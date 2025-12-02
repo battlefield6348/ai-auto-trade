@@ -131,7 +131,7 @@
 - Codex（AI）可自行建立 commit，涵蓋依需求文件產出的程式碼與測試。
 - 人類負責審閱與 `git push` 到遠端（origin），避免 AI 直接推送。
 - 人類仍可就 `/docs` 內的需求或架構更新建立 commit，但請勿直接提交 `/internal` 變更。
-- 建議 commit message 簡潔描述目的，例如：`docs: 新增 0003-create-user 需求`、`feat: 實作 user create usecase` 或 `chore: 更新架構說明`。
+- 建議 commit message 簡潔描述目的，並且以繁體中文內容為主，例如：`docs: 新增 0003-create-user 需求`、`feat: 實作 user create usecase` 或 `chore: 更新架構說明`。
 
 ## 5. 需求文件模板（位於 `/docs/requirements/0000-template.md`）
 ```

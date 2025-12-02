@@ -47,6 +47,7 @@ const (
 	SortReturn20       SortField = "return20"
 	SortVolumeMultiple SortField = "volume_multiple"
 	SortChangeRate     SortField = "change_rate"
+	SortRangePos20     SortField = "range_pos20"
 )
 
 // SortOption 指定排序欄位與方向。

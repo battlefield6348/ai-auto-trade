@@ -121,7 +121,7 @@ func TestPresetTemplates(t *testing.T) {
 	}
 	found := false
 	for _, tpl := range templates {
-		if tpl.ID == "strong_today" {
+		if tpl.ID == "short_term_strong" {
 			found = true
 		}
 		if tpl.Input.Date.IsZero() {
@@ -129,6 +129,6 @@ func TestPresetTemplates(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatalf("missing strong_today template")
+		t.Fatalf("missing short_term_strong template")
 	}
 }

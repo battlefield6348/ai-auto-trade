@@ -40,6 +40,11 @@ const (
 	FieldScore          NumericField = "score"
 	FieldAmplitude      NumericField = "amplitude"
 	FieldRangePos20     NumericField = "range_pos20"
+	FieldMA5            NumericField = "ma5"
+	FieldMA10           NumericField = "ma10"
+	FieldMA20           NumericField = "ma20"
+	FieldMA60           NumericField = "ma60"
+	FieldAvgAmplitude20 NumericField = "avg_amplitude20"
 )
 
 type NumericOp string
@@ -126,16 +131,16 @@ type PresetTemplate struct {
 func PresetTemplates(date time.Time) []PresetTemplate {
 	return []PresetTemplate{
 		{
-			ID:          "strong_today",
-			Name:        "今日強勢股",
-			Description: "近5日報酬佳且接近前高，量能放大，排序依分數",
+			ID:          "short_term_strong",
+			Name:        "短期強勢股",
+			Description: "近5日報酬佳、量能放大、位於區間上半段",
 			Input: ScreenerInput{
 				Date:  date,
 				Logic: LogicAND,
 				Conditions: []Condition{
 					numericCond(FieldReturn5, OpGTE, 0.05),
-					numericCond(FieldRangePos20, OpGTE, 0.8),
-					numericCond(FieldVolumeMultiple, OpGTE, 1.3),
+					numericCond(FieldRangePos20, OpGTE, 0.6),
+					numericCond(FieldVolumeMultiple, OpGTE, 1.5),
 					{Type: ConditionTags, Tags: &TagsCondition{IncludeAny: []domain.Tag{domain.TagShortTermStrong, domain.TagVolumeSurge}}},
 				},
 				Sort: SortOption{Field: SortScore, Desc: true},
@@ -144,15 +149,46 @@ func PresetTemplates(date time.Time) []PresetTemplate {
 		{
 			ID:          "volume_surge",
 			Name:        "量能放大股",
-			Description: "當日量能相對近20日放大，排序依量能倍率",
+			Description: "當日量能明顯放大，搭配正向報酬",
 			Input: ScreenerInput{
 				Date:  date,
 				Logic: LogicAND,
 				Conditions: []Condition{
-					numericCond(FieldVolumeMultiple, OpGTE, 1.5),
+					numericCond(FieldVolumeMultiple, OpGTE, 2.0),
 					numericCond(FieldReturn5, OpGTE, 0.0),
 				},
 				Sort: SortOption{Field: SortVolumeMultiple, Desc: true},
+			},
+		},
+		{
+			ID:          "bullish_breakout",
+			Name:        "多頭排列突破",
+			Description: "靠近前高且整體分數佳，模擬多頭排列突破情境",
+			Input: ScreenerInput{
+				Date:  date,
+				Logic: LogicAND,
+				Conditions: []Condition{
+					numericCond(FieldRangePos20, OpGTE, 0.9),
+					numericCond(FieldScore, OpGTE, 65),
+					numericCond(FieldDeviation20, OpGTE, 0.0),
+					numericCond(FieldReturn20, OpGTE, 0.0),
+				},
+				Sort: SortOption{Field: SortScore, Desc: true},
+			},
+		},
+		{
+			ID:          "low_vol_base",
+			Name:        "低波動蓄勢",
+			Description: "近 20 日波動度低，價位貼近均線，等待突破",
+			Input: ScreenerInput{
+				Date:  date,
+				Logic: LogicAND,
+				Conditions: []Condition{
+					numericCond(FieldAvgAmplitude20, OpLTE, 0.02),
+					numericBetween(FieldDeviation20, -0.02, 0.02),
+					{Type: ConditionTags, Tags: &TagsCondition{ExcludeAny: []domain.Tag{domain.TagHighVolatility}}},
+				},
+				Sort: SortOption{Field: SortScore, Desc: true},
 			},
 		},
 		{
@@ -382,6 +418,16 @@ func numericValue(r domain.DailyAnalysisResult, field NumericField) *float64 {
 		return r.Amplitude
 	case FieldRangePos20:
 		return r.RangePos20
+	case FieldMA5:
+		return r.MA5
+	case FieldMA10:
+		return r.MA10
+	case FieldMA20:
+		return r.MA20
+	case FieldMA60:
+		return r.MA60
+	case FieldAvgAmplitude20:
+		return r.AvgAmplitude20
 	default:
 		return nil
 	}
@@ -543,6 +589,18 @@ func numericCond(field NumericField, op NumericOp, value float64) Condition {
 			Field: field,
 			Op:    op,
 			Value: value,
+		},
+	}
+}
+
+func numericBetween(field NumericField, min, max float64) Condition {
+	return Condition{
+		Type: ConditionNumeric,
+		Numeric: &NumericCondition{
+			Field: field,
+			Op:    OpBetween,
+			Min:   min,
+			Max:   max,
 		},
 	}
 }

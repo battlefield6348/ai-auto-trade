@@ -1,0 +1,477 @@
+# 角色與權限（Roles & Permissions）功能規格
+
+版本：v1.0  
+狀態：草稿  
+最後更新：2025-12-03  
+
+---
+
+## 1. 文件目的與範圍
+
+本文件定義本系統的**角色（Roles）**與**權限（Permissions）**模型，作為：
+
+- 身分驗證文件（`authentication_authorization.md`）的延伸補充。
+- 所有 API／後端服務在做授權判斷（Authorization）時的依據。
+- 之後前端 UI、管理後台、CI/CD、自動化腳本權限設計的統一標準。
+
+本文件關注：
+
+- 角色有哪些。
+- 每個角色可以對哪些「資源（Resource）」做哪些「操作（Action）」。
+- 「自己的資料」與「他人資料」的存取差異。
+
+本文件不包含：
+
+- 實際實作細節（如 middleware、程式碼、JWT Claim 型別等）。
+- 資料庫 schema、table 欄位、migration 實作。
+
+---
+
+## 2. 核心概念
+
+### 2.1 資源（Resource）
+
+本系統的主要資源類別：
+
+1. 使用者與帳號管理（Users & Accounts）
+2. Data Ingestion 任務與結果（Ingestion Jobs）
+3. 日批次分析任務與結果（Analysis Jobs & Results）
+4. 分析結果查詢與匯出（Analysis Query & Export）
+5. 選股器與條件模板（Screener & Templates）
+6. 通知與訂閱（Alerts & Subscriptions）
+7. 策略（Strategies）
+8. 報表與儀表板（Reports & Dashboards）
+9. 系統健康與設定（System Health & Settings）
+
+### 2.2 操作（Action）
+
+典型操作類型（行為層級）：
+
+- `view`：查看／讀取  
+- `create`：建立  
+- `update`：修改  
+- `delete`：刪除  
+- `manage`：管理／具有完整控制（通常包含 create/update/delete）  
+- `trigger`：觸發某個工作流程或批次任務  
+- `export`：匯出資料  
+
+實際實作時，可用更細粒度或合併為一組字串型權限名稱。
+
+### 2.3 角色（Role）
+
+v1 定義主角色：
+
+- `admin`：系統管理者  
+- `analyst`：內部分析人員／高權限使用者  
+- `user`：一般使用者（終端客戶或開發初期自用帳號）  
+- `service_account`：系統服務帳號（機器對機器呼叫用）
+
+未來可擴充自訂角色，但 v1 先以此四種為主。
+
+---
+
+## 3. 角色定義與定位
+
+### 3.1 Admin
+
+定位：
+
+- 負責系統管理與維運。
+- 能管理其他使用者、權限設定、系統級排程與設定。
+- 預設擁有所有權限。
+
+典型使用者：
+
+- 系統負責人、DevOps、資安／管理者。
+
+### 3.2 Analyst
+
+定位：
+
+- 系統內部實際使用分析功能的人。
+- 可使用全部分析、選股、策略、報表相關功能，但不能任意管理其他人的帳號。
+- 對系統級設定有限制。
+
+典型使用者：
+
+- 量化研究人員、交易策略開發人員、研究部門等。
+
+### 3.3 User
+
+定位：
+
+- 一般終端使用者。
+- 僅能操作「自己的資料」：自己的策略、自訂選股條件、自訂通知訂閱等。
+- 僅能看對自己開放的市場/產業/個股資訊與預設報表。
+
+典型使用者：
+
+- 一般投資人、內部測試帳號、早期試用者。
+
+### 3.4 Service Account
+
+定位：
+
+- 提供給內部系統或工具使用的機器帳號。
+- 權限依需求個別配置，而非固定（可以跟 admin 一樣大，也可以非常小）。
+- 不具備人類登入行為（無 UI 登入場景）。
+
+典型使用者：
+
+- CI/CD pipeline  
+- 排程工具  
+- 其他後端服務呼叫本系統 API
+
+---
+
+## 4. 權限名稱設計（Logical Permission Set）
+
+以下是**邏輯層級**的權限名稱集合，實作時可以等價映射到字串常數、enum 等。
+
+> 命名格式示意：`<範疇>.<資源>.<動作>`
+
+### 4.1 使用者與帳號（Users）
+
+- `users.view_self`：查看自己的帳號資料
+- `users.update_self`：修改自己的資料（顯示名稱、密碼等）
+- `users.view_any`：查看任意使用者帳號
+- `users.manage`：建立／更新／停用任意使用者帳號
+- `roles.manage`：管理角色與權限綁定（僅限 admin）
+
+### 4.2 Data Ingestion
+
+- `ingestion.view_status`：查看 Data Ingestion 任務狀態、歷史紀錄
+- `ingestion.trigger_daily`：觸發每日例行抓取（重跑）
+- `ingestion.trigger_backfill`：觸發回補任務
+- `ingestion.trigger_recover`：觸發單股／區間重抓
+- `ingestion.manage_config`：管理 Ingestion 的設定（如來源、限流參數）
+
+### 4.3 日批次分析（Daily Analysis）
+
+- `analysis.view_status`：查看分析任務狀態
+- `analysis.trigger_daily`：觸發每日分析批次（重跑）
+- `analysis.trigger_recalculate`：針對指定股票／日期區間重算分析結果
+- `analysis.manage_config`：調整分析相關設定（如參數、版本切換）
+
+### 4.4 分析結果查詢與匯出（Query & Export）
+
+- `analysis_results.query`：查詢分析結果（API）
+- `analysis_results.export`：匯出分析結果（CSV 等）
+- `analysis_results.view_sensitive`：查看進階／完整欄位（例如內部指標）
+
+### 4.5 選股器（Screener）
+
+- `screener.use`：使用選股器（發出條件查詢）
+- `screener.presets.view`：查看系統預設選股模板
+- `screener.presets.manage_global`：管理全域選股模板（建立／修改／刪除）
+- `screener.presets.manage_own`：管理「自己的」自訂選股條件／模板
+
+### 4.6 通知與訂閱（Alerts & Subscriptions）
+
+- `alerts.manage_own`：建立／修改／刪除自己的訂閱與通知設定
+- `alerts.view_own_history`：查看自己的通知歷史
+- `alerts.manage_any`：管理任意使用者的訂閱（例如 admin 代客設定）
+- `alerts.view_any_history`：查看任意使用者的通知歷史（限 internal）
+
+### 4.7 策略（Strategy Engine）
+
+- `strategies.manage_own`：建立／修改／停用／刪除自己的策略
+- `strategies.view_own`：查看自己策略與觸發紀錄
+- `strategies.manage_any`：管理任意使用者的策略（admin 或特定內部角色）
+- `strategies.view_any`：查看所有策略摘要與績效（內部分析用）
+
+### 4.8 報表與儀表板（Reports & Dashboards）
+
+- `dashboard.market.view`：查看市場總覽儀表板
+- `dashboard.industry.view`：查看產業儀表板
+- `dashboard.stock.view`：查看個股儀表板
+- `dashboard.strategy.view`：查看策略績效儀表板
+- `dashboard.system_health.view`：查看系統健康儀表板（內部）
+
+- `reports.generate`：生成報表（依權限範圍）
+- `reports.download`：下載報表
+
+### 4.9 系統健康與維運（System Health & Ops）
+
+- `system.health.view`：查看系統健康與錯誤統計
+- `system.jobs.manage`：管理各種排程與批次設定
+- `system.config.manage`：管理系統全域設定（例如 Feature Flag）
+
+---
+
+## 5. 角色對權限矩陣（v1 規劃）
+
+以下為 v1 建議預設權限對應（之後可由 Admin 調整）。
+
+### 5.1 Admin 權限
+
+Admin 預設：
+
+- 擁有 **全部** 權限（所有 permission）。
+
+若需軟性限制，可明列：
+
+- `users.view_self` / `users.update_self` / `users.view_any` / `users.manage` / `roles.manage`
+- `ingestion.*`（所有 ingestion 相關）
+- `analysis.*`
+- `analysis_results.*`
+- `screener.*`
+- `alerts.*`
+- `strategies.*`
+- `dashboard.*`
+- `reports.*`
+- `system.*`
+
+實作時可用「超級角色」邏輯簡化。
+
+### 5.2 Analyst 權限（建議）
+
+Analyst 主要是內部研究／策略人員，預設權限：
+
+- 使用者：
+  - `users.view_self`
+  - `users.update_self`
+  - 不允許 `users.view_any` / `users.manage`
+
+- Data Ingestion：
+  - `ingestion.view_status`
+  - 可選：允許 `ingestion.trigger_backfill`、`ingestion.trigger_recover`，視公司政策決定
+
+- 日批次分析：
+  - `analysis.view_status`
+  - `analysis.trigger_recalculate`
+  - 是否允許 `analysis.trigger_daily` 可由產品決定（可先關）
+
+- 分析結果：
+  - `analysis_results.query`
+  - `analysis_results.export`
+  - `analysis_results.view_sensitive`（通常為 ✔）
+
+- 選股器：
+  - `screener.use`
+  - `screener.presets.view`
+  - `screener.presets.manage_own`
+  - 視需求是否開 `screener.presets.manage_global`（多數情況下 ✔）
+
+- 通知：
+  - `alerts.manage_own`
+  - `alerts.view_own_history`
+  - 通常不開 `alerts.manage_any`
+
+- 策略：
+  - `strategies.manage_own`
+  - `strategies.view_own`
+  - 可選：`strategies.view_any`（方便研究同事策略）
+
+- 報表與儀表板：
+  - `dashboard.market.view`
+  - `dashboard.industry.view`
+  - `dashboard.stock.view`
+  - `dashboard.strategy.view`
+  - `dashboard.system_health.view`（若有參與維運則 ✔）
+  - `reports.generate`
+  - `reports.download`
+
+- 系統健康：
+  - `system.health.view`（可選）
+  - 不開 `system.jobs.manage` / `system.config.manage`
+
+### 5.3 User 權限（建議）
+
+一般使用者需要的最低權限：
+
+- 使用者：
+  - `users.view_self`
+  - `users.update_self`
+
+- Data Ingestion / 分析：
+  - 無直接 trigger 權限
+  - 不需要 `ingestion.view_status` / `analysis.view_status`
+
+- 分析結果查詢：
+  - `analysis_results.query`
+  - 是否開 `analysis_results.export` 依產品策略（可先限定）
+
+- 選股器：
+  - `screener.use`
+  - `screener.presets.view`（僅可見「公開模板」）
+  - `screener.presets.manage_own`（自訂條件）
+
+- 通知：
+  - `alerts.manage_own`
+  - `alerts.view_own_history`
+
+- 策略：
+  - `strategies.manage_own`
+  - `strategies.view_own`
+  - 不允許 `strategies.view_any` / `strategies.manage_any`
+
+- 報表與儀表板：
+  - `dashboard.market.view`（可為精簡版）
+  - `dashboard.industry.view`（可為精簡版）
+  - `dashboard.stock.view`
+  - 是否開 `dashboard.strategy.view` 視產品決定
+  - `reports.download`（僅能下載與自己相關的報表）
+
+- 系統健康：
+  - 不開放任何 `system.*`
+
+### 5.4 Service Account 權限（建議）
+
+Service Account 不固定，依用途配置：
+
+例：
+
+1. 批次排程用 Service Account：
+   - `ingestion.trigger_daily`
+   - `analysis.trigger_daily`
+   - `ingestion.view_status`
+   - `analysis.view_status`
+
+2. 報表產生用 Service Account：
+   - `analysis_results.query`
+   - `reports.generate`
+   - `reports.download`
+
+3. DevOps 工具用 Service Account：
+   - `system.health.view`
+   - `system.jobs.manage`（可選）
+
+Service Account 權限不可預設全開，必須明確設定，以最小權限原則為基準。
+
+---
+
+## 6. 「自己」與「他人」資料的授權規則
+
+### 6.1 自己的資料（Own Resources）
+
+以下資源屬「使用者擁有」概念：
+
+- 自己的策略（Strategies）
+- 自己的通知訂閱（Subscriptions）
+- 自己的自訂選股模板（Screener Presets）
+- 自己的匯出任務／報表（Export Jobs / Reports）
+
+規則：
+
+- `user` / `analyst` 預設可對「自己的資料」進行 view / create / update / delete。
+- Admin 具有超級權限，可操作任何人的資料。
+
+### 6.2 他人的資料（Others’ Resources）
+
+- `user`：
+  - 不得讀取／修改他人的策略、訂閱、模板。
+- `analyst`：
+  - 視產品需求，可允許「只讀」他人策略（`strategies.view_any`）用於研究；
+  - 但預設不可修改（無 `strategies.manage_any`）。
+- `admin`：
+  - 可讀寫所有資料（含停用、刪除）。
+
+---
+
+## 7. API 層授權規則（行為要求）
+
+本節不列出完整 API，只定義授權檢查時的原則。
+
+### 7.1 每個 API 必須定義：
+
+- 需要的最小角色（如：`user` 以上）
+- 需要的具體權限（如：`screener.use`）
+- 是否為「只允許操作自己的資源」或「可操作任意資源」
+
+例示（行為說明）：
+
+- 建立自訂選股條件  
+  - 角色：`user` 以上  
+  - 權限：`screener.presets.manage_own`  
+  - 限制：owner 必須是目前登入的 user
+
+- Admin 建立新帳號  
+  - 角色：`admin`  
+  - 權限：`users.manage`  
+
+- 觸發回補任務  
+  - 角色：至少 `analyst` 或以上（依產品決策）  
+  - 權限：`ingestion.trigger_backfill`  
+
+- 查詢某日全市場分析結果  
+  - 角色：`user` 以上  
+  - 權限：`analysis_results.query`  
+  - 若未來有「分層產品」（不同使用者可見範圍不同），則需增加額外條件。
+
+---
+
+## 8. 管理介面需求（僅行為）
+
+未來若建立管理後台（Admin UI），需支援：
+
+1. 列出所有角色與其綁定的權限清單。  
+2. 調整某角色的權限（在安全前提下）。  
+3. 查看單一使用者：
+   - 所屬角色
+   - 實際生效的權限集合（Role → Permission 展開後）
+4. 對 Service Account 設定個別權限（而非只看角色）。
+
+v1 可以不實作 UI，但這些能力需被納入未來規劃。
+
+---
+
+## 9. 稽核與記錄（Audit）
+
+針對與權限相關的敏感操作，需記錄：
+
+- 誰（使用者 ID）  
+- 在何時  
+- 做了什麼操作（例如：`變更某帳號角色`、`刪除某人策略`）  
+- 目標資源（如 target user / target strategy ID）
+
+典型稽核事件：
+
+- 新增／停用／刪除使用者帳號
+- 變更使用者角色
+- 變更角色對應的權限集合
+- Admin 或 Analyst 操作他人策略／訂閱
+- Service Account 關鍵操作（例如觸發大規模回補）
+
+---
+
+## 10. 非功能性需求
+
+### 10.1 一致性
+
+- 所有業務 API 必須經過同一套授權機制，不可跳過。
+- 禁止在應用程式任意地方「硬寫角色判斷」而不走統一權限層。
+
+### 10.2 可維護性
+
+- 權限集合應集中定義（例如一份配置或常數集合），避免散落在程式各處。
+- 角色 → 權限的 mapping 需可調整（未來支援 UI 或設定檔）。
+
+### 10.3 擴充性
+
+- 未來新增模組（例如：回測引擎、交易 API）時：
+  - 必須為其定義新的 `resource.action` 權限名稱。
+  - 並將這些權限映射到現有或新角色。
+
+---
+
+## 11. 與 `authentication_authorization.md` 的關係
+
+- `authentication_authorization.md` 負責：
+  - 使用者登入／登出
+  - Token 產生與驗證
+  - 基本帳號狀態（active/disabled）
+
+- 本文件 `roles_permissions.md` 負責：
+  - 定義系統內「可以做什麼」的規則
+  - 角色與權限的對應關係
+  - 各模組／API 的授權範圍
+
+實作時，所有保護 API 的流程應為：
+
+1. 驗證 Token（身份確認）  
+2. 取得使用者角色 & 權限集合  
+3. 檢查是否擁有所需權限  
+4. 若涉及「自己 vs 他人資料」，再做 Owner 檢查  
+
+---

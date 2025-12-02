@@ -13,6 +13,7 @@ import (
 // UserRepository 存取使用者。
 type UserRepository interface {
 	FindByEmail(ctx context.Context, email string) (auth.User, error)
+	FindByID(ctx context.Context, id string) (auth.User, error)
 }
 
 // PasswordHasher 驗證密碼。
@@ -66,6 +67,25 @@ var RolePermissions = map[auth.Role][]Permission{
 		PermInternalAPI,
 		PermSystemHealth,
 	},
+}
+
+// ResourceOwnerChecker 用於判斷資源是否屬於當前使用者。
+type ResourceOwnerChecker interface {
+	IsOwner(ctx context.Context, userID, resourceID string) bool
+}
+
+// AuthorizeInput 定義授權需求。
+type AuthorizeInput struct {
+	UserID     string
+	Required   []Permission
+	ResourceID string // 若需要判斷 owner
+	OwnerPerm  Permission
+}
+
+// AuthorizeResult 回傳授權結果。
+type AuthorizeResult struct {
+	Allowed bool
+	Reason  string
 }
 
 // LoginUseCase 驗證帳密並簽發 token。
@@ -140,10 +160,13 @@ func (uc *LogoutUseCase) Execute(ctx context.Context, refreshToken string) error
 }
 
 // Authorizer 檢查角色/權限。
-type Authorizer struct{}
+type Authorizer struct {
+	users UserRepository
+	owner ResourceOwnerChecker
+}
 
-func NewAuthorizer() *Authorizer {
-	return &Authorizer{}
+func NewAuthorizer(users UserRepository, owner ResourceOwnerChecker) *Authorizer {
+	return &Authorizer{users: users, owner: owner}
 }
 
 func (a *Authorizer) HasPermission(role auth.Role, perm Permission) bool {
@@ -154,4 +177,30 @@ func (a *Authorizer) HasPermission(role auth.Role, perm Permission) bool {
 		}
 	}
 	return false
+}
+
+// Authorize 檢查使用者是否具備所需權限，並視情況檢查 owner。
+func (a *Authorizer) Authorize(ctx context.Context, input AuthorizeInput) (AuthorizeResult, error) {
+	user, err := a.users.FindByID(ctx, input.UserID)
+	if err != nil {
+		return AuthorizeResult{Allowed: false, Reason: "user not found"}, err
+	}
+	if !user.IsActive() {
+		return AuthorizeResult{Allowed: false, Reason: "user disabled"}, nil
+	}
+
+	for _, perm := range input.Required {
+		if a.HasPermission(user.Role, perm) {
+			continue
+		}
+		// 若指定 owner 權限檢查且資源為本人
+		if input.OwnerPerm != "" && input.ResourceID != "" && a.owner != nil {
+			if a.owner.IsOwner(ctx, user.ID, input.ResourceID) && perm == input.OwnerPerm {
+				continue
+			}
+		}
+		return AuthorizeResult{Allowed: false, Reason: fmt.Sprintf("missing permission %s", perm)}, nil
+	}
+
+	return AuthorizeResult{Allowed: true}, nil
 }

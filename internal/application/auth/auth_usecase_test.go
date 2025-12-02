@@ -21,6 +21,13 @@ func (f fakeUserRepo) FindByEmail(_ context.Context, _ string) (domain.User, err
 	return f.user, nil
 }
 
+func (f fakeUserRepo) FindByID(_ context.Context, _ string) (domain.User, error) {
+	if f.err != nil {
+		return domain.User{}, f.err
+	}
+	return f.user, nil
+}
+
 type fakeHasher struct {
 	match bool
 }
@@ -104,12 +111,45 @@ func TestLogoutRevokesRefresh(t *testing.T) {
 }
 
 func TestAuthorizeRolePermission(t *testing.T) {
-	authz := NewAuthorizer()
+	authz := NewAuthorizer(fakeUserRepo{user: domain.User{ID: "u1", Role: domain.RoleAdmin, Status: domain.StatusActive}}, nil)
 	if !authz.HasPermission(domain.RoleAdmin, PermUserManage) {
 		t.Fatalf("admin should have user manage")
 	}
 	if authz.HasPermission(domain.RoleUser, PermUserManage) {
 		t.Fatalf("user should not have user manage")
+	}
+
+	res, err := authz.Authorize(context.Background(), AuthorizeInput{
+		UserID:   "u1",
+		Required: []Permission{PermUserManage},
+	})
+	if err != nil || !res.Allowed {
+		t.Fatalf("expected authorize success, got %+v err=%v", res, err)
+	}
+}
+
+type fakeOwner struct {
+	owned bool
+}
+
+func (f fakeOwner) IsOwner(_ context.Context, _ string, _ string) bool { return f.owned }
+
+func TestAuthorizeOwnerFallback(t *testing.T) {
+	authz := NewAuthorizer(
+		fakeUserRepo{user: domain.User{ID: "u1", Role: domain.RoleUser, Status: domain.StatusActive}},
+		fakeOwner{owned: true},
+	)
+	res, err := authz.Authorize(context.Background(), AuthorizeInput{
+		UserID:     "u1",
+		Required:   []Permission{PermUserManage},
+		ResourceID: "res1",
+		OwnerPerm:  PermUserManage,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !res.Allowed {
+		t.Fatalf("expected allowed due to owner fallback")
 	}
 }
 

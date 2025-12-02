@@ -60,6 +60,11 @@ func TestScreenerUseCase_AND(t *testing.T) {
 	if out.Results[0].Symbol != "2330" {
 		t.Fatalf("unexpected symbol: %s", out.Results[0].Symbol)
 	}
+
+	// reusable condition matcher
+	if !MatchConditions(repo.results[0], []Condition{numericCond(FieldReturn5, OpGTE, 0.05)}, LogicAND) {
+		t.Fatalf("expected match")
+	}
 }
 
 func TestScreenerUseCase_OR(t *testing.T) {

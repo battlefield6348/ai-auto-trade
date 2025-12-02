@@ -281,7 +281,7 @@ func (u *ScreenerUseCase) Run(ctx context.Context, input ScreenerInput) (Screene
 
 	filtered := make([]domain.DailyAnalysisResult, 0, len(baseResults))
 	for _, r := range baseResults {
-		if matchConditions(r, input.Conditions, input.Logic) {
+		if MatchConditions(r, input.Conditions, input.Logic) {
 			filtered = append(filtered, r)
 		}
 	}
@@ -336,7 +336,7 @@ func applyNumericToRange(cond *NumericCondition, minPtr **float64, maxPtr **floa
 	}
 }
 
-func matchConditions(r domain.DailyAnalysisResult, conditions []Condition, logic BoolLogic) bool {
+func MatchConditions(r domain.DailyAnalysisResult, conditions []Condition, logic BoolLogic) bool {
 	if len(conditions) == 0 {
 		return true
 	}

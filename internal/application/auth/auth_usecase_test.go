@@ -35,8 +35,8 @@ type fakeHasher struct {
 func (f fakeHasher) Compare(_, _ string) bool { return f.match }
 
 type fakeTokens struct {
-	pair domain.TokenPair
-	err  error
+	pair    domain.TokenPair
+	err     error
 	revoked string
 }
 
@@ -61,9 +61,9 @@ func TestLoginSuccess(t *testing.T) {
 		Password: "hashed",
 	}
 	tokens := &fakeTokens{pair: domain.TokenPair{
-		AccessToken: "access",
-		RefreshToken: "refresh",
-		AccessExpiry: time.Now().Add(time.Minute),
+		AccessToken:   "access",
+		RefreshToken:  "refresh",
+		AccessExpiry:  time.Now().Add(time.Minute),
 		RefreshExpiry: time.Now().Add(time.Hour),
 	}}
 	uc := NewLoginUseCase(fakeUserRepo{user: user}, fakeHasher{match: true}, tokens)

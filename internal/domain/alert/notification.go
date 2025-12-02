@@ -20,12 +20,12 @@ type Notification struct {
 
 // StockSummary 提供通知中顯示的股票摘要。
 type StockSummary struct {
-	Symbol  string
-	Name    string
-	Market  string
-	Close   float64
-	Score   float64
-	Tags    []analysisDomain.Tag
+	Symbol string
+	Name   string
+	Market string
+	Close  float64
+	Score  float64
+	Tags   []analysisDomain.Tag
 }
 
 // SystemMetric 用於系統警報通知。
@@ -34,4 +34,3 @@ type SystemMetric struct {
 	Value  float64
 	Detail string
 }
-

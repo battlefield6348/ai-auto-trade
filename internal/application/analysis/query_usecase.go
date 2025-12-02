@@ -22,20 +22,20 @@ type AnalysisQueryRepository interface {
 
 // QueryFilter 為列表查詢的過濾條件。
 type QueryFilter struct {
-	Markets         []dataingestion.Market
-	Industries      []string
-	Symbols         []string
-	ScoreMin        *float64
-	ScoreMax        *float64
-	Return5Min      *float64
-	Return5Max      *float64
-	Return20Min     *float64
-	Return20Max     *float64
+	Markets           []dataingestion.Market
+	Industries        []string
+	Symbols           []string
+	ScoreMin          *float64
+	ScoreMax          *float64
+	Return5Min        *float64
+	Return5Max        *float64
+	Return20Min       *float64
+	Return20Max       *float64
 	VolumeMultipleMin *float64
 	VolumeMultipleMax *float64
-	TagsAny         []domain.Tag // 符合任一
-	TagsAll         []domain.Tag // 必須全包含
-	OnlySuccess     bool
+	TagsAny           []domain.Tag // 符合任一
+	TagsAll           []domain.Tag // 必須全包含
+	OnlySuccess       bool
 }
 
 // SortField 定義列表排序欄位。
@@ -193,7 +193,7 @@ func (u *QueryUseCase) ExportDailyStrong(ctx context.Context, input ExportDailyS
 	}
 
 	out, err := u.QueryByDate(ctx, QueryByDateInput{
-		Date: input.Date,
+		Date:   input.Date,
 		Filter: input.Filter,
 		Sort:   input.Sort,
 		Pagination: Pagination{

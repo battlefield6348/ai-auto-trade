@@ -90,10 +90,10 @@ type AuthorizeResult struct {
 
 // LoginUseCase 驗證帳密並簽發 token。
 type LoginUseCase struct {
-	users   UserRepository
-	hasher  PasswordHasher
-	tokens  TokenIssuer
-	now     func() time.Time
+	users  UserRepository
+	hasher PasswordHasher
+	tokens TokenIssuer
+	now    func() time.Time
 }
 
 func NewLoginUseCase(users UserRepository, hasher PasswordHasher, tokens TokenIssuer) *LoginUseCase {

@@ -216,7 +216,7 @@ func (u *UseCase) ExportDailyMarketReport(ctx context.Context, date time.Time, l
 		Filter: analysis.QueryFilter{
 			OnlySuccess: true,
 		},
-		Sort: analysis.SortOption{Field: analysis.SortScore, Desc: true},
+		Sort:       analysis.SortOption{Field: analysis.SortScore, Desc: true},
 		Pagination: analysis.Pagination{Offset: 0, Limit: limit},
 	})
 	if err != nil {
@@ -256,10 +256,10 @@ func (u *UseCase) ExportDailyMarketReport(ctx context.Context, date time.Time, l
 // helpers
 func buildScoreHistogram(results []analysisDomain.DailyAnalysisResult) map[string]int {
 	buckets := map[string]int{
-		"0-20":  0,
-		"20-40": 0,
-		"40-60": 0,
-		"60-80": 0,
+		"0-20":   0,
+		"20-40":  0,
+		"40-60":  0,
+		"60-80":  0,
 		"80-100": 0,
 	}
 	for _, r := range results {
@@ -281,11 +281,11 @@ func buildScoreHistogram(results []analysisDomain.DailyAnalysisResult) map[strin
 
 func topIndustries(results []analysisDomain.DailyAnalysisResult, n int) []reportsDomain.IndustryStat {
 	type agg struct {
-		count int
-		score float64
-		ret5  float64
-		ret5Count int
-		ret20 float64
+		count      int
+		score      float64
+		ret5       float64
+		ret5Count  int
+		ret20      float64
 		ret20Count int
 	}
 	stats := make(map[string]*agg)
@@ -393,4 +393,3 @@ func sameDate(a, b time.Time) bool {
 	by, bm, bd := b.Date()
 	return ay == by && am == bm && ad == bd
 }
-

@@ -16,17 +16,17 @@ const (
 
 // DailyPrice represents a single stock's daily OHLCV record.
 type DailyPrice struct {
-	Symbol      string
-	Market      Market
-	TradeDate   time.Time
-	Open        float64
-	High        float64
-	Low         float64
-	Close       float64
-	Volume      int64 // 成交量（股）
-	Turnover    int64 // 成交金額（可為 0，視來源而定）
-	Change      float64
-	ChangeRate  float64
+	Symbol       string
+	Market       Market
+	TradeDate    time.Time
+	Open         float64
+	High         float64
+	Low          float64
+	Close        float64
+	Volume       int64 // 成交量（股）
+	Turnover     int64 // 成交金額（可為 0，視來源而定）
+	Change       float64
+	ChangeRate   float64
 	IsExDividend bool
 }
 

@@ -98,11 +98,11 @@ const (
 )
 
 type Condition struct {
-	Type      ConditionType
-	Numeric   *NumericCondition
-	Category  *CategoryCondition
-	Tags      *TagsCondition
-	Symbols   *SymbolCondition
+	Type     ConditionType
+	Numeric  *NumericCondition
+	Category *CategoryCondition
+	Tags     *TagsCondition
+	Symbols  *SymbolCondition
 }
 
 type ScreenerInput struct {

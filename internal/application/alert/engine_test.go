@@ -103,14 +103,14 @@ func TestEngine_StockSubscription_NoMatch(t *testing.T) {
 	date := time.Date(2024, 12, 2, 0, 0, 0, 0, time.UTC)
 	engine := NewEngine(
 		fakeSubsRepo{list: []alertDomain.Subscription{{
-			ID:        "stock1",
-			Name:      "單股監控",
-			Type:      alertDomain.SubscriptionStock,
-			Enabled:   true,
-			Logic:     analysis.LogicAND,
-			Symbol:    "2330",
+			ID:         "stock1",
+			Name:       "單股監控",
+			Type:       alertDomain.SubscriptionStock,
+			Enabled:    true,
+			Logic:      analysis.LogicAND,
+			Symbol:     "2330",
 			Conditions: []analysis.Condition{numericCondForTest(analysis.FieldScore, analysis.OpGTE, 90)},
-			Channels:  []alertDomain.Channel{alertDomain.ChannelEmail},
+			Channels:   []alertDomain.Channel{alertDomain.ChannelEmail},
 		}}},
 		fakeScreener{},
 		fakeAnalysisQuery{

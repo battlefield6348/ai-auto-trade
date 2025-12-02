@@ -166,4 +166,3 @@ func TestExportDailyMarketReport(t *testing.T) {
 }
 
 func ptr(v float64) *float64 { return &v }
-

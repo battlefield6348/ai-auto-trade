@@ -38,11 +38,11 @@ type StrategyCondition struct {
 
 // MultiDayCondition 要求條件連續成立。
 type MultiDayCondition struct {
-	Days          int                 // 包含當日
-	Condition     analysis.Condition  // 需成立的條件（可再搭配 StrategyCondition.Conditions）
-	RequireAll    bool                // 若為 true，所有天都需成立；false 則為至少首尾滿足
-	AllowPartial  bool                // 保留未來彈性
-	Description   string              // 文字描述
+	Days         int                // 包含當日
+	Condition    analysis.Condition // 需成立的條件（可再搭配 StrategyCondition.Conditions）
+	RequireAll   bool               // 若為 true，所有天都需成立；false 則為至少首尾滿足
+	AllowPartial bool               // 保留未來彈性
+	Description  string             // 文字描述
 }
 
 // StrategyAction 定義觸發後的動作。

@@ -34,18 +34,18 @@ func NewIngestUseCase(source PriceSource, repo PriceRepository) *IngestUseCase {
 type IngestMode string
 
 const (
-	IngestModeDaily     IngestMode = "daily"
-	IngestModeBackfill  IngestMode = "backfill"
-	IngestModeRecovery  IngestMode = "recovery"
+	IngestModeDaily    IngestMode = "daily"
+	IngestModeBackfill IngestMode = "backfill"
+	IngestModeRecovery IngestMode = "recovery"
 )
 
 // IngestInput 控制一次資料抓取行為。
 type IngestInput struct {
-	Date          time.Time
-	Mode          IngestMode
-	Replace       bool
-	Symbols       []string
-	MarketFilter  *dataingestion.Market
+	Date         time.Time
+	Mode         IngestMode
+	Replace      bool
+	Symbols      []string
+	MarketFilter *dataingestion.Market
 }
 
 type Failure struct {

@@ -8,8 +8,8 @@ import (
 	"ai-auto-trade/internal/application/analysis"
 	alertDomain "ai-auto-trade/internal/domain/alert"
 	analysisDomain "ai-auto-trade/internal/domain/analysis"
-	strategyDomain "ai-auto-trade/internal/domain/strategy"
 	"ai-auto-trade/internal/domain/dataingestion"
+	strategyDomain "ai-auto-trade/internal/domain/strategy"
 )
 
 type fakeStrategyRepo struct {
@@ -174,7 +174,7 @@ func TestEngine_MultiDayNotEnoughHistory(t *testing.T) {
 			Enabled:       true,
 			FrequencyDays: 1,
 			Condition: strategyDomain.StrategyCondition{
-				Logic:      analysis.LogicAND,
+				Logic: analysis.LogicAND,
 				MultiDay: &strategyDomain.MultiDayCondition{
 					Days:      3,
 					Condition: numericCondForTest(analysis.FieldReturn5, analysis.OpGTE, 0.01),

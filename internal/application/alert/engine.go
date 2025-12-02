@@ -202,4 +202,3 @@ func mapStocks(results []analysisDomain.DailyAnalysisResult) []alertDomain.Stock
 	}
 	return out
 }
-

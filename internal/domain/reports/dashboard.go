@@ -3,8 +3,8 @@ package reports
 import (
 	"time"
 
-	"ai-auto-trade/internal/domain/analysis"
 	alertDomain "ai-auto-trade/internal/domain/alert"
+	"ai-auto-trade/internal/domain/analysis"
 	"ai-auto-trade/internal/domain/dataingestion"
 )
 
@@ -37,23 +37,23 @@ type StockBrief struct {
 
 // IndustryDashboard 針對單一產業的摘要。
 type IndustryDashboard struct {
-	Date          time.Time
-	Industry      string
-	AverageScore  float64
-	AverageRet5   float64
-	AverageRet20  float64
-	TopStocks     []StockBrief
-	TotalCount    int
+	Date         time.Time
+	Industry     string
+	AverageScore float64
+	AverageRet5  float64
+	AverageRet20 float64
+	TopStocks    []StockBrief
+	TotalCount   int
 }
 
 // StockDashboard 個股歷史摘要。
 type StockDashboard struct {
-	Symbol      string
-	Market      dataingestion.Market
-	Industry    string
-	History     []analysis.DailyAnalysisResult
+	Symbol       string
+	Market       dataingestion.Market
+	Industry     string
+	History      []analysis.DailyAnalysisResult
 	TagsTimeline []TagTimelineEntry
-	LastResult  *analysis.DailyAnalysisResult
+	LastResult   *analysis.DailyAnalysisResult
 }
 
 // TagTimelineEntry 記錄某日出現的標籤。
@@ -64,15 +64,15 @@ type TagTimelineEntry struct {
 
 // StrategyPerformance 策略績效摘要。
 type StrategyPerformance struct {
-	Date          time.Time
-	Strategies    []StrategySummary
+	Date       time.Time
+	Strategies []StrategySummary
 }
 
 // StrategySummary 為單一策略的統計。
 type StrategySummary struct {
-	ID           string
-	Name         string
-	Triggered    int
+	ID             string
+	Name           string
+	Triggered      int
 	TriggeredToday bool
 }
 

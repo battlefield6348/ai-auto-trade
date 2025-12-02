@@ -308,3 +308,113 @@ MVP 版「強勢股」條件可定義為：
   "success": true,
   "data": { ... }
 }
+
+7.2 常見錯誤情境
+
+登入失敗：
+
+error_code: AUTH_INVALID_CREDENTIALS
+
+權限不足：
+
+error_code: AUTH_FORBIDDEN
+
+trade_date 尚未有分析結果：
+
+error_code: ANALYSIS_NOT_READY
+
+Ingestion / Analysis 任務執行中：
+
+error_code: JOB_RUNNING
+
+系統內部錯誤：
+
+error_code: INTERNAL_ERROR
+
+8. 權限對應（MVP 必要子集）
+
+MVP 中需要的最小權限：
+
+登入：
+
+不需權限（但需帳號 active）
+
+/api/analysis/daily：
+
+analysis_results.query
+
+/api/screener/strong-stocks：
+
+screener.use
+
+/api/admin/ingestion/daily：
+
+角色：admin / analyst
+
+權限：ingestion.trigger_daily
+
+/api/admin/analysis/daily：
+
+角色：admin / analyst
+
+權限：analysis.trigger_daily
+
+9. MVP 驗收標準
+
+MVP 被視為「可用」需滿足：
+
+登入
+
+使用預先建立之帳號（如 user），能成功取得 Access Token。
+
+資料抓取與分析
+
+用 admin 或 analyst 帳號：
+
+呼叫 /api/admin/ingestion/daily 對某日（例如 2025-12-01）抓日 K。
+
+呼叫 /api/admin/analysis/daily 對同一日執行分析。
+
+DB 中：
+
+daily_prices 對應日期有資料。
+
+analysis_results 對應日期有資料，且 score 等欄位有值。
+
+查詢分析結果
+
+用一般 user 帳號：
+
+呼叫 /api/analysis/daily?trade_date=2025-12-01 成功取得分頁列表。
+
+取得強勢股清單
+
+用同一 user 帳號：
+
+呼叫 /api/screener/strong-stocks?trade_date=2025-12-01
+
+能得到至少 0~N 檔「強勢股」結果（如果沒有符合也需回傳 items: []，不可錯誤）。
+
+權限驗證
+
+未登入呼叫任何上述保護 API → 得到 401。
+
+一般 user 呼叫 /api/admin/* → 得到 403。
+
+10. 未來擴充（不屬於 MVP）
+
+以下功能在其他文件已有定義，但 不包含在本次 MVP 實作範圍內，可於 MVP 之後逐步加入：
+
+完整 Screener Condition Model（任意條件組合）
+
+通知與訂閱系統（Alert & Notification）
+
+策略引擎（Strategy Engine）
+
+報表與儀表板（Reports & Dashboard）
+
+自動排程（每日自動 Ingestion / Analysis / Screener / 報表）
+
+更完整的角色／權限管理 UI
+
+完整回補機制（多日、多檔股票）

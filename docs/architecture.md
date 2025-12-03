@@ -211,6 +211,7 @@ go test ./...
 - 介面命名以能力或角色為主：`UserRepository`、`PaymentService`、`Clock` 等。
 - 錯誤處理：使用 `error`；必要時在 domain 定義 domain-level errors，避免依賴 framework-specific error 型別。
 - Context 傳遞：進入點（HTTP handler、CLI）建立 `context.Context`；Application/Infrastructure 可用 context；Domain 層避免直接持有 context。
+- 所有 public 函式/方法必須有繁體中文註解，清楚描述用途與行為；其他註解亦一律使用繁體中文。
 
 ## 8. 未來擴充規範
 - 調整架構或 DDD 邊界時，人類不得直接修改程式碼。

@@ -10,7 +10,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-// Connect creates a PostgreSQL connection pool. If no DSN is provided, nil is returned.
+// Connect 建立 PostgreSQL 連線池；若未設定 DSN 則回傳 nil。
 func Connect(ctx context.Context, cfg config.DBConfig) (*sql.DB, error) {
 	if cfg.DSN == "" {
 		return nil, nil

@@ -4,7 +4,7 @@ import (
 	"net/http"
 )
 
-// Ping returns a handler that responds with pong for health checks.
+// Ping 回傳簡單的健康檢查 handler，使用 GET 時會回應 pong。
 func Ping() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {

@@ -13,7 +13,7 @@ import (
 	dataDomain "ai-auto-trade/internal/domain/dataingestion"
 )
 
-// In-memory store for MVP; not thread-safe for production use.
+// Store 為 MVP 使用的記憶體資料庫，僅供示範且非併發安全。
 type Store struct {
 	mu              sync.RWMutex
 	users           map[string]authDomain.User
@@ -40,6 +40,7 @@ type stockRecord struct {
 	CreatedAt time.Time
 }
 
+// NewStore 建立新的記憶體 Store 實例。
 func NewStore() *Store {
 	return &Store{
 		users:           make(map[string]authDomain.User),
@@ -58,7 +59,7 @@ func (s *Store) nextID() string {
 	return fmt.Sprintf("id-%d", s.idSeq)
 }
 
-// Seed default users.
+// SeedUsers 建立預設帳號供登入測試。
 func (s *Store) SeedUsers() {
 	s.addUser("admin@example.com", "admin", "Admin", authDomain.RoleAdmin)
 	s.addUser("analyst@example.com", "analyst", "Analyst", authDomain.RoleAnalyst)
@@ -82,6 +83,7 @@ func (s *Store) addUser(email, password, name string, role authDomain.Role) {
 }
 
 // UserRepository impl
+// FindByEmail 依 email 查詢使用者。
 func (s *Store) FindByEmail(ctx context.Context, email string) (authDomain.User, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -93,6 +95,7 @@ func (s *Store) FindByEmail(ctx context.Context, email string) (authDomain.User,
 	return authDomain.User{}, fmt.Errorf("user not found")
 }
 
+// FindByID 依 ID 查詢使用者。
 func (s *Store) FindByID(ctx context.Context, id string) (authDomain.User, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -116,6 +119,7 @@ type MemoryTokenIssuer struct {
 	ttl   time.Duration
 }
 
+// NewMemoryTokenIssuer 建立簡易的記憶體版 token 簽發器。
 func NewMemoryTokenIssuer(store *Store, ttl time.Duration) *MemoryTokenIssuer {
 	return &MemoryTokenIssuer{store: store, ttl: ttl}
 }
@@ -140,7 +144,7 @@ func (m *MemoryTokenIssuer) RevokeRefresh(ctx context.Context, token string) err
 	return nil
 }
 
-// Validate token and return user.
+// ValidateToken 驗證 access token 並回傳對應使用者。
 func (s *Store) ValidateToken(token string) (authDomain.User, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -160,6 +164,7 @@ func (OwnerChecker) IsOwner(ctx context.Context, userID, resourceID string) bool
 }
 
 // AnalysisQueryRepository impls
+// FindByDate 依交易日期查詢分析結果，支援分頁與成功過濾。
 func (s *Store) FindByDate(ctx context.Context, date time.Time, filter analysis.QueryFilter, sortOpt analysis.SortOption, pagination analysis.Pagination) ([]analysisDomain.DailyAnalysisResult, int, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -183,6 +188,7 @@ func (s *Store) FindByDate(ctx context.Context, date time.Time, filter analysis.
 	return list[pagination.Offset:end], total, nil
 }
 
+// FindHistory 依股票代碼與日期區間查詢歷史分析結果。
 func (s *Store) FindHistory(ctx context.Context, symbol string, from, to *time.Time, limit int, onlySuccess bool) ([]analysisDomain.DailyAnalysisResult, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -214,6 +220,7 @@ func (s *Store) FindHistory(ctx context.Context, symbol string, from, to *time.T
 	return all, nil
 }
 
+// Get 取得指定日期、指定股票的分析結果。
 func (s *Store) Get(ctx context.Context, symbol string, date time.Time) (analysisDomain.DailyAnalysisResult, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -228,6 +235,7 @@ func (s *Store) Get(ctx context.Context, symbol string, date time.Time) (analysi
 }
 
 // Helpers to insert stocks and prices
+// UpsertStock 建立或回傳既有股票 ID（以代碼+市場為 key）。
 func (s *Store) UpsertStock(code, name string, market dataDomain.Market, industry string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -241,6 +249,7 @@ func (s *Store) UpsertStock(code, name string, market dataDomain.Market, industr
 	return id
 }
 
+// InsertDailyPrice 寫入或覆蓋某日單檔的日 K。
 func (s *Store) InsertDailyPrice(price dataDomain.DailyPrice) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -251,6 +260,7 @@ func (s *Store) InsertDailyPrice(price dataDomain.DailyPrice) {
 	s.dailyPrices[dateKey][price.Symbol] = price
 }
 
+// InsertAnalysisResult 寫入或覆蓋分析結果。
 func (s *Store) InsertAnalysisResult(res analysisDomain.DailyAnalysisResult) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -262,6 +272,7 @@ func (s *Store) InsertAnalysisResult(res analysisDomain.DailyAnalysisResult) {
 }
 
 // Accessors for prices
+// PricesBySymbol 取得單檔股票的全部日 K 並依日期排序。
 func (s *Store) PricesBySymbol(symbol string) []dataDomain.DailyPrice {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -277,6 +288,7 @@ func (s *Store) PricesBySymbol(symbol string) []dataDomain.DailyPrice {
 	return out
 }
 
+// PricesByDate 取得指定日期的全市場日 K。
 func (s *Store) PricesByDate(date time.Time) []dataDomain.DailyPrice {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -288,7 +300,7 @@ func (s *Store) PricesByDate(date time.Time) []dataDomain.DailyPrice {
 	return out
 }
 
-// HasAnalysisForDate indicates whether analysis_results exist for the given trade date.
+// HasAnalysisForDate 回傳指定交易日是否已有分析結果。
 func (s *Store) HasAnalysisForDate(date time.Time) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

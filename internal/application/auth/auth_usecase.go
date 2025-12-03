@@ -110,6 +110,7 @@ type LoginUseCase struct {
 	now    func() time.Time
 }
 
+// NewLoginUseCase 建立登入用例，負責驗證帳密並簽發 token。
 func NewLoginUseCase(users UserRepository, hasher PasswordHasher, tokens TokenIssuer) *LoginUseCase {
 	return &LoginUseCase{
 		users:  users,
@@ -162,6 +163,7 @@ type LogoutUseCase struct {
 	tokens TokenIssuer
 }
 
+// NewLogoutUseCase 建立登出用例，負責撤銷 refresh token。
 func NewLogoutUseCase(tokens TokenIssuer) *LogoutUseCase {
 	return &LogoutUseCase{tokens: tokens}
 }
@@ -179,6 +181,7 @@ type Authorizer struct {
 	owner ResourceOwnerChecker
 }
 
+// NewAuthorizer 建立授權器，依角色權限與資源歸屬檢查請求。
 func NewAuthorizer(users UserRepository, owner ResourceOwnerChecker) *Authorizer {
 	return &Authorizer{users: users, owner: owner}
 }

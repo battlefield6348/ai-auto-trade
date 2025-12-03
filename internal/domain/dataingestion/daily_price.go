@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// Market enumerates supported markets.
+// Market 列舉支援的市場別。
 type Market string
 
 const (
@@ -14,7 +14,7 @@ const (
 	MarketTPEx Market = "TPEx"
 )
 
-// DailyPrice represents a single stock's daily OHLCV record.
+// DailyPrice 描述單一股票的日 K/成交量資料。
 type DailyPrice struct {
 	Symbol       string
 	Market       Market
@@ -30,7 +30,7 @@ type DailyPrice struct {
 	IsExDividend bool
 }
 
-// ValidationError groups multiple validation failures.
+// ValidationError 收集多個驗證失敗原因。
 type ValidationError struct {
 	Reasons []string
 }
@@ -39,7 +39,7 @@ func (e *ValidationError) Error() string {
 	return fmt.Sprintf("daily price validation failed: %v", e.Reasons)
 }
 
-// Validate ensures the record satisfies basic integrity constraints.
+// Validate 檢查欄位是否符合基本完整性條件。
 func (p DailyPrice) Validate() error {
 	var reasons []string
 
@@ -105,7 +105,7 @@ func minFloat64(values ...float64) float64 {
 	return min
 }
 
-// IsValidationError helper to check error type.
+// IsValidationError 檢查錯誤是否為每日價格的驗證錯誤。
 func IsValidationError(err error) bool {
 	var ve *ValidationError
 	return errors.As(err, &ve)

@@ -19,6 +19,7 @@ type StrongScreener struct {
 	queryUsecase *analysis.QueryUseCase
 }
 
+// NewStrongScreener 建立強勢股篩選器，使用固定條件執行 MVP 選股。
 func NewStrongScreener(repo analysis.AnalysisQueryRepository) *StrongScreener {
 	return &StrongScreener{
 		queryUsecase: analysis.NewQueryUseCase(repo),

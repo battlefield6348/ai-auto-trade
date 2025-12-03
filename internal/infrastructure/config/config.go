@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// Config holds runtime configuration for the HTTP API and dependencies.
+// Config 儲存 HTTP API 及外部相依的執行設定。
 type Config struct {
 	HTTP HTTPConfig
 	DB   DBConfig
@@ -29,7 +29,7 @@ type AuthConfig struct {
 	TokenTTL time.Duration
 }
 
-// Load reads configuration from environment variables with sensible defaults.
+// Load 從環境變數載入設定，缺值時使用預設值。
 func Load() (Config, error) {
 	var cfg Config
 

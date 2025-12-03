@@ -40,6 +40,7 @@ type UseCase struct {
 	now      func() time.Time
 }
 
+// NewUseCase 建立報表與儀表板用例，匯總分析、策略與健康度資料。
 func NewUseCase(analysis AnalysisReader, strategy StrategyRunReader, health HealthReader) *UseCase {
 	return &UseCase{
 		analysis: analysis,

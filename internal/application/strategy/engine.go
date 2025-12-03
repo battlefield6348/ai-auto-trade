@@ -51,6 +51,7 @@ type Engine struct {
 	maxResult int
 }
 
+// NewEngine 建立策略引擎，負責讀取啟用策略並執行對應篩選與動作。
 func NewEngine(repo StrategyRepository, screener ScreenerExecutor, history AnalysisHistoryProvider, dispatch ActionDispatcher) *Engine {
 	return &Engine{
 		repo:      repo,

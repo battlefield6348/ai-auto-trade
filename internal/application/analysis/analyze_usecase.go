@@ -57,6 +57,7 @@ type AnalyzeUseCase struct {
 	repo            AnalysisRepository
 }
 
+// NewAnalyzeUseCase 建立日批次分析用例，串接基本資料、歷史價格與儲存介面。
 func NewAnalyzeUseCase(basicProvider BasicInfoProvider, historyProvider PriceHistoryProvider, repo AnalysisRepository) *AnalyzeUseCase {
 	return &AnalyzeUseCase{
 		basicProvider:   basicProvider,

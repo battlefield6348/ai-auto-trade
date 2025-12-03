@@ -110,6 +110,7 @@ type QueryUseCase struct {
 	repo AnalysisQueryRepository
 }
 
+// NewQueryUseCase 建立分析結果查詢用例，包裝各種查詢與匯出行為。
 func NewQueryUseCase(repo AnalysisQueryRepository) *QueryUseCase {
 	return &QueryUseCase{repo: repo}
 }

@@ -16,6 +16,7 @@ type ScreenerUseCase struct {
 	repo AnalysisQueryRepository
 }
 
+// NewScreenerUseCase 建立通用選股用例，支援多條件組合查詢。
 func NewScreenerUseCase(repo AnalysisQueryRepository) *ScreenerUseCase {
 	return &ScreenerUseCase{repo: repo}
 }
@@ -336,6 +337,7 @@ func applyNumericToRange(cond *NumericCondition, minPtr **float64, maxPtr **floa
 	}
 }
 
+// MatchConditions 依布林邏輯檢查分析結果是否符合所有設定條件。
 func MatchConditions(r domain.DailyAnalysisResult, conditions []Condition, logic BoolLogic) bool {
 	if len(conditions) == 0 {
 		return true

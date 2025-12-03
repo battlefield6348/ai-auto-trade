@@ -24,6 +24,7 @@ type IngestUseCase struct {
 	repo   PriceRepository
 }
 
+// NewIngestUseCase 建立資料擷取用例，串接外部來源與儲存端。
 func NewIngestUseCase(source PriceSource, repo PriceRepository) *IngestUseCase {
 	return &IngestUseCase{
 		source: source,

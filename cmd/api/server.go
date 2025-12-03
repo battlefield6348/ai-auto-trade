@@ -29,8 +29,7 @@ type server struct {
 const (
 	errCodeBadRequest         = "BAD_REQUEST"
 	errCodeInvalidCredentials = "AUTH_INVALID_CREDENTIALS"
-	errCodeMissingToken       = "AUTH_MISSING_TOKEN"
-	errCodeInvalidToken       = "AUTH_INVALID_TOKEN"
+	errCodeUnauthorized       = "AUTH_UNAUTHORIZED"
 	errCodeForbidden          = "AUTH_FORBIDDEN"
 	errCodeAnalysisNotReady   = "ANALYSIS_NOT_READY"
 	errCodeIngestionNotReady  = "INGESTION_NOT_READY"
@@ -344,12 +343,12 @@ func (s *server) withAuth(perm auth.Permission, next http.HandlerFunc) http.Hand
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := parseBearer(r.Header.Get("Authorization"))
 		if token == "" {
-			writeError(w, http.StatusUnauthorized, errCodeMissingToken, "missing token")
+			writeError(w, http.StatusUnauthorized, errCodeUnauthorized, "missing token")
 			return
 		}
 		user, ok := s.store.ValidateToken(token)
 		if !ok {
-			writeError(w, http.StatusUnauthorized, errCodeInvalidToken, "invalid token")
+			writeError(w, http.StatusUnauthorized, errCodeUnauthorized, "invalid token")
 			return
 		}
 		res, err := s.authz.Authorize(r.Context(), auth.AuthorizeInput{

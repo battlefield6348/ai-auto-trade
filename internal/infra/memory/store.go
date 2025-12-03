@@ -61,9 +61,9 @@ func (s *Store) nextID() string {
 
 // SeedUsers 建立預設帳號供登入測試。
 func (s *Store) SeedUsers() {
-	s.addUser("admin@example.com", "admin", "Admin", authDomain.RoleAdmin)
-	s.addUser("analyst@example.com", "analyst", "Analyst", authDomain.RoleAnalyst)
-	s.addUser("user@example.com", "password", "User", authDomain.RoleUser)
+	s.addUser("admin@example.com", "password123", "Admin", authDomain.RoleAdmin)
+	s.addUser("analyst@example.com", "password123", "Analyst", authDomain.RoleAnalyst)
+	s.addUser("user@example.com", "password123", "User", authDomain.RoleUser)
 }
 
 func (s *Store) addUser(email, password, name string, role authDomain.Role) {

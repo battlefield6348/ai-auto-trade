@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	analysisDomain "ai-auto-trade/internal/domain/analysis"
+	dataDomain "ai-auto-trade/internal/domain/dataingestion"
 	"ai-auto-trade/internal/infrastructure/config"
 )
 
@@ -69,6 +71,146 @@ func TestAuthErrors(t *testing.T) {
 	}, http.StatusForbidden)
 	if forbidden.ErrorCode != errCodeForbidden {
 		t.Fatalf("expected error_code=%s got=%s", errCodeForbidden, forbidden.ErrorCode)
+	}
+}
+
+// TestIngestionRoles 檢查 admin/analyst 可觸發，user 不可。
+func TestIngestionRoles(t *testing.T) {
+	srv := newServer(config.Config{})
+	ts := httptest.NewServer(srv.routes())
+	defer ts.Close()
+
+	admin := login(t, ts, "admin@example.com", "password123")
+	analyst := login(t, ts, "analyst@example.com", "password123")
+
+	requireSuccess(t, postJSON(t, ts, "/api/admin/ingestion/daily", admin, map[string]string{
+		"trade_date": "2025-12-01",
+	}, http.StatusOK))
+
+	requireSuccess(t, postJSON(t, ts, "/api/admin/ingestion/daily", analyst, map[string]string{
+		"trade_date": "2025-12-01",
+	}, http.StatusOK))
+
+	user := login(t, ts, "user@example.com", "password123")
+	resp := postJSON(t, ts, "/api/admin/ingestion/daily", user, map[string]string{
+		"trade_date": "2025-12-01",
+	}, http.StatusForbidden)
+	if resp.ErrorCode != errCodeForbidden {
+		t.Fatalf("expected forbidden for user")
+	}
+}
+
+// TestAnalysisFlow 檢查分析未完成與完成後的查詢行為。
+func TestAnalysisFlow(t *testing.T) {
+	srv := newServer(config.Config{})
+	ts := httptest.NewServer(srv.routes())
+	defer ts.Close()
+
+	admin := login(t, ts, "admin@example.com", "password123")
+	userToken := login(t, ts, "user@example.com", "password123")
+
+	// 未完成分析
+	notReady := getJSON(t, ts, "/api/analysis/daily?trade_date=2025-12-01", userToken, http.StatusNotFound)
+	if notReady.ErrorCode != errCodeAnalysisNotReady {
+		t.Fatalf("expected %s got %s", errCodeAnalysisNotReady, notReady.ErrorCode)
+	}
+
+	postJSON(t, ts, "/api/admin/ingestion/daily", admin, map[string]string{
+		"trade_date": "2025-12-01",
+	}, http.StatusOK)
+	postJSON(t, ts, "/api/admin/analysis/daily", admin, map[string]string{
+		"trade_date": "2025-12-01",
+	}, http.StatusOK)
+
+	queryResp := getJSON(t, ts, "/api/analysis/daily?trade_date=2025-12-01&limit=5", userToken, http.StatusOK)
+	requireSuccess(t, queryResp)
+
+	var body struct {
+		Success    bool `json:"success"`
+		TotalCount int  `json:"total_count"`
+		Items      []struct {
+			StockCode string  `json:"stock_code"`
+			Close     float64 `json:"close_price"`
+			Score     float64 `json:"score"`
+		} `json:"items"`
+	}
+	parse(t, queryResp.RawBody, &body)
+	if body.TotalCount == 0 || len(body.Items) == 0 {
+		t.Fatalf("expected analysis items")
+	}
+	if body.Items[0].StockCode == "" || body.Items[0].Close == 0 {
+		t.Fatalf("missing fields in analysis item")
+	}
+}
+
+// TestScreenerConditions 檢查篩選、排序與空結果。
+func TestScreenerConditions(t *testing.T) {
+	srv := newServer(config.Config{})
+	tradeDate, _ := time.Parse("2006-01-02", "2025-12-01")
+	srv.store.InsertAnalysisResult(analysisDomain.DailyAnalysisResult{
+		Symbol:         "AAA",
+		Market:         dataDomain.MarketTWSE,
+		TradeDate:      tradeDate,
+		ChangeRate:     0.02,
+		Return5:        floatPtr(0.05),
+		VolumeMultiple: floatPtr(2.0),
+		Score:          80,
+		Success:        true,
+	})
+	srv.store.InsertAnalysisResult(analysisDomain.DailyAnalysisResult{
+		Symbol:         "BBB",
+		Market:         dataDomain.MarketTWSE,
+		TradeDate:      tradeDate,
+		ChangeRate:     0.01,
+		Return5:        floatPtr(0.03),
+		VolumeMultiple: floatPtr(1.6),
+		Score:          75,
+		Success:        true,
+	})
+	srv.store.InsertAnalysisResult(analysisDomain.DailyAnalysisResult{
+		Symbol:         "CCC",
+		Market:         dataDomain.MarketTWSE,
+		TradeDate:      tradeDate,
+		ChangeRate:     -0.01,
+		Return5:        floatPtr(-0.02),
+		VolumeMultiple: floatPtr(1.2),
+		Score:          90,
+		Success:        true,
+	})
+
+	ts := httptest.NewServer(srv.routes())
+	defer ts.Close()
+
+	token := login(t, ts, "user@example.com", "password123")
+
+	resp := getJSON(t, ts, "/api/screener/strong-stocks?trade_date=2025-12-01&limit=5", token, http.StatusOK)
+	requireSuccess(t, resp)
+
+	var body struct {
+		Success    bool `json:"success"`
+		TotalCount int  `json:"total_count"`
+		Items      []struct {
+			StockCode string   `json:"stock_code"`
+			Return5   *float64 `json:"return_5d"`
+			Score     float64  `json:"score"`
+		} `json:"items"`
+	}
+	parse(t, resp.RawBody, &body)
+	if body.TotalCount != 2 || len(body.Items) != 2 {
+		t.Fatalf("expected 2 items after filter, got %d", len(body.Items))
+	}
+	if body.Items[0].Score < body.Items[1].Score {
+		t.Fatalf("expected sorted by score desc")
+	}
+
+	emptyResp := getJSON(t, ts, "/api/screener/strong-stocks?trade_date=2025-12-01&score_min=200", token, http.StatusOK)
+	requireSuccess(t, emptyResp)
+	var emptyBody struct {
+		Items []interface{} `json:"items"`
+	}
+	parse(t, emptyResp.RawBody, &emptyBody)
+	if len(emptyBody.Items) != 0 {
+		t.Fatalf("expected empty items")
 	}
 }
 
@@ -173,3 +315,15 @@ func decode(t *testing.T, raw []byte, out interface{}) {
 		t.Fatalf("decode body: %v", err)
 	}
 }
+
+func parse(t *testing.T, raw []byte, out interface{}) {
+	decode(t, raw, out)
+}
+
+func requireSuccess(t *testing.T, resp apiResponse) {
+	if !resp.Success && resp.Status < 400 {
+		t.Fatalf("expected success but got error_code=%s err=%s", resp.ErrorCode, resp.Error)
+	}
+}
+
+func floatPtr(f float64) *float64 { return &f }

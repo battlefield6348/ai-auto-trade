@@ -29,5 +29,16 @@ services:
     ports:
       - "8080:8080"
 
+  swagger:
+    image: swaggerapi/swagger-ui:v5.17.14
+    depends_on:
+      - app
+    environment:
+      SWAGGER_JSON: /docs/openapi.yaml
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./docs/api/openapi.yaml:/docs/openapi.yaml:ro
+
 volumes:
   db_data:

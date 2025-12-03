@@ -17,7 +17,7 @@ type fakeQueryRepoMVP struct {
 func (f fakeQueryRepoMVP) FindByDate(_ context.Context, date time.Time, _ analysis.QueryFilter, _ analysis.SortOption, _ analysis.Pagination) ([]analysisDomain.DailyAnalysisResult, int, error) {
 	var filtered []analysisDomain.DailyAnalysisResult
 	for _, r := range f.results {
-		if sameDate(r.TradeDate, date) {
+		if r.TradeDate.Equal(date) {
 			filtered = append(filtered, r)
 		}
 	}

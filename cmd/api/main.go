@@ -3,17 +3,13 @@ package main
 import (
 	"log"
 	"net/http"
-
-	httpapi "ai-auto-trade/internal/interface/http"
 )
 
 func main() {
-	router := httpapi.NewRouter()
-
+	srv := newServer()
 	addr := ":8080"
 	log.Printf("starting HTTP server on %s", addr)
-
-	if err := http.ListenAndServe(addr, router); err != nil {
+	if err := http.ListenAndServe(addr, srv.routes()); err != nil {
 		log.Fatalf("server stopped: %v", err)
 	}
 }

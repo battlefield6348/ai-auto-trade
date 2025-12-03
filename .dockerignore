@@ -1,0 +1,13 @@
+bin
+vendor
+tmp
+.git
+.github
+*.log
+*.out
+*.test
+coverage.*
+node_modules
+dist
+*.swp
+*.swo

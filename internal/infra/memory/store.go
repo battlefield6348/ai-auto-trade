@@ -287,3 +287,10 @@ func (s *Store) PricesByDate(date time.Time) []dataDomain.DailyPrice {
 	}
 	return out
 }
+
+// HasAnalysisForDate indicates whether analysis_results exist for the given trade date.
+func (s *Store) HasAnalysisForDate(date time.Time) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.analysisResults[date.Format("2006-01-02")]) > 0
+}

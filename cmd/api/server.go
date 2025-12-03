@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	analysisDomain "ai-auto-trade/internal/domain/analysis"
 	dataDomain "ai-auto-trade/internal/domain/dataingestion"
 	"ai-auto-trade/internal/infra/memory"
+	"ai-auto-trade/internal/infrastructure/config"
 )
 
 type server struct {
@@ -24,10 +26,27 @@ type server struct {
 	tokenTTL   time.Duration
 }
 
-func newServer() *server {
+const (
+	errCodeBadRequest         = "BAD_REQUEST"
+	errCodeInvalidCredentials = "AUTH_INVALID_CREDENTIALS"
+	errCodeMissingToken       = "AUTH_MISSING_TOKEN"
+	errCodeInvalidToken       = "AUTH_INVALID_TOKEN"
+	errCodeForbidden          = "AUTH_FORBIDDEN"
+	errCodeAnalysisNotReady   = "ANALYSIS_NOT_READY"
+	errCodeIngestionNotReady  = "INGESTION_NOT_READY"
+	errCodeMethodNotAllowed   = "METHOD_NOT_ALLOWED"
+	errCodeInternal           = "INTERNAL_ERROR"
+)
+
+func newServer(cfg config.Config) *server {
 	store := memory.NewStore()
 	store.SeedUsers()
-	tokenIssuer := memory.NewMemoryTokenIssuer(store, 30*time.Minute)
+
+	ttl := cfg.Auth.TokenTTL
+	if ttl == 0 {
+		ttl = 30 * time.Minute
+	}
+	tokenIssuer := memory.NewMemoryTokenIssuer(store, ttl)
 	loginUC := auth.NewLoginUseCase(store, memory.PlainHasher{}, tokenIssuer)
 	authz := auth.NewAuthorizer(store, memory.OwnerChecker{})
 	queryUC := analysis.NewQueryUseCase(store)
@@ -39,7 +58,7 @@ func newServer() *server {
 		authz:      authz,
 		queryUC:    queryUC,
 		screenerUC: screenerUC,
-		tokenTTL:   30 * time.Minute,
+		tokenTTL:   ttl,
 	}
 }
 
@@ -61,7 +80,7 @@ func (s *server) routes() http.Handler {
 
 func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
 		return
 	}
 	var body struct {
@@ -69,7 +88,7 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid body")
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
 		return
 	}
 	res, err := s.loginUC.Execute(r.Context(), auth.LoginInput{
@@ -77,9 +96,11 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Password: body.Password,
 	})
 	if err != nil {
-		writeError(w, http.StatusUnauthorized, err.Error())
+		log.Printf("login failed email=%s: %v", body.Email, err)
+		writeError(w, http.StatusUnauthorized, errCodeInvalidCredentials, "invalid credentials")
 		return
 	}
+	log.Printf("login success user_id=%s role=%s email=%s", res.User.ID, res.User.Role, res.User.Email)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success":      true,
@@ -91,24 +112,27 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleIngestionDaily(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
 		return
 	}
 	var body struct {
 		TradeDate string `json:"trade_date"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid body")
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
 		return
 	}
 	tradeDate, err := time.Parse("2006-01-02", body.TradeDate)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid trade_date")
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid trade_date")
 		return
 	}
 
 	// Seed sample stocks and generate synthetic prices for MVP.
+	start := time.Now()
+	log.Printf("ingestion daily start trade_date=%s", tradeDate.Format("2006-01-02"))
 	s.generateDailyPrices(tradeDate)
+	log.Printf("ingestion daily done trade_date=%s duration=%s", tradeDate.Format("2006-01-02"), time.Since(start))
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success":       true,
@@ -121,29 +145,36 @@ func (s *server) handleIngestionDaily(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleAnalysisDaily(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
 		return
 	}
 	var body struct {
 		TradeDate string `json:"trade_date"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid body")
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
 		return
 	}
 	tradeDate, err := time.Parse("2006-01-02", body.TradeDate)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid trade_date")
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid trade_date")
 		return
 	}
 
 	prices := s.store.PricesByDate(tradeDate)
+	if len(prices) == 0 {
+		writeError(w, http.StatusConflict, errCodeIngestionNotReady, "ingestion data not ready for trade_date")
+		return
+	}
+	start := time.Now()
+	log.Printf("analysis daily start trade_date=%s prices=%d", tradeDate.Format("2006-01-02"), len(prices))
 	success := 0
 	for _, p := range prices {
 		res := s.calculateAnalysis(p)
 		s.store.InsertAnalysisResult(res)
 		success++
 	}
+	log.Printf("analysis daily done trade_date=%s success=%d duration=%s", tradeDate.Format("2006-01-02"), success, time.Since(start))
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success":       true,
@@ -156,17 +187,17 @@ func (s *server) handleAnalysisDaily(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleAnalysisQuery(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
 		return
 	}
 	tradeDateStr := r.URL.Query().Get("trade_date")
 	if tradeDateStr == "" {
-		writeError(w, http.StatusBadRequest, "trade_date required")
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "trade_date required")
 		return
 	}
 	tradeDate, err := time.Parse("2006-01-02", tradeDateStr)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid trade_date")
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid trade_date")
 		return
 	}
 	limit := parseIntDefault(r.URL.Query().Get("limit"), 100)
@@ -186,7 +217,12 @@ func (s *server) handleAnalysisQuery(w http.ResponseWriter, r *http.Request) {
 		},
 	})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		log.Printf("analysis query failed date=%s: %v", tradeDate.Format("2006-01-02"), err)
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "internal error")
+		return
+	}
+	if out.Total == 0 {
+		writeError(w, http.StatusNotFound, errCodeAnalysisNotReady, "analysis results not ready for trade_date")
 		return
 	}
 
@@ -216,6 +252,7 @@ func (s *server) handleAnalysisQuery(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	log.Printf("analysis query done date=%s total=%d limit=%d offset=%d", tradeDate.Format("2006-01-02"), out.Total, limit, offset)
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success":     true,
 		"trade_date":  tradeDate.Format("2006-01-02"),
@@ -226,17 +263,17 @@ func (s *server) handleAnalysisQuery(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleStrongStocks(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
 		return
 	}
 	tradeDateStr := r.URL.Query().Get("trade_date")
 	if tradeDateStr == "" {
-		writeError(w, http.StatusBadRequest, "trade_date required")
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "trade_date required")
 		return
 	}
 	tradeDate, err := time.Parse("2006-01-02", tradeDateStr)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid trade_date")
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid trade_date")
 		return
 	}
 	limit := parseIntDefault(r.URL.Query().Get("limit"), 50)
@@ -246,6 +283,11 @@ func (s *server) handleStrongStocks(w http.ResponseWriter, r *http.Request) {
 	scoreMin := parseFloatDefault(r.URL.Query().Get("score_min"), 70)
 	volMin := parseFloatDefault(r.URL.Query().Get("volume_ratio_min"), 1.5)
 
+	if !s.store.HasAnalysisForDate(tradeDate) {
+		writeError(w, http.StatusNotFound, errCodeAnalysisNotReady, "analysis results not ready for trade_date")
+		return
+	}
+
 	res, err := s.screenerUC.Run(r.Context(), mvp.StrongScreenerInput{
 		TradeDate:      tradeDate,
 		Limit:          limit,
@@ -253,7 +295,8 @@ func (s *server) handleStrongStocks(w http.ResponseWriter, r *http.Request) {
 		VolumeRatioMin: volMin,
 	})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		log.Printf("strong stocks screener failed date=%s: %v", tradeDate.Format("2006-01-02"), err)
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "internal error")
 		return
 	}
 
@@ -281,6 +324,7 @@ func (s *server) handleStrongStocks(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	log.Printf("strong stocks query done date=%s total=%d returned=%d", tradeDate.Format("2006-01-02"), res.TotalCount, len(items))
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success":    true,
 		"trade_date": tradeDate.Format("2006-01-02"),
@@ -300,20 +344,25 @@ func (s *server) withAuth(perm auth.Permission, next http.HandlerFunc) http.Hand
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := parseBearer(r.Header.Get("Authorization"))
 		if token == "" {
-			writeError(w, http.StatusUnauthorized, "missing token")
+			writeError(w, http.StatusUnauthorized, errCodeMissingToken, "missing token")
 			return
 		}
 		user, ok := s.store.ValidateToken(token)
 		if !ok {
-			writeError(w, http.StatusUnauthorized, "invalid token")
+			writeError(w, http.StatusUnauthorized, errCodeInvalidToken, "invalid token")
 			return
 		}
 		res, err := s.authz.Authorize(r.Context(), auth.AuthorizeInput{
 			UserID:   user.ID,
 			Required: []auth.Permission{perm},
 		})
-		if err != nil || !res.Allowed {
-			writeError(w, http.StatusForbidden, "forbidden")
+		if err != nil {
+			log.Printf("auth check failed user_id=%s: %v", user.ID, err)
+			writeError(w, http.StatusInternalServerError, errCodeInternal, "internal error")
+			return
+		}
+		if !res.Allowed {
+			writeError(w, http.StatusForbidden, errCodeForbidden, "forbidden")
 			return
 		}
 		// stash user in context? for simplicity, skip.
@@ -357,10 +406,17 @@ func parseFloatDefault(s string, def float64) float64 {
 	return f
 }
 
-func writeError(w http.ResponseWriter, code int, msg string) {
-	writeJSON(w, code, map[string]interface{}{
-		"success": false,
-		"error":   msg,
+type errorResponse struct {
+	Success   bool   `json:"success"`
+	Error     string `json:"error"`
+	ErrorCode string `json:"error_code,omitempty"`
+}
+
+func writeError(w http.ResponseWriter, status int, code, msg string) {
+	writeJSON(w, status, errorResponse{
+		Success:   false,
+		Error:     msg,
+		ErrorCode: code,
 	})
 }
 

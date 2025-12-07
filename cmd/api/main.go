@@ -29,7 +29,7 @@ func main() {
 		log.Printf("database connected")
 	}
 
-	srv := newServer(cfg)
+	srv := newServer(cfg, pool)
 	addr := cfg.HTTP.Addr
 	log.Printf("starting HTTP server on %s", addr)
 	if err := http.ListenAndServe(addr, srv.routes()); err != nil {

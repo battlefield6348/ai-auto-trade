@@ -16,7 +16,7 @@ import (
 
 // TestMvpE2EFlow 模擬文件中的 T01、T04、T05、T08、T10、T15 主要路徑。
 func TestMvpE2EFlow(t *testing.T) {
-	srv := newServer(config.Config{})
+	srv := newServer(config.Config{}, nil)
 	ts := httptest.NewServer(srv.routes())
 	defer ts.Close()
 
@@ -45,7 +45,7 @@ func TestMvpE2EFlow(t *testing.T) {
 
 // TestAuthErrors 檢查未帶 token、錯誤密碼、權限不足的行為。
 func TestAuthErrors(t *testing.T) {
-	srv := newServer(config.Config{})
+	srv := newServer(config.Config{}, nil)
 	ts := httptest.NewServer(srv.routes())
 	defer ts.Close()
 
@@ -76,7 +76,7 @@ func TestAuthErrors(t *testing.T) {
 
 // TestIngestionRoles 檢查 admin/analyst 可觸發，user 不可。
 func TestIngestionRoles(t *testing.T) {
-	srv := newServer(config.Config{})
+	srv := newServer(config.Config{}, nil)
 	ts := httptest.NewServer(srv.routes())
 	defer ts.Close()
 
@@ -102,7 +102,7 @@ func TestIngestionRoles(t *testing.T) {
 
 // TestAnalysisFlow 檢查分析未完成與完成後的查詢行為。
 func TestAnalysisFlow(t *testing.T) {
-	srv := newServer(config.Config{})
+	srv := newServer(config.Config{}, nil)
 	ts := httptest.NewServer(srv.routes())
 	defer ts.Close()
 
@@ -145,7 +145,7 @@ func TestAnalysisFlow(t *testing.T) {
 
 // TestScreenerConditions 檢查篩選、排序與空結果。
 func TestScreenerConditions(t *testing.T) {
-	srv := newServer(config.Config{})
+	srv := newServer(config.Config{}, nil)
 	tradeDate, _ := time.Parse("2006-01-02", "2025-12-01")
 	srv.store.InsertAnalysisResult(analysisDomain.DailyAnalysisResult{
 		Symbol:         "AAA",

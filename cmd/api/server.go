@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"database/sql"
+
 	"ai-auto-trade/internal/application/analysis"
 	"ai-auto-trade/internal/application/auth"
 	"ai-auto-trade/internal/application/mvp"
@@ -18,6 +20,7 @@ import (
 )
 
 type server struct {
+	db         *sql.DB
 	store      *memory.Store
 	loginUC    *auth.LoginUseCase
 	authz      *auth.Authorizer
@@ -37,7 +40,7 @@ const (
 	errCodeInternal           = "INTERNAL_ERROR"
 )
 
-func newServer(cfg config.Config) *server {
+func newServer(cfg config.Config, dbPool *sql.DB) *server {
 	store := memory.NewStore()
 	store.SeedUsers()
 
@@ -52,6 +55,7 @@ func newServer(cfg config.Config) *server {
 	screenerUC := mvp.NewStrongScreener(store)
 
 	return &server{
+		db:         dbPool,
 		store:      store,
 		loginUC:    loginUC,
 		authz:      authz,

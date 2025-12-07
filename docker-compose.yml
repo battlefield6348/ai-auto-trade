@@ -17,22 +17,8 @@ services:
       timeout: 5s
       retries: 5
 
-  app:
-    build:
-      context: .
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      DB_DSN: postgres://ai:ai@db:5432/ai_auto_trade?sslmode=disable
-      HTTP_ADDR: ":8080"
-    ports:
-      - "8080:8080"
-
   swagger:
     image: swaggerapi/swagger-ui:v5.17.14
-    depends_on:
-      - app
     environment:
       SWAGGER_JSON: /docs/openapi.yaml
     ports:

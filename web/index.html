@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Auto Trade MVP Console</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="dot"></div>
+      <h1>AI Auto Trade Console</h1>
+    </div>
+    <div id="status" class="status">未登入</div>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>登入</h2>
+      <form id="loginForm" class="form">
+        <label>Email <input type="email" id="email" value="admin@example.com" required></label>
+        <label>密碼 <input type="password" id="password" value="password123" required></label>
+        <button type="submit">登入</button>
+      </form>
+      <p class="hint">預設帳號：admin / analyst / user，密碼皆為 <code>password123</code></p>
+    </section>
+
+    <section class="card">
+      <h2>手動日 K 擷取</h2>
+      <form id="ingestForm" class="form">
+        <label>交易日 <input type="date" id="ingestDate" required></label>
+        <button type="submit">觸發 Ingestion</button>
+      </form>
+      <pre id="ingestResult" class="result"></pre>
+    </section>
+
+    <section class="card">
+      <h2>單日分析</h2>
+      <form id="analysisForm" class="form">
+        <label>交易日 <input type="date" id="analysisDate" required></label>
+        <button type="submit">觸發 Analysis</button>
+      </form>
+      <pre id="analysisResult" class="result"></pre>
+    </section>
+
+    <section class="card">
+      <h2>分析結果查詢</h2>
+      <form id="queryForm" class="form">
+        <label>交易日 <input type="date" id="queryDate" required></label>
+        <label>Limit <input type="number" id="queryLimit" value="20" min="1" max="1000"></label>
+        <label>Offset <input type="number" id="queryOffset" value="0" min="0"></label>
+        <button type="submit">查詢</button>
+      </form>
+      <div id="queryTable" class="table"></div>
+    </section>
+
+    <section class="card">
+      <h2>強勢股篩選</h2>
+      <form id="screenerForm" class="form">
+        <label>交易日 <input type="date" id="screenerDate" required></label>
+        <label>Score ≥ <input type="number" id="scoreMin" value="70" step="0.1"></label>
+        <label>Volume Ratio ≥ <input type="number" id="volMin" value="1.5" step="0.1"></label>
+        <label>Limit <input type="number" id="screenerLimit" value="20" min="1" max="200"></label>
+        <button type="submit">查詢強勢股</button>
+      </form>
+      <div id="screenerTable" class="table"></div>
+    </section>
+  </main>
+
+  <script src="main.js"></script>
+</body>
+</html>

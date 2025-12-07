@@ -70,6 +70,8 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("pong"))
 	})
+	// 前端靜態頁面：提供簡易操作介面。
+	mux.Handle("/", http.FileServer(http.Dir("web")))
 
 	mux.HandleFunc("/api/auth/login", s.handleLogin)
 	mux.Handle("/api/admin/ingestion/daily", s.withAuth(auth.PermIngestionTriggerDaily, s.handleIngestionDaily))

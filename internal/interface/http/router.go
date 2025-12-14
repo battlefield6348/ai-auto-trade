@@ -95,6 +95,7 @@ func (s *Server) Store() *memory.Store {
 
 func (s *Server) registerRoutes() {
 	s.mux.Handle("/api/ping", s.wrapGet(s.handlePing))
+	s.mux.Handle("/api/health", s.wrapGet(s.handleHealth))
 	s.mux.Handle("/api/auth/login", s.wrapPost(s.handleLogin))
 	s.mux.Handle("/api/admin/ingestion/daily", s.requireAuth(auth.PermIngestionTriggerDaily, s.wrapPost(s.handleIngestionDaily)))
 	s.mux.Handle("/api/admin/analysis/daily", s.requireAuth(auth.PermAnalysisTriggerDaily, s.wrapPost(s.handleAnalysisDaily)))

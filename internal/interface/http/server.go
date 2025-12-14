@@ -85,6 +85,25 @@ func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	dbStatus := "unavailable"
+	if s.db == nil {
+		dbStatus = "not_configured"
+	} else {
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		if err := s.db.PingContext(ctx); err == nil {
+			dbStatus = "ok"
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success":        true,
+		"db":             dbStatus,
+		"use_synthetic":  s.useSynthetic,
+		"analysis_ready": s.tokenSvc != nil,
+	})
+}
+
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Email    string `json:"email"`

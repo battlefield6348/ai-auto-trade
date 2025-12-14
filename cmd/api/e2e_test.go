@@ -40,6 +40,11 @@ func TestMvpE2EFlow(t *testing.T) {
 	userToken := login(t, ts, "user@example.com", "password123")
 	getJSON(t, ts, "/api/analysis/daily?trade_date=2025-12-01&limit=10", userToken, http.StatusOK)
 	getJSON(t, ts, "/api/screener/strong-stocks?trade_date=2025-12-01&limit=10", userToken, http.StatusOK)
+
+	res := getJSON(t, ts, "/api/health", "", http.StatusOK)
+	if !res.Success {
+		t.Fatalf("health should be success")
+	}
 }
 
 // TestAuthErrors 檢查未帶 token、錯誤密碼、權限不足的行為。

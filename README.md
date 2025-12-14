@@ -1,115 +1,58 @@
-# Taiwan Stock Analyzer × Golang × 前後端 × 全自動開發專案
+# Price Action Crypto Analyzer · Golang · Auto Trading
 
-本專案是一個以 Golang 為核心的「台灣股票批次分析服務」，採用 monorepo 管理 **後端服務** 與 **前端 Web Console**。  
-目標是：**人類只維護需求文件，所有程式碼與測試盡可能由 AI 依文件自動產生與維護**。
+本專案以價格行為學（Price Action）為核心，提供 BTC 市場分析與自動交易能力，並以 monorepo 管理後端服務、排程分析、自動交易模組與前端 Web Console。
 
-- 類型：後端 API + 批次服務 + 前端 Web Console
-- Domain：台灣股票（上市／上櫃）
-- 主要任務：每天自動抓取資料 → 清洗 → 計算技術指標 → 儲存分析結果 → 由 Web Console 查詢與操作
-- 架構文件：`docs/architecture.md`
+## 核心目標
+- 人類只維護需求與策略文件，所有分析邏輯、排程、交易與測試盡可能由 AI 依文件自動產出與維護。
 
----
+## 理念：價格行為學（Price Action）
+- 分析重點：價格結構（趨勢/盤整/反轉）、高低點行為（HH/HL/LH/LL）、關鍵區域（支撐/壓力/流動性區）、K 線型態（吞噬、假突破、停損掃描）、市場狀態（趨勢盤/震盪盤）。
+- 策略必須可解釋、可追溯，不做黑箱模型。
 
-## 0. 目前狀態與 MVP 範圍
+## 主要功能模組
+- **定期市場判斷**：固定週期（例 1H/4H/Daily）分析市場結構、關鍵區間、潛在進場方向；結果需可追溯並推送 Telegram（格式可直接執行）。
+- **自動交易（Execution）**：分析後可決定掛單、市價進場或僅觀察；每筆交易含進場/停損/停利/倉位；分析模組與下單模組嚴格分離，可停用、可前端手動接管、決策可回溯。
+- **Web Console**：策略控制台與監控介面，提供登入、最新/歷史分析、交易紀錄、啟停排程分析、啟停自動交易、策略版本切換、Telegram 推送預覽；不承載分析/交易邏輯。
 
-### 0.1 後端（Backend）已實作功能
+## 系統流程
+1. 排程觸發
+2. 價格行為分析（Price Action Engine）
+3. 市場狀態判斷（多/空/盤整）
+4. 產出交易策略建議
+5. 推送 Telegram 通知；（選用）自動交易執行
 
-- 登入：`POST /api/auth/login`  
-  - 預設帳號：`admin@example.com`、`analyst@example.com`、`user@example.com`  
-  - 預設密碼：`password123`
-- 手動日 K 擷取：`POST /api/admin/ingestion/daily`
-- 單日分析：`POST /api/admin/analysis/daily`
-- 分析結果查詢：`GET /api/analysis/daily`
-- 強勢股篩選（固定條件版）：`GET /api/screener/strong-stocks`
-- API 規格：`docs/api/openapi.yaml`（可用 Swagger UI 瀏覽）
+## 技術與架構原則
+- **後端**：Golang；DDD + Clean Architecture。模組切分：Market Analysis / Strategy Decision / Trade Execution / Notification（Telegram）。策略邏輯需有文件、有測試、可由 AI 再生。
+- **前端**：技術棧由 `frontend/web-console` 自行定義（建議 TypeScript），定位為內部管理介面（非高頻交易 UI）。所有頁面流程先定義於 `docs/frontend/web-console/*.md`。
 
-### 0.2 前端（Frontend Web Console）目標（規劃方向）
+## AI 全自動開發原則
+- 人類只維護 `/docs` 需求與策略/流程文件。
+- AI 產生後端程式碼、測試與前端頁面。
+- 後端需保證 `go test ./...` 通過，所有行為可由文件推導。
 
-前端 Web Console 主要用於：
-
-- 以網頁介面操作登入 / 登出
-- 手動觸發日 K 擷取 / 單日分析
-- 瀏覽每日分析結果
-- 瀏覽強勢股清單
-
-前端需求與頁面說明將放在：
-
-- `docs/frontend/web-console/*.md`（需求文件）
-- 真實程式碼放在：`frontend/web-console/` 目錄下，由 AI 依文件生成
-
----
-
-## 1. 專案目標與定位
-
-### 1.1 功能目標（Domain）
-
-- 自動取得台灣股票每日價量資料（開、高、低、收、量）。
-- 進行基本清洗與整理，確保資料可用。
-- 計算常見技術指標（例如 MA5 / MA20 / 成交量平均）。
-- 每天產出分析結果並儲存（例如：站上均線、價位突破、量能放大）。
-- 透過 API 與 Web Console 提供查詢與操作能力。
-
-### 1.2 開發目標（流程）
-
-- 使用 Golang + DDD + Clean Architecture 作為後端核心架構。
-- 前端技術棧由 `frontend/web-console` 專案定義（例如 React / Vue / Next.js 等）。
-- 人類僅維護 `/docs` 內的需求與架構文件，不直接修改 `/internal` 或前端程式碼。
-- AI 依文件產生程式與測試，確保：
-  - 後端：`go test ./...` 通過。
-  - 前端：依專案設定執行對應測試／Lint／Build。
-
----
-
-## 2. 技術棧與設計原則（摘要）
-
-### 2.1 後端（Backend）
-
-- 語言：Golang（版本以 `go.mod` 為準）
-- 架構：DDD + Clean Architecture
-- 測試：`go test`
-- 格式/靜態檢查：`go fmt ./...`、`go vet ./...`
-- API 規格來源：`docs/api/openapi.yaml`
-
-### 2.2 前端（Frontend Web Console）
-
-- 技術棧：由 `frontend/web-console` 專案自訂（建議：TypeScript + 主流前端框架）
-- 功能定位：
-  - 管理介面（Internal Console）
-  - 操作分析流程與查詢結果的 GUI
-- 規格來源：`docs/frontend/web-console/*.md`（頁面規格、流程、API 依賴）
-
----
-
-## 3. 系統流程（批次服務與操作）
-
-1. 排程觸發（例如每日收盤後）
-2. 取得指定日期日 K 資料
-3. 清洗與指標計算
-4. 寫入儲存（DB）
-5. 透過：
-   - API 查詢與篩選
-   - 前端 Web Console 進行查詢、檢視與操作
-
----
-
-## 4. 專案目錄（Monorepo 結構）
-
-```text
+## Monorepo 結構（預期）
+```
 .
-├── cmd/api                   # 後端 HTTP 服務進入點
-├── internal                  # 後端 Domain / Application / Infrastructure / Interface
+├── cmd
+│   ├── api                 # HTTP API 服務
+│   ├── scheduler           # 排程分析服務
+│   └── trader              # 自動交易服務
+├── internal                # Domain / Application / Infrastructure
 ├── frontend
-│   └── web-console           # 前端 Web Console 專案（框架由此目錄定義）
+│   └── web-console         # 前端 Web Console
 ├── docs
-│   ├── architecture.md       # 整體架構說明
-│   ├── api
-│   │   └── openapi.yaml      # API 規格（供後端 / 前端參考）
-│   ├── backend               # 後端需求文件（以功能或 bounded context 切分）
+│   ├── architecture.md
+│   ├── strategy            # 價格行為與交易策略文件
+│   ├── backend
 │   └── frontend
-│       └── web-console       # 前端頁面、流程需求文件
-├── test                      # 整合／E2E 測試（選用）
+│       └── web-console
 ├── docker-compose.yml
 ├── Dockerfile
 ├── go.mod
-├── go.sum
-└── Makefile
+└── README.md
+```
+
+## 核心價值
+- 不追求炫技指標；不做不可解釋的黑箱策略。
+- 專注市場結構、風險控制、紀律化執行。
+- AI 是開發執行者，而非決策者。

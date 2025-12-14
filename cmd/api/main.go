@@ -8,6 +8,7 @@ import (
 
 	"ai-auto-trade/internal/infrastructure/config"
 	"ai-auto-trade/internal/infrastructure/db"
+	httpapi "ai-auto-trade/internal/interface/http"
 )
 
 func main() {
@@ -29,10 +30,10 @@ func main() {
 		log.Printf("database connected")
 	}
 
-	srv := newServer(cfg, pool)
+	apiServer := httpapi.NewServer()
 	addr := cfg.HTTP.Addr
 	log.Printf("starting HTTP server on %s", addr)
-	if err := http.ListenAndServe(addr, srv.routes()); err != nil {
+	if err := http.ListenAndServe(addr, apiServer.Handler()); err != nil {
 		log.Fatalf("server stopped: %v", err)
 	}
 }

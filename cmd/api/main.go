@@ -30,7 +30,7 @@ func main() {
 		log.Printf("database connected")
 	}
 
-	apiServer := httpapi.NewServer()
+	apiServer := httpapi.NewServer(cfg, pool)
 	addr := cfg.HTTP.Addr
 	log.Printf("starting HTTP server on %s", addr)
 	if err := http.ListenAndServe(addr, apiServer.Handler()); err != nil {

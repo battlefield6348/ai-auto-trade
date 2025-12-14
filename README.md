@@ -30,6 +30,13 @@
 - AI 產生後端程式碼、測試與前端頁面。
 - 後端需保證 `go test ./...` 通過，所有行為可由文件推導。
 
+## 快速啟動（Docker Compose）
+- 先安裝 Docker / Docker Compose。
+- 啟動所有服務（API、Postgres、Swagger）：`docker compose up -d --build`
+- Postgres 連線資訊：`postgres://ai:ai@localhost:5432/ai_auto_trade?sslmode=disable`，初次啟動會自動套用 `db/migrations/0001_init.sql`。
+- API 預設埠：`http://localhost:8080`；Swagger UI：`http://localhost:8081`
+- 若 DB Volume 已存在需重跑 migration，可用：`docker compose exec db psql -U ai -d ai_auto_trade -f /docker-entrypoint-initdb.d/0001_init.sql`
+
 ## Monorepo 結構（預期）
 ```
 .

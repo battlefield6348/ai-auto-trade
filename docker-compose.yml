@@ -1,6 +1,20 @@
 version: "3.9"
 
 services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      HTTP_ADDR: ":8080"
+      DB_DSN: "postgres://ai:ai@db:5432/ai_auto_trade?sslmode=disable"
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
   db:
     image: postgres:15-alpine
     environment:
@@ -11,6 +25,7 @@ services:
       - "5432:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ai -d ai_auto_trade"]
       interval: 5s

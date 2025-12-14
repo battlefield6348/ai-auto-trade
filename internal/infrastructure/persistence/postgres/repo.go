@@ -172,6 +172,19 @@ func (r *Repo) HasAnalysisForDate(ctx context.Context, date time.Time) (bool, er
 	return ok, nil
 }
 
+// LatestAnalysisDate 回傳最新分析日期。
+func (r *Repo) LatestAnalysisDate(ctx context.Context) (time.Time, error) {
+	const q = `SELECT COALESCE(MAX(trade_date), '0001-01-01') FROM analysis_results;`
+	var d time.Time
+	if err := r.db.QueryRowContext(ctx, q).Scan(&d); err != nil {
+		return time.Time{}, err
+	}
+	if d.IsZero() || d.Year() <= 1 {
+		return time.Time{}, fmt.Errorf("no analysis data")
+	}
+	return d, nil
+}
+
 // FindByDate 供 QueryUseCase 使用。
 func (r *Repo) FindByDate(ctx context.Context, date time.Time, filter analysis.QueryFilter, sort analysis.SortOption, pagination analysis.Pagination) ([]analysisDomain.DailyAnalysisResult, int, error) {
 	// MVP 僅支援基本條件：OnlySuccess + 分頁

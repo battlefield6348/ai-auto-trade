@@ -314,3 +314,23 @@ func (s *Store) HasAnalysisForDate(date time.Time) bool {
 	defer s.mu.RUnlock()
 	return len(s.analysisResults[date.Format("2006-01-02")]) > 0
 }
+
+// LatestAnalysisDate 回傳最新的分析日期（成功與否皆考慮）。
+func (s *Store) LatestAnalysisDate() (time.Time, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var latest time.Time
+	for dateKey := range s.analysisResults {
+		d, err := time.Parse("2006-01-02", dateKey)
+		if err != nil {
+			continue
+		}
+		if d.After(latest) {
+			latest = d
+		}
+	}
+	if latest.IsZero() {
+		return time.Time{}, false
+	}
+	return latest, true
+}

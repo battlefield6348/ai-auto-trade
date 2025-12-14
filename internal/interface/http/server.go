@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -38,6 +39,7 @@ type DataRepository interface {
 	PricesByPair(ctx context.Context, pair string) ([]dataDomain.DailyPrice, error)
 	InsertAnalysisResult(ctx context.Context, stockID string, res analysisDomain.DailyAnalysisResult) error
 	HasAnalysisForDate(ctx context.Context, date time.Time) (bool, error)
+	LatestAnalysisDate(ctx context.Context) (time.Time, error)
 }
 
 // memoryRepoAdapter 讓 memory.Store 相容 DataRepository。
@@ -64,6 +66,13 @@ func (m memoryRepoAdapter) InsertAnalysisResult(ctx context.Context, stockID str
 }
 func (m memoryRepoAdapter) HasAnalysisForDate(ctx context.Context, date time.Time) (bool, error) {
 	return m.store.HasAnalysisForDate(date), nil
+}
+func (m memoryRepoAdapter) LatestAnalysisDate(ctx context.Context) (time.Time, error) {
+	d, ok := m.store.LatestAnalysisDate()
+	if !ok {
+		return time.Time{}, fmt.Errorf("no analysis data")
+	}
+	return d, nil
 }
 
 func (m memoryRepoAdapter) FindByDate(ctx context.Context, date time.Time, filter analysis.QueryFilter, sort analysis.SortOption, pagination analysis.Pagination) ([]analysisDomain.DailyAnalysisResult, int, error) {
@@ -285,6 +294,61 @@ func (s *Server) handleAnalysisQuery(w http.ResponseWriter, r *http.Request) {
 		"trade_date":  tradeDate.Format("2006-01-02"),
 		"total_count": out.Total,
 		"items":       items,
+	})
+}
+
+func (s *Server) handleAnalysisSummary(w http.ResponseWriter, r *http.Request) {
+	latestDate, err := s.dataRepo.LatestAnalysisDate(r.Context())
+	if err != nil || latestDate.IsZero() {
+		writeError(w, http.StatusNotFound, errCodeAnalysisNotReady, "analysis results not ready")
+		return
+	}
+	out, err := s.queryUC.QueryByDate(r.Context(), analysis.QueryByDateInput{
+		Date: latestDate,
+		Filter: analysis.QueryFilter{
+			OnlySuccess: true,
+		},
+		Pagination: analysis.Pagination{
+			Offset: 0,
+			Limit:  100,
+		},
+	})
+	if err != nil || len(out.Results) == 0 {
+		writeError(w, http.StatusNotFound, errCodeAnalysisNotReady, "analysis results not ready")
+		return
+	}
+
+	// 以最高分數的交易對作為當前趨勢參考
+	best := out.Results[0]
+	for _, r := range out.Results {
+		if r.Score > best.Score {
+			best = r
+		}
+	}
+
+	trend := "neutral"
+	advice := "保持觀察，等待更明確的趨勢。"
+	if best.Score >= 80 {
+		trend = "bullish"
+		advice = "偏多：可分批佈局或續抱，留意風險控管。"
+	} else if best.Score <= 40 {
+		trend = "bearish"
+		advice = "偏空：宜觀望或減碼，避免追價。"
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success":      true,
+		"trade_date":   latestDate.Format("2006-01-02"),
+		"trading_pair": best.Symbol,
+		"trend":        trend,
+		"advice":       advice,
+		"metrics": map[string]interface{}{
+			"close_price":    best.Close,
+			"change_percent": best.ChangeRate,
+			"return_5d":      best.Return5,
+			"volume_ratio":   best.VolumeMultiple,
+			"score":          best.Score,
+		},
 	})
 }
 

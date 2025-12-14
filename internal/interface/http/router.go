@@ -100,6 +100,7 @@ func (s *Server) registerRoutes() {
 	s.mux.Handle("/api/admin/ingestion/daily", s.requireAuth(auth.PermIngestionTriggerDaily, s.wrapPost(s.handleIngestionDaily)))
 	s.mux.Handle("/api/admin/analysis/daily", s.requireAuth(auth.PermAnalysisTriggerDaily, s.wrapPost(s.handleAnalysisDaily)))
 	s.mux.Handle("/api/analysis/daily", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleAnalysisQuery)))
+	s.mux.Handle("/api/analysis/summary", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleAnalysisSummary)))
 	s.mux.Handle("/api/screener/strong-stocks", s.requireAuth(auth.PermScreenerUse, s.wrapGet(s.handleStrongStocks)))
 	// 前端操作介面
 	s.mux.Handle("/", http.FileServer(http.Dir("web")))

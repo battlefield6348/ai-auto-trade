@@ -182,7 +182,7 @@ FROM analysis_results ar
 JOIN stocks s ON ar.stock_id = s.id
 WHERE ar.trade_date = $1
 AND ($2::bool IS FALSE OR ar.status = 'success')
-ORDER BY s.stock_code
+ORDER BY s.trading_pair
 LIMIT $3 OFFSET $4;
 `
 	rows, err := r.db.QueryContext(ctx, q, date, filter.OnlySuccess, pagination.Limit, pagination.Offset)

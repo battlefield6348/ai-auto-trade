@@ -8,6 +8,8 @@ services:
     environment:
       HTTP_ADDR: ":8080"
       DB_DSN: "postgres://ai:ai@db:5432/ai_auto_trade?sslmode=disable"
+      AUTH_SECRET: ${AUTH_SECRET:-dev-secret-change-me}
+      INGESTION_USE_SYNTHETIC: ${INGESTION_USE_SYNTHETIC:-false}
     ports:
       - "8080:8080"
     depends_on:

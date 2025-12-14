@@ -20,8 +20,8 @@ type Store struct {
 	users           map[string]authDomain.User
 	passwords       map[string]string
 	tokens          map[string]tokenRecord
-	stocks          map[string]stockRecord                                   // id -> record
-	stockByCode     map[string]string                                        // code+market -> id
+	tradingPairs    map[string]pairRecord                                    // id -> record
+	pairByCode      map[string]string                                        // pair+market -> id
 	dailyPrices     map[string]map[string]dataDomain.DailyPrice              // date -> stockID -> price
 	analysisResults map[string]map[string]analysisDomain.DailyAnalysisResult // date -> stockID -> result
 	idSeq           int64
@@ -32,9 +32,9 @@ type tokenRecord struct {
 	Expires time.Time
 }
 
-type stockRecord struct {
+type pairRecord struct {
 	ID        string
-	Code      string
+	Pair      string
 	Market    dataDomain.Market
 	Name      string
 	Industry  string
@@ -47,8 +47,8 @@ func NewStore() *Store {
 		users:           make(map[string]authDomain.User),
 		passwords:       make(map[string]string),
 		tokens:          make(map[string]tokenRecord),
-		stocks:          make(map[string]stockRecord),
-		stockByCode:     make(map[string]string),
+		tradingPairs:    make(map[string]pairRecord),
+		pairByCode:      make(map[string]string),
 		dailyPrices:     make(map[string]map[string]dataDomain.DailyPrice),
 		analysisResults: make(map[string]map[string]analysisDomain.DailyAnalysisResult),
 	}
@@ -243,17 +243,17 @@ func (s *Store) Get(ctx context.Context, symbol string, date time.Time) (analysi
 }
 
 // Helpers to insert stocks and prices
-// UpsertStock 建立或回傳既有股票 ID（以代碼+市場為 key）。
-func (s *Store) UpsertStock(code, name string, market dataDomain.Market, industry string) string {
+// UpsertTradingPair 建立或回傳既有交易對 ID（以交易對+市場為 key）。
+func (s *Store) UpsertTradingPair(pair, name string, market dataDomain.Market, industry string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	key := fmt.Sprintf("%s-%s", code, market)
-	if id, ok := s.stockByCode[key]; ok {
+	key := fmt.Sprintf("%s-%s", pair, market)
+	if id, ok := s.pairByCode[key]; ok {
 		return id
 	}
 	id := s.nextID()
-	s.stocks[id] = stockRecord{ID: id, Code: code, Name: name, Market: market, Industry: industry, CreatedAt: time.Now()}
-	s.stockByCode[key] = id
+	s.tradingPairs[id] = pairRecord{ID: id, Pair: pair, Name: name, Market: market, Industry: industry, CreatedAt: time.Now()}
+	s.pairByCode[key] = id
 	return id
 }
 
@@ -280,13 +280,13 @@ func (s *Store) InsertAnalysisResult(res analysisDomain.DailyAnalysisResult) {
 }
 
 // Accessors for prices
-// PricesBySymbol 取得單檔股票的全部日 K 並依日期排序。
-func (s *Store) PricesBySymbol(symbol string) []dataDomain.DailyPrice {
+// PricesByPair 取得單一交易對的全部日 K 並依日期排序。
+func (s *Store) PricesByPair(pair string) []dataDomain.DailyPrice {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	var out []dataDomain.DailyPrice
 	for _, day := range s.dailyPrices {
-		if p, ok := day[symbol]; ok {
+		if p, ok := day[pair]; ok {
 			out = append(out, p)
 		}
 	}

@@ -64,22 +64,22 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
 
 -- 2) Core market data
 CREATE TABLE IF NOT EXISTS stocks (
-    id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    stock_code    VARCHAR(16) NOT NULL,
-    market_type   VARCHAR(32) NOT NULL,
-    name_zh       VARCHAR(255) NOT NULL,
-    name_en       VARCHAR(255),
-    industry      VARCHAR(255),
-    listing_date  DATE,
+    id             UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    trading_pair   VARCHAR(32) NOT NULL,
+    market_type    VARCHAR(32) NOT NULL,
+    name_zh        VARCHAR(255),
+    name_en        VARCHAR(255),
+    industry       VARCHAR(255),
+    listing_date   DATE,
     delisting_date DATE,
-    status        VARCHAR(32) NOT NULL DEFAULT 'active',
-    category      VARCHAR(64),
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (stock_code, market_type)
+    status         VARCHAR(32) NOT NULL DEFAULT 'active',
+    category       VARCHAR(64),
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (trading_pair, market_type)
 );
 
-CREATE INDEX IF NOT EXISTS idx_stocks_code ON stocks(stock_code);
+CREATE INDEX IF NOT EXISTS idx_stocks_pair ON stocks(trading_pair);
 
 CREATE TABLE IF NOT EXISTS daily_prices (
     id             UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -362,4 +362,3 @@ CREATE TABLE IF NOT EXISTS system_events (
 
 CREATE INDEX IF NOT EXISTS idx_system_events_type ON system_events(event_type, occurred_at);
 CREATE INDEX IF NOT EXISTS idx_system_events_severity ON system_events(severity, occurred_at);
-

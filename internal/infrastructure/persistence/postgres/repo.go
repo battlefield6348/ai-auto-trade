@@ -21,17 +21,17 @@ func NewRepo(db *sql.DB) *Repo {
 	return &Repo{db: db}
 }
 
-// UpsertStock 以 stock_code + market_type 作為唯一鍵，回傳 stock_id。
-func (r *Repo) UpsertStock(ctx context.Context, code, name string, market dataDomain.Market, industry string) (string, error) {
+// UpsertTradingPair 以 trading_pair + market_type 作為唯一鍵，回傳 id。
+func (r *Repo) UpsertTradingPair(ctx context.Context, pair, name string, market dataDomain.Market, industry string) (string, error) {
 	const q = `
-INSERT INTO stocks (stock_code, market_type, name_zh, industry, status)
+INSERT INTO stocks (trading_pair, market_type, name_zh, industry, status)
 VALUES ($1, $2, $3, $4, 'active')
-ON CONFLICT (stock_code, market_type)
+ON CONFLICT (trading_pair, market_type)
 DO UPDATE SET name_zh = EXCLUDED.name_zh, industry = EXCLUDED.industry, updated_at = NOW()
 RETURNING id;
 `
 	var id string
-	if err := r.db.QueryRowContext(ctx, q, code, string(market), name, industry).Scan(&id); err != nil {
+	if err := r.db.QueryRowContext(ctx, q, pair, string(market), name, industry).Scan(&id); err != nil {
 		return "", err
 	}
 	return id, nil
@@ -73,11 +73,11 @@ DO UPDATE SET open_price = EXCLUDED.open_price,
 // PricesByDate 取某交易日全市場日 K。
 func (r *Repo) PricesByDate(ctx context.Context, date time.Time) ([]dataDomain.DailyPrice, error) {
 	const q = `
-SELECT s.stock_code, s.market_type, dp.trade_date, dp.open_price, dp.high_price, dp.low_price, dp.close_price, dp.volume
+SELECT s.trading_pair, s.market_type, dp.trade_date, dp.open_price, dp.high_price, dp.low_price, dp.close_price, dp.volume
 FROM daily_prices dp
 JOIN stocks s ON dp.stock_id = s.id
 WHERE dp.trade_date = $1
-ORDER BY s.stock_code;
+ORDER BY s.trading_pair;
 `
 	rows, err := r.db.QueryContext(ctx, q, date)
 	if err != nil {
@@ -97,16 +97,16 @@ ORDER BY s.stock_code;
 	return out, rows.Err()
 }
 
-// PricesBySymbol 取單檔歷史日 K（遞增日期）。
-func (r *Repo) PricesBySymbol(ctx context.Context, symbol string) ([]dataDomain.DailyPrice, error) {
+// PricesByPair 取單檔交易對歷史日 K（遞增日期）。
+func (r *Repo) PricesByPair(ctx context.Context, pair string) ([]dataDomain.DailyPrice, error) {
 	const q = `
-SELECT s.stock_code, s.market_type, dp.trade_date, dp.open_price, dp.high_price, dp.low_price, dp.close_price, dp.volume
+SELECT s.trading_pair, s.market_type, dp.trade_date, dp.open_price, dp.high_price, dp.low_price, dp.close_price, dp.volume
 FROM daily_prices dp
 JOIN stocks s ON dp.stock_id = s.id
-WHERE s.stock_code = $1
+WHERE s.trading_pair = $1
 ORDER BY dp.trade_date;
 `
-	rows, err := r.db.QueryContext(ctx, q, symbol)
+	rows, err := r.db.QueryContext(ctx, q, pair)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +176,7 @@ func (r *Repo) HasAnalysisForDate(ctx context.Context, date time.Time) (bool, er
 func (r *Repo) FindByDate(ctx context.Context, date time.Time, filter analysis.QueryFilter, sort analysis.SortOption, pagination analysis.Pagination) ([]analysisDomain.DailyAnalysisResult, int, error) {
 	// MVP 僅支援基本條件：OnlySuccess + 分頁
 	const q = `
-SELECT s.stock_code, s.market_type, s.industry, ar.trade_date, ar.analysis_version,
+SELECT s.trading_pair, s.market_type, s.industry, ar.trade_date, ar.analysis_version,
        ar.close_price, ar.change, ar.change_percent, ar.return_5d, ar.volume, ar.volume_ratio, ar.score, ar.status, ar.error_reason
 FROM analysis_results ar
 JOIN stocks s ON ar.stock_id = s.id
@@ -245,11 +245,11 @@ SELECT count(*) FROM analysis_results ar WHERE ar.trade_date = $1 AND ($2::bool 
 // FindHistory 供 QueryUseCase 使用，MVP 版。
 func (r *Repo) FindHistory(ctx context.Context, symbol string, from, to *time.Time, limit int, onlySuccess bool) ([]analysisDomain.DailyAnalysisResult, error) {
 	q := `
-SELECT s.stock_code, s.market_type, ar.trade_date, ar.analysis_version,
+SELECT s.trading_pair, s.market_type, ar.trade_date, ar.analysis_version,
        ar.close_price, ar.change, ar.change_percent, ar.return_5d, ar.volume, ar.volume_ratio, ar.score, ar.status, ar.error_reason
 FROM analysis_results ar
 JOIN stocks s ON ar.stock_id = s.id
-WHERE s.stock_code = $1
+WHERE s.trading_pair = $1
 `
 	args := []interface{}{symbol}
 	if from != nil {
@@ -315,11 +315,11 @@ WHERE s.stock_code = $1
 // Get 單筆查詢。
 func (r *Repo) Get(ctx context.Context, symbol string, date time.Time) (analysisDomain.DailyAnalysisResult, error) {
 	const q = `
-SELECT s.stock_code, s.market_type, ar.trade_date, ar.analysis_version,
+SELECT s.trading_pair, s.market_type, ar.trade_date, ar.analysis_version,
        ar.close_price, ar.change, ar.change_percent, ar.return_5d, ar.volume, ar.volume_ratio, ar.score, ar.status, ar.error_reason
 FROM analysis_results ar
 JOIN stocks s ON ar.stock_id = s.id
-WHERE s.stock_code = $1 AND ar.trade_date = $2
+WHERE s.trading_pair = $1 AND ar.trade_date = $2
 LIMIT 1;
 `
 	var rres analysisDomain.DailyAnalysisResult

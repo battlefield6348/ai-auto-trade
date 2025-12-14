@@ -32,10 +32,10 @@ const (
 // DataRepository 定義 ingestion/analysis 讀寫與查詢接口。
 type DataRepository interface {
 	analysis.AnalysisQueryRepository
-	UpsertStock(ctx context.Context, code, name string, market dataDomain.Market, industry string) (string, error)
+	UpsertTradingPair(ctx context.Context, pair, name string, market dataDomain.Market, industry string) (string, error)
 	InsertDailyPrice(ctx context.Context, stockID string, price dataDomain.DailyPrice) error
 	PricesByDate(ctx context.Context, date time.Time) ([]dataDomain.DailyPrice, error)
-	PricesBySymbol(ctx context.Context, symbol string) ([]dataDomain.DailyPrice, error)
+	PricesByPair(ctx context.Context, pair string) ([]dataDomain.DailyPrice, error)
 	InsertAnalysisResult(ctx context.Context, stockID string, res analysisDomain.DailyAnalysisResult) error
 	HasAnalysisForDate(ctx context.Context, date time.Time) (bool, error)
 }
@@ -45,8 +45,8 @@ type memoryRepoAdapter struct {
 	store *memory.Store
 }
 
-func (m memoryRepoAdapter) UpsertStock(ctx context.Context, code, name string, market dataDomain.Market, industry string) (string, error) {
-	return m.store.UpsertStock(code, name, market, industry), nil
+func (m memoryRepoAdapter) UpsertTradingPair(ctx context.Context, pair, name string, market dataDomain.Market, industry string) (string, error) {
+	return m.store.UpsertTradingPair(pair, name, market, industry), nil
 }
 func (m memoryRepoAdapter) InsertDailyPrice(ctx context.Context, stockID string, price dataDomain.DailyPrice) error {
 	m.store.InsertDailyPrice(price)
@@ -55,8 +55,8 @@ func (m memoryRepoAdapter) InsertDailyPrice(ctx context.Context, stockID string,
 func (m memoryRepoAdapter) PricesByDate(ctx context.Context, date time.Time) ([]dataDomain.DailyPrice, error) {
 	return m.store.PricesByDate(date), nil
 }
-func (m memoryRepoAdapter) PricesBySymbol(ctx context.Context, symbol string) ([]dataDomain.DailyPrice, error) {
-	return m.store.PricesBySymbol(symbol), nil
+func (m memoryRepoAdapter) PricesByPair(ctx context.Context, pair string) ([]dataDomain.DailyPrice, error) {
+	return m.store.PricesByPair(pair), nil
 }
 func (m memoryRepoAdapter) InsertAnalysisResult(ctx context.Context, stockID string, res analysisDomain.DailyAnalysisResult) error {
 	m.store.InsertAnalysisResult(res)
@@ -176,7 +176,7 @@ func (s *Server) handleAnalysisDaily(w http.ResponseWriter, r *http.Request) {
 	log.Printf("analysis daily start trade_date=%s prices=%d", tradeDate.Format("2006-01-02"), len(prices))
 	success := 0
 	for _, p := range prices {
-		stockID, err := s.dataRepo.UpsertStock(r.Context(), p.Symbol, p.Symbol, p.Market, "")
+		stockID, err := s.dataRepo.UpsertTradingPair(r.Context(), p.Symbol, p.Symbol, p.Market, "")
 		if err != nil {
 			log.Printf("upsert stock failed symbol=%s: %v", p.Symbol, err)
 			continue
@@ -452,7 +452,7 @@ func (s *Server) generateDailyPrices(ctx context.Context, tradeDate time.Time) e
 		return err
 	}
 	for _, p := range series {
-		stockID, err := s.dataRepo.UpsertStock(ctx, p.Symbol, "Bitcoin", dataDomain.MarketCrypto, "Crypto")
+		stockID, err := s.dataRepo.UpsertTradingPair(ctx, p.Symbol, "Bitcoin", dataDomain.MarketCrypto, "Crypto")
 		if err != nil {
 			return err
 		}
@@ -482,7 +482,7 @@ func (s *Server) generateSyntheticBTC(ctx context.Context, tradeDate time.Time) 
 	}
 	for _, srs := range series {
 		d := tradeDate.AddDate(0, 0, -srs.offset)
-		stockID, err := s.dataRepo.UpsertStock(ctx, "BTCUSDT", "Bitcoin", dataDomain.MarketCrypto, "Crypto")
+		stockID, err := s.dataRepo.UpsertTradingPair(ctx, "BTCUSDT", "Bitcoin", dataDomain.MarketCrypto, "Crypto")
 		if err != nil {
 			return err
 		}
@@ -512,7 +512,7 @@ func (s *Server) insertPriceSeries(ctx context.Context, code string, market data
 			return err
 		}
 		if len(existing) == 0 {
-			stockID, err := s.dataRepo.UpsertStock(ctx, code, code, market, "")
+			stockID, err := s.dataRepo.UpsertTradingPair(ctx, code, code, market, "")
 			if err != nil {
 				return err
 			}
@@ -532,7 +532,7 @@ func (s *Server) insertPriceSeries(ctx context.Context, code string, market data
 		}
 	}
 	// today
-	stockID, err := s.dataRepo.UpsertStock(ctx, code, code, market, "")
+	stockID, err := s.dataRepo.UpsertTradingPair(ctx, code, code, market, "")
 	if err != nil {
 		return err
 	}
@@ -553,7 +553,7 @@ func (s *Server) insertPriceSeries(ctx context.Context, code string, market data
 }
 
 func (s *Server) calculateAnalysis(ctx context.Context, p dataDomain.DailyPrice) analysisDomain.DailyAnalysisResult {
-	history, _ := s.dataRepo.PricesBySymbol(ctx, p.Symbol)
+	history, _ := s.dataRepo.PricesByPair(ctx, p.Symbol)
 	var return5 *float64
 	var volumeRatio *float64
 	var changeRate float64

@@ -127,22 +127,22 @@ MVP 實作分為以下階段，須依照順序：
 ### 6.2 任務
 
 1. 依 `database_schema.md` 建立以下資料表與對應 Domain Model / Repository 介面：
-   - `stocks`
+   - `stocks`（交易對，預設 BTC/USDT）
    - `daily_prices`
    - `analysis_results`
 
 2. 為 MVP 流程提供必要的 Repository 方法（不必一次實作全部）：
    - `stocks`：
-     - 依 `stock_code` 查／寫。
-     - 建立新股票。
+     - 依 `trading_pair` 查／寫。
+     - 建立新交易對。
    - `daily_prices`：
-     - 寫入（建立或更新）某日某股的日 K。
+     - 寫入（建立或更新）某日某交易對的日 K。
      - 依 `stock_id + 日期區間` 查歷史日 K。
-     - 依 `trade_date` 查全市場日 K。
+     - 依 `trade_date` 查當日交易對日 K。
    - `analysis_results`：
-     - 寫入／更新某日某股的分析結果。
+     - 寫入／更新某日某交易對的分析結果。
      - 依 `stock_id + 日期區間` 查歷史分析結果。
-     - 依 `trade_date` 查全市場分析結果。
+     - 依 `trade_date` 查當日分析結果。
      - 依指定條件（score / return_5d / volume_ratio 等）做查詢（供 Screener 用）。
 
 ---

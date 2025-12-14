@@ -280,7 +280,7 @@ components:
           format: date
         total_stocks:
           type: integer
-          example: 2
+          example: 1
         success_count:
           type: integer
           example: 2
@@ -308,19 +308,16 @@ components:
     AnalysisItem:
       type: object
       properties:
-        stock_code:
+        trading_pair:
           type: string
-          example: "2330"
-        stock_name:
-          type: string
-          example: 台積電
+          example: "BTCUSDT"
         market_type:
           type: string
-          example: TWSE
+          example: CRYPTO
         close_price:
           type: number
           format: float
-          example: 608.0
+          example: 40800.0
         change_percent:
           type: number
           format: float
@@ -332,7 +329,7 @@ components:
           example: 0.03
         volume:
           type: integer
-          example: 1000000
+          example: 190000
         volume_ratio:
           type: number
           format: float
@@ -361,16 +358,16 @@ components:
     ScreenerItem:
       type: object
       properties:
-        stock_code:
+        trading_pair:
           type: string
-          example: "2330"
+          example: "BTCUSDT"
         market_type:
           type: string
-          example: TWSE
+          example: CRYPTO
         close_price:
           type: number
           format: float
-          example: 608.0
+          example: 40800.0
         change_percent:
           type: number
           format: float
@@ -382,7 +379,7 @@ components:
           example: 0.03
         volume:
           type: integer
-          example: 1000000
+          example: 190000
         volume_ratio:
           type: number
           format: float

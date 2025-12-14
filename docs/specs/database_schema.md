@@ -62,7 +62,7 @@
 主要欄位（邏輯層）：
 
 - id：主鍵
-- stock_code：交易對代碼（例 "BTCUSDT"）
+- trading_pair：交易對代碼（例 "BTCUSDT"）
 - market_type：市場別（此處使用 `CRYPTO`，預留多交易所）
 - name_zh / name_en：名稱（可空）
 - industry：可填入 "Crypto"（或保留未來分類）
@@ -72,8 +72,8 @@
 
 約束與索引：
 
-- `stock_code` + `market_type` 應為唯一（BTC/USDT + CRYPTO）
-- 常用查詢需針對 `stock_code` 建索引
+- `trading_pair` + `market_type` 應為唯一（BTC/USDT + CRYPTO）
+- 常用查詢需針對 `trading_pair` 建索引
 - 其他模組多透過 `id` 與其關聯
 
 ---

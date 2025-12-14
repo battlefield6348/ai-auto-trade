@@ -22,10 +22,10 @@
 對應 `/docs/specs/mvp_end_to_end_flow.md`，測試項目包含：
 
 1. 使用者登入  
-2. Data Ingestion（單日抓取）  
-3. Daily Analysis（單日分析）  
-4. 分析結果查詢 API  
-5. 強勢股 Screener API  
+2. Data Ingestion（單日抓取，BTC/USDT）  
+3. Daily Analysis（單日分析，BTC/USDT）  
+4. 分析結果查詢 API（交易對欄位）  
+5. 強勢交易對 Screener API  
 6. RBAC（角色／權限）  
 7. 錯誤處理  
 8. 任務流程正確銜接（真正的 End-to-End）
@@ -283,4 +283,3 @@ MVP 被視為完成必須：
 4. 全部保護 API 皆依權限正確判斷。  
 
 ---
-

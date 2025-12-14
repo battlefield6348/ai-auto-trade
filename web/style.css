@@ -159,3 +159,55 @@ button:hover {
   color: var(--error);
   font-weight: 600;
 }
+
+.summary {
+  display: grid;
+  gap: 10px;
+}
+
+.summary-view {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  background: #0b1220;
+  min-height: 80px;
+}
+
+.summary-pill {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.summary-grid div {
+  background: #0f172a;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px;
+  display: flex;
+  justify-content: space-between;
+  color: var(--text);
+}
+
+.summary-grid strong {
+  color: var(--muted);
+}
+
+.advice {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(16,185,129,0.15), rgba(34,211,238,0.1));
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-weight: 600;
+}

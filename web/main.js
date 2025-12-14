@@ -124,6 +124,17 @@ document.getElementById("screenerForm").addEventListener("submit", async (e) => 
   }
 });
 
+document.getElementById("summaryBtn").addEventListener("click", async () => {
+  const view = document.getElementById("summaryView");
+  view.innerHTML = "讀取中...";
+  try {
+    const res = await api("/api/analysis/summary");
+    renderSummary(view, res);
+  } catch (err) {
+    view.innerHTML = `<div class="error">${err.message}</div>`;
+  }
+});
+
 function renderTable(container, rows) {
   if (!rows.length) {
     container.innerHTML = `<div class="pill">無資料</div>`;
@@ -156,4 +167,30 @@ function fmt(v) {
     return Math.abs(v) >= 1000 ? v.toLocaleString() : v.toFixed(3).replace(/\.?0+$/, "");
   }
   return v;
+}
+
+function renderSummary(el, res) {
+  const trendLabel =
+    res.trend === "bullish"
+      ? "偏多"
+      : res.trend === "bearish"
+      ? "偏空"
+      : "中性";
+  const ret5 = res.metrics.return_5d != null ? fmt(res.metrics.return_5d) : "N/A";
+  const volr = res.metrics.volume_ratio != null ? fmt(res.metrics.volume_ratio) : "N/A";
+  el.innerHTML = `
+    <div class="summary-pill">
+      <div>日期：${res.trade_date}</div>
+      <div>交易對：${res.trading_pair}</div>
+      <div>趨勢：${trendLabel}</div>
+    </div>
+    <div class="summary-grid">
+      <div><strong>收盤</strong><span>${fmt(res.metrics.close_price)}</span></div>
+      <div><strong>日漲跌幅</strong><span>${fmt(res.metrics.change_percent)}</span></div>
+      <div><strong>近5日報酬</strong><span>${ret5}</span></div>
+      <div><strong>量能倍率</strong><span>${volr}</span></div>
+      <div><strong>Score</strong><span>${fmt(res.metrics.score)}</span></div>
+    </div>
+    <div class="advice">${res.advice}</div>
+  `;
 }

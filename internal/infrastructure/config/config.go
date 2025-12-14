@@ -27,6 +27,7 @@ type DBConfig struct {
 
 type AuthConfig struct {
 	TokenTTL time.Duration
+	Secret   string
 }
 
 // Load 從環境變數載入設定，缺值時使用預設值。
@@ -54,6 +55,7 @@ func Load() (Config, error) {
 	if err != nil {
 		return cfg, fmt.Errorf("AUTH_TOKEN_TTL: %w", err)
 	}
+	cfg.Auth.Secret = env("AUTH_SECRET", "dev-secret-change-me")
 
 	return cfg, nil
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	authDomain "ai-auto-trade/internal/domain/auth"
+	authinfra "ai-auto-trade/internal/infrastructure/auth"
 )
 
 // AuthRepo 提供使用者、角色、權限的存取。
@@ -85,7 +86,11 @@ func (r *AuthRepo) SeedDefaults(ctx context.Context) error {
 		{"user@example.com", "User", authDomain.RoleUser},
 	}
 	for _, u := range users {
-		uid, err := upsertUserTx(ctx, tx, u.email, u.name, "password123")
+		hash, err := authinfra.HashPassword("password123")
+		if err != nil {
+			return err
+		}
+		uid, err := upsertUserTx(ctx, tx, u.email, u.name, hash)
 		if err != nil {
 			return err
 		}

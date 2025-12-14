@@ -355,8 +355,13 @@ func (s *Server) requireAuth(perm auth.Permission, next http.Handler) http.Handl
 			writeError(w, http.StatusUnauthorized, errCodeUnauthorized, "missing token")
 			return
 		}
-		user, ok := s.store.ValidateToken(token)
-		if !ok {
+		claims, err := s.tokenSvc.ParseAccessToken(token)
+		if err != nil {
+			writeError(w, http.StatusUnauthorized, errCodeUnauthorized, "invalid token")
+			return
+		}
+		user, err := s.authRepo.FindByID(r.Context(), claims.UserID)
+		if err != nil {
 			writeError(w, http.StatusUnauthorized, errCodeUnauthorized, "invalid token")
 			return
 		}

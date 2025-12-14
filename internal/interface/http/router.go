@@ -10,6 +10,7 @@ import (
 	"ai-auto-trade/internal/application/auth"
 	"ai-auto-trade/internal/application/mvp"
 	"ai-auto-trade/internal/infra/memory"
+	authinfra "ai-auto-trade/internal/infrastructure/auth"
 	"ai-auto-trade/internal/infrastructure/config"
 	"ai-auto-trade/internal/infrastructure/persistence/postgres"
 )
@@ -28,6 +29,7 @@ type Server struct {
 	db         *sql.DB
 	dataRepo   DataRepository
 	authRepo   auth.UserRepository
+	tokenSvc   *authinfra.JWTIssuer
 }
 
 // NewServer 建立 API 伺服器，預設使用記憶體資料存儲；若 db 未來可用，再注入對應 repository。
@@ -49,8 +51,8 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 	if ttl == 0 {
 		ttl = 30 * time.Minute
 	}
-	tokenIssuer := memory.NewMemoryTokenIssuer(store, ttl)
-	loginUC := auth.NewLoginUseCase(authRepo, memory.PlainHasher{}, tokenIssuer)
+	tokenSvc := authinfra.NewJWTIssuer(cfg.Auth.Secret, ttl)
+	loginUC := auth.NewLoginUseCase(authRepo, authinfra.BcryptHasher{}, tokenSvc)
 	authz := auth.NewAuthorizer(authRepo, memory.OwnerChecker{})
 	queryUC := analysis.NewQueryUseCase(dataRepo)
 	screenerUC := mvp.NewStrongScreener(dataRepo)
@@ -66,6 +68,7 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 		db:         db,
 		dataRepo:   dataRepo,
 		authRepo:   authRepo,
+		tokenSvc:   tokenSvc,
 	}
 	if db != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), seedTimeout)

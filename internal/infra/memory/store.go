@@ -11,6 +11,7 @@ import (
 	analysisDomain "ai-auto-trade/internal/domain/analysis"
 	authDomain "ai-auto-trade/internal/domain/auth"
 	dataDomain "ai-auto-trade/internal/domain/dataingestion"
+	authinfra "ai-auto-trade/internal/infrastructure/auth"
 )
 
 // Store 為 MVP 使用的記憶體資料庫，僅供示範且非併發安全。
@@ -61,9 +62,16 @@ func (s *Store) nextID() string {
 
 // SeedUsers 建立預設帳號供登入測試。
 func (s *Store) SeedUsers() {
-	s.addUser("admin@example.com", "password123", "Admin", authDomain.RoleAdmin)
-	s.addUser("analyst@example.com", "password123", "Analyst", authDomain.RoleAnalyst)
-	s.addUser("user@example.com", "password123", "User", authDomain.RoleUser)
+	hash := func(p string) string {
+		h, err := authinfra.HashPassword(p)
+		if err != nil {
+			return p
+		}
+		return h
+	}
+	s.addUser("admin@example.com", hash("password123"), "Admin", authDomain.RoleAdmin)
+	s.addUser("analyst@example.com", hash("password123"), "Analyst", authDomain.RoleAnalyst)
+	s.addUser("user@example.com", hash("password123"), "User", authDomain.RoleUser)
 }
 
 func (s *Store) addUser(email, password, name string, role authDomain.Role) {

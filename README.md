@@ -36,6 +36,7 @@
 - Postgres 連線資訊：`postgres://ai:ai@localhost:5432/ai_auto_trade?sslmode=disable`，初次啟動會自動套用 `db/migrations/0001_init.sql`。
 - API 預設埠：`http://localhost:8080`；Swagger UI：`http://localhost:8081`
 - 若 DB Volume 已存在需重跑 migration，可用：`docker compose exec db psql -U ai -d ai_auto_trade -f /docker-entrypoint-initdb.d/0001_init.sql`
+- Auth：預設 `AUTH_SECRET=dev-secret-change-me`（請於正式環境改成安全值），預設帳號 `admin/analyst/user@example.com` 密碼均為 `password123`。
 
 ## Monorepo 結構（預期）
 ```

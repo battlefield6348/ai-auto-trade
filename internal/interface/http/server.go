@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"strconv"
@@ -129,9 +130,12 @@ func (s *Server) handleIngestionDaily(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	log.Printf("ingestion daily start trade_date=%s", tradeDate.Format("2006-01-02"))
 	if err := s.generateDailyPrices(r.Context(), tradeDate); err != nil {
-		log.Printf("ingestion error: %v", err)
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "ingestion failed")
-		return
+		log.Printf("ingestion error: %v; fallback to synthetic BTC", err)
+		if fbErr := s.generateSyntheticBTC(r.Context(), tradeDate); fbErr != nil {
+			log.Printf("fallback ingestion failed: %v", fbErr)
+			writeError(w, http.StatusInternalServerError, errCodeInternal, "ingestion failed")
+			return
+		}
 	}
 	log.Printf("ingestion daily done trade_date=%s duration=%s", tradeDate.Format("2006-01-02"), time.Since(start))
 
@@ -440,22 +444,60 @@ func parseFloatDefault(s string, def float64) float64 {
 	return f
 }
 
-// generateDailyPrices seeds two stocks and daily prices plus simple history for return calculation.
+// generateDailyPrices 從外部來源取得 BTCUSDT 的日 K，失敗時由上層 fallback。
 func (s *Server) generateDailyPrices(ctx context.Context, tradeDate time.Time) error {
-	_, err := s.dataRepo.UpsertStock(ctx, "2330", "TSMC", dataDomain.MarketTWSE, "半導體")
+	series, err := s.fetchBTCSeries(ctx, tradeDate)
 	if err != nil {
 		return err
 	}
-	_, err = s.dataRepo.UpsertStock(ctx, "2317", "HonHai", dataDomain.MarketTWSE, "電子")
-	if err != nil {
-		return err
+	for _, p := range series {
+		stockID, err := s.dataRepo.UpsertStock(ctx, p.Symbol, "Bitcoin", dataDomain.MarketCrypto, "Crypto")
+		if err != nil {
+			return err
+		}
+		if err := s.dataRepo.InsertDailyPrice(ctx, stockID, p); err != nil {
+			return err
+		}
 	}
+	return nil
+}
 
-	if err := s.insertPriceSeries(ctx, "2330", dataDomain.MarketTWSE, tradeDate, 600, 610, 595, 608, 1_000_000); err != nil {
-		return err
+// generateSyntheticBTC 為無法取數時的預設資料（含近 5 日）。
+func (s *Server) generateSyntheticBTC(ctx context.Context, tradeDate time.Time) error {
+	series := []struct {
+		offset int
+		open   float64
+		high   float64
+		low    float64
+		close  float64
+		volume int64
+	}{
+		{5, 38000, 38500, 37500, 38200, 150000},
+		{4, 38200, 38800, 38000, 38700, 152000},
+		{3, 38700, 39500, 38500, 39400, 160000},
+		{2, 39400, 40000, 39000, 39800, 170000},
+		{1, 39800, 40400, 39600, 40200, 175000},
+		{0, 40200, 41000, 40000, 40800, 190000},
 	}
-	if err := s.insertPriceSeries(ctx, "2317", dataDomain.MarketTWSE, tradeDate, 100, 105, 99, 104, 2_000_000); err != nil {
-		return err
+	for _, srs := range series {
+		d := tradeDate.AddDate(0, 0, -srs.offset)
+		stockID, err := s.dataRepo.UpsertStock(ctx, "BTCUSDT", "Bitcoin", dataDomain.MarketCrypto, "Crypto")
+		if err != nil {
+			return err
+		}
+		price := dataDomain.DailyPrice{
+			Symbol:    "BTCUSDT",
+			Market:    dataDomain.MarketCrypto,
+			TradeDate: d,
+			Open:      srs.open,
+			High:      srs.high,
+			Low:       srs.low,
+			Close:     srs.close,
+			Volume:    srs.volume,
+		}
+		if err := s.dataRepo.InsertDailyPrice(ctx, stockID, price); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -576,4 +618,59 @@ func simpleScore(ret5 *float64, changeRate float64, volumeRatio *float64) float6
 		return 100
 	}
 	return score
+}
+
+// fetchBTCSeries 從 Binance 抓取 BTCUSDT 1d K 線，包含指定日期與前 5 日。
+func (s *Server) fetchBTCSeries(ctx context.Context, tradeDate time.Time) ([]dataDomain.DailyPrice, error) {
+	start := tradeDate.AddDate(0, 0, -5)
+	end := tradeDate.AddDate(0, 0, 1)
+	url := "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&startTime=" +
+		strconv.FormatInt(start.UnixMilli(), 10) + "&endTime=" + strconv.FormatInt(end.UnixMilli(), 10)
+
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.New("binance response not ok")
+	}
+
+	var raw [][]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, err
+	}
+	var out []dataDomain.DailyPrice
+	for _, row := range raw {
+		if len(row) < 6 {
+			continue
+		}
+		openTime, ok := row[0].(float64)
+		if !ok {
+			continue
+		}
+		open, _ := strconv.ParseFloat(row[1].(string), 64)
+		high, _ := strconv.ParseFloat(row[2].(string), 64)
+		low, _ := strconv.ParseFloat(row[3].(string), 64)
+		closeP, _ := strconv.ParseFloat(row[4].(string), 64)
+		vol, _ := strconv.ParseFloat(row[5].(string), 64)
+
+		day := time.UnixMilli(int64(openTime)).UTC()
+		out = append(out, dataDomain.DailyPrice{
+			Symbol:    "BTCUSDT",
+			Market:    dataDomain.MarketCrypto,
+			TradeDate: day,
+			Open:      open,
+			High:      high,
+			Low:       low,
+			Close:     closeP,
+			Volume:    int64(vol),
+		})
+	}
+	if len(out) == 0 {
+		return nil, errors.New("no kline data")
+	}
+	return out, nil
 }

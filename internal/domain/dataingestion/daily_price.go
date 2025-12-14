@@ -12,6 +12,7 @@ type Market string
 const (
 	MarketTWSE Market = "TWSE"
 	MarketTPEx Market = "TPEx"
+	MarketCrypto Market = "CRYPTO"
 )
 
 // DailyPrice 描述單一股票的日 K/成交量資料。

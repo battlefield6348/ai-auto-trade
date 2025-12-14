@@ -628,50 +628,61 @@ func (s *Server) fetchBTCSeries(ctx context.Context, tradeDate time.Time) ([]dat
 	url := "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&startTime=" +
 		strconv.FormatInt(start.UnixMilli(), 10) + "&endTime=" + strconv.FormatInt(end.UnixMilli(), 10)
 
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New("binance response not ok")
-	}
+	var lastErr error
+	for attempt := 1; attempt <= 3; attempt++ {
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = err
+		} else {
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				lastErr = errors.New("binance response not ok")
+			} else {
+				var raw [][]interface{}
+				if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+					lastErr = err
+				} else {
+					var out []dataDomain.DailyPrice
+					for _, row := range raw {
+						if len(row) < 6 {
+							continue
+						}
+						openTime, ok := row[0].(float64)
+						if !ok {
+							continue
+						}
+						open, _ := strconv.ParseFloat(row[1].(string), 64)
+						high, _ := strconv.ParseFloat(row[2].(string), 64)
+						low, _ := strconv.ParseFloat(row[3].(string), 64)
+						closeP, _ := strconv.ParseFloat(row[4].(string), 64)
+						vol, _ := strconv.ParseFloat(row[5].(string), 64)
 
-	var raw [][]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-		return nil, err
-	}
-	var out []dataDomain.DailyPrice
-	for _, row := range raw {
-		if len(row) < 6 {
-			continue
+						day := time.UnixMilli(int64(openTime)).UTC()
+						out = append(out, dataDomain.DailyPrice{
+							Symbol:    "BTCUSDT",
+							Market:    dataDomain.MarketCrypto,
+							TradeDate: day,
+							Open:      open,
+							High:      high,
+							Low:       low,
+							Close:     closeP,
+							Volume:    int64(vol),
+						})
+					}
+					if len(out) == 0 {
+						lastErr = errors.New("no kline data")
+					} else {
+						return out, nil
+					}
+				}
+			}
 		}
-		openTime, ok := row[0].(float64)
-		if !ok {
-			continue
-		}
-		open, _ := strconv.ParseFloat(row[1].(string), 64)
-		high, _ := strconv.ParseFloat(row[2].(string), 64)
-		low, _ := strconv.ParseFloat(row[3].(string), 64)
-		closeP, _ := strconv.ParseFloat(row[4].(string), 64)
-		vol, _ := strconv.ParseFloat(row[5].(string), 64)
 
-		day := time.UnixMilli(int64(openTime)).UTC()
-		out = append(out, dataDomain.DailyPrice{
-			Symbol:    "BTCUSDT",
-			Market:    dataDomain.MarketCrypto,
-			TradeDate: day,
-			Open:      open,
-			High:      high,
-			Low:       low,
-			Close:     closeP,
-			Volume:    int64(vol),
-		})
+		if attempt < 3 {
+			time.Sleep(time.Duration(attempt) * time.Second)
+		}
 	}
-	if len(out) == 0 {
-		return nil, errors.New("no kline data")
-	}
-	return out, nil
+	return nil, lastErr
 }

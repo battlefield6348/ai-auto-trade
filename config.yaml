@@ -1,0 +1,15 @@
+http:
+  addr: ":8080"
+
+db:
+  dsn: "postgres://ai:ai@localhost:5432/ai_auto_trade?sslmode=disable"
+  max_open_conns: 5
+  max_idle_conns: 2
+  max_idle_time: 15m
+
+auth:
+  secret: "dev-secret-change-me"
+  token_ttl: 30m
+
+ingestion:
+  use_synthetic: true

@@ -3,115 +3,70 @@ package config
 import (
 	"fmt"
 	"os"
-	"strconv"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 // Config 儲存 HTTP API 及外部相依的執行設定。
 type Config struct {
-	HTTP HTTPConfig
-	DB   DBConfig
-	Auth AuthConfig
-	Ingestion IngestionConfig
+	HTTP      HTTPConfig      `yaml:"http"`
+	DB        DBConfig        `yaml:"db"`
+	Auth      AuthConfig      `yaml:"auth"`
+	Ingestion IngestionConfig `yaml:"ingestion"`
 }
 
 type HTTPConfig struct {
-	Addr string
+	Addr string `yaml:"addr"`
 }
 
 type DBConfig struct {
-	DSN          string
-	MaxOpenConns int
-	MaxIdleConns int
-	MaxIdleTime  time.Duration
+	DSN          string        `yaml:"dsn"`
+	MaxOpenConns int           `yaml:"max_open_conns"`
+	MaxIdleConns int           `yaml:"max_idle_conns"`
+	MaxIdleTime  time.Duration `yaml:"max_idle_time"`
 }
 
 type AuthConfig struct {
-	TokenTTL time.Duration
-	Secret   string
+	TokenTTL time.Duration `yaml:"token_ttl"`
+	Secret   string        `yaml:"secret"`
 }
 
 type IngestionConfig struct {
-	UseSynthetic bool
+	UseSynthetic bool `yaml:"use_synthetic"`
 }
 
-// Load 從環境變數載入設定，缺值時使用預設值。
-func Load() (Config, error) {
+// LoadFromFile 從 YAML 組態檔載入設定。
+func LoadFromFile(path string) (Config, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return Config{}, fmt.Errorf("read config file: %w", err)
+	}
 	var cfg Config
-
-	cfg.HTTP.Addr = env("HTTP_ADDR", ":8080")
-
-	cfg.DB.DSN = firstNonEmpty(os.Getenv("DB_DSN"), os.Getenv("DATABASE_URL"))
-	var err error
-	cfg.DB.MaxOpenConns, err = envInt("DB_MAX_OPEN_CONNS", 5)
-	if err != nil {
-		return cfg, fmt.Errorf("DB_MAX_OPEN_CONNS: %w", err)
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return Config{}, fmt.Errorf("parse config yaml: %w", err)
 	}
-	cfg.DB.MaxIdleConns, err = envInt("DB_MAX_IDLE_CONNS", 2)
-	if err != nil {
-		return cfg, fmt.Errorf("DB_MAX_IDLE_CONNS: %w", err)
-	}
-	cfg.DB.MaxIdleTime, err = envDuration("DB_MAX_IDLE_TIME", 15*time.Minute)
-	if err != nil {
-		return cfg, fmt.Errorf("DB_MAX_IDLE_TIME: %w", err)
-	}
-
-	cfg.Auth.TokenTTL, err = envDuration("AUTH_TOKEN_TTL", 30*time.Minute)
-	if err != nil {
-		return cfg, fmt.Errorf("AUTH_TOKEN_TTL: %w", err)
-	}
-	cfg.Auth.Secret = env("AUTH_SECRET", "dev-secret-change-me")
-
-	cfg.Ingestion.UseSynthetic = envBool("INGESTION_USE_SYNTHETIC", false)
-
-	return cfg, nil
+	return applyDefaults(cfg), nil
 }
 
-func env(key, def string) string {
-	val := os.Getenv(key)
-	if val == "" {
-		return def
+func applyDefaults(cfg Config) Config {
+	if cfg.HTTP.Addr == "" {
+		cfg.HTTP.Addr = ":8080"
 	}
-	return val
-}
-
-func envInt(key string, def int) (int, error) {
-	val := os.Getenv(key)
-	if val == "" {
-		return def, nil
+	if cfg.DB.MaxOpenConns == 0 {
+		cfg.DB.MaxOpenConns = 5
 	}
-	out, err := strconv.Atoi(val)
-	if err != nil {
-		return 0, err
+	if cfg.DB.MaxIdleConns == 0 {
+		cfg.DB.MaxIdleConns = 2
 	}
-	return out, nil
-}
-
-func envDuration(key string, def time.Duration) (time.Duration, error) {
-	val := os.Getenv(key)
-	if val == "" {
-		return def, nil
+	if cfg.DB.MaxIdleTime == 0 {
+		cfg.DB.MaxIdleTime = 15 * time.Minute
 	}
-	return time.ParseDuration(val)
-}
-
-func envBool(key string, def bool) bool {
-	val := os.Getenv(key)
-	if val == "" {
-		return def
+	if cfg.Auth.TokenTTL == 0 {
+		cfg.Auth.TokenTTL = 30 * time.Minute
 	}
-	b, err := strconv.ParseBool(val)
-	if err != nil {
-		return def
+	if cfg.Auth.Secret == "" {
+		cfg.Auth.Secret = "dev-secret-change-me"
 	}
-	return b
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
+	return cfg
 }

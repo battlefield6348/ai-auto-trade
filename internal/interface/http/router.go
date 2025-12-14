@@ -30,6 +30,7 @@ type Server struct {
 	dataRepo   DataRepository
 	authRepo   auth.UserRepository
 	tokenSvc   *authinfra.JWTIssuer
+	useSynthetic bool
 }
 
 // NewServer 建立 API 伺服器，預設使用記憶體資料存儲；若 db 未來可用，再注入對應 repository。
@@ -69,6 +70,7 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 		dataRepo:   dataRepo,
 		authRepo:   authRepo,
 		tokenSvc:   tokenSvc,
+		useSynthetic: cfg.Ingestion.UseSynthetic,
 	}
 	if db != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), seedTimeout)

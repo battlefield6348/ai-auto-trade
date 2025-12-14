@@ -12,6 +12,7 @@ type Config struct {
 	HTTP HTTPConfig
 	DB   DBConfig
 	Auth AuthConfig
+	Ingestion IngestionConfig
 }
 
 type HTTPConfig struct {
@@ -28,6 +29,10 @@ type DBConfig struct {
 type AuthConfig struct {
 	TokenTTL time.Duration
 	Secret   string
+}
+
+type IngestionConfig struct {
+	UseSynthetic bool
 }
 
 // Load 從環境變數載入設定，缺值時使用預設值。
@@ -56,6 +61,8 @@ func Load() (Config, error) {
 		return cfg, fmt.Errorf("AUTH_TOKEN_TTL: %w", err)
 	}
 	cfg.Auth.Secret = env("AUTH_SECRET", "dev-secret-change-me")
+
+	cfg.Ingestion.UseSynthetic = envBool("INGESTION_USE_SYNTHETIC", false)
 
 	return cfg, nil
 }
@@ -86,6 +93,18 @@ func envDuration(key string, def time.Duration) (time.Duration, error) {
 		return def, nil
 	}
 	return time.ParseDuration(val)
+}
+
+func envBool(key string, def bool) bool {
+	val := os.Getenv(key)
+	if val == "" {
+		return def
+	}
+	b, err := strconv.ParseBool(val)
+	if err != nil {
+		return def
+	}
+	return b
 }
 
 func firstNonEmpty(values ...string) string {

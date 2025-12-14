@@ -24,7 +24,8 @@ const (
 
 // TestMvpE2EFlow 覆蓋登入、ingestion、analysis、查詢與強勢股清單。
 func TestMvpE2EFlow(t *testing.T) {
-	srv := httpapi.NewServer(config.Config{}, nil)
+	cfg := config.Config{Auth: config.AuthConfig{Secret: "test-secret"}, Ingestion: config.IngestionConfig{UseSynthetic: true}}
+	srv := httpapi.NewServer(cfg, nil)
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
@@ -43,7 +44,8 @@ func TestMvpE2EFlow(t *testing.T) {
 
 // TestAuthErrors 檢查未帶 token、錯誤密碼、權限不足的行為。
 func TestAuthErrors(t *testing.T) {
-	srv := httpapi.NewServer(config.Config{}, nil)
+	cfg := config.Config{Auth: config.AuthConfig{Secret: "test-secret"}, Ingestion: config.IngestionConfig{UseSynthetic: true}}
+	srv := httpapi.NewServer(cfg, nil)
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
@@ -71,7 +73,8 @@ func TestAuthErrors(t *testing.T) {
 
 // TestAnalysisFlow 檢查分析未完成與完成後的查詢行為。
 func TestAnalysisFlow(t *testing.T) {
-	srv := httpapi.NewServer(config.Config{}, nil)
+	cfg := config.Config{Auth: config.AuthConfig{Secret: "test-secret"}, Ingestion: config.IngestionConfig{UseSynthetic: true}}
+	srv := httpapi.NewServer(cfg, nil)
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
@@ -97,23 +100,24 @@ func TestAnalysisFlow(t *testing.T) {
 		Success    bool `json:"success"`
 		TotalCount int  `json:"total_count"`
 		Items      []struct {
-			StockCode string  `json:"stock_code"`
-			Close     float64 `json:"close_price"`
-			Score     float64 `json:"score"`
+			TradingPair string  `json:"trading_pair"`
+			Close       float64 `json:"close_price"`
+			Score       float64 `json:"score"`
 		} `json:"items"`
 	}
 	parse(t, queryResp.RawBody, &body)
 	if body.TotalCount == 0 || len(body.Items) == 0 {
 		t.Fatalf("expected analysis items")
 	}
-	if body.Items[0].StockCode == "" || body.Items[0].Close == 0 {
+	if body.Items[0].TradingPair == "" || body.Items[0].Close == 0 {
 		t.Fatalf("missing fields in analysis item")
 	}
 }
 
 // TestScreenerConditions 檢查篩選、排序與空結果。
 func TestScreenerConditions(t *testing.T) {
-	srv := httpapi.NewServer(config.Config{}, nil)
+	cfg := config.Config{Auth: config.AuthConfig{Secret: "test-secret"}, Ingestion: config.IngestionConfig{UseSynthetic: true}}
+	srv := httpapi.NewServer(cfg, nil)
 	tradeDate, _ := time.Parse("2006-01-02", "2025-12-01")
 	srv.Store().InsertAnalysisResult(analysisDomain.DailyAnalysisResult{
 		Symbol:         "AAA",
@@ -158,9 +162,9 @@ func TestScreenerConditions(t *testing.T) {
 		Success    bool `json:"success"`
 		TotalCount int  `json:"total_count"`
 		Items      []struct {
-			StockCode string   `json:"stock_code"`
-			Return5   *float64 `json:"return_5d"`
-			Score     float64  `json:"score"`
+			TradingPair string   `json:"trading_pair"`
+			Return5     *float64 `json:"return_5d"`
+			Score       float64  `json:"score"`
 		} `json:"items"`
 	}
 	parse(t, resp.RawBody, &body)

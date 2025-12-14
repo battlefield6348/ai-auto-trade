@@ -237,8 +237,7 @@ func (s *Server) handleAnalysisQuery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type item struct {
-		StockCode     string   `json:"stock_code"`
-		StockName     string   `json:"stock_name"`
+		TradingPair   string   `json:"trading_pair"`
 		MarketType    string   `json:"market_type"`
 		ClosePrice    float64  `json:"close_price"`
 		ChangePercent float64  `json:"change_percent"`
@@ -250,8 +249,7 @@ func (s *Server) handleAnalysisQuery(w http.ResponseWriter, r *http.Request) {
 	items := make([]item, 0, len(out.Results))
 	for _, r := range out.Results {
 		items = append(items, item{
-			StockCode:     r.Symbol,
-			StockName:     r.Industry,
+			TradingPair:   r.Symbol,
 			MarketType:    string(r.Market),
 			ClosePrice:    r.Close,
 			ChangePercent: r.ChangeRate,
@@ -313,7 +311,7 @@ func (s *Server) handleStrongStocks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type item struct {
-		StockCode     string   `json:"stock_code"`
+		TradingPair   string   `json:"trading_pair"`
 		MarketType    string   `json:"market_type"`
 		ClosePrice    float64  `json:"close_price"`
 		ChangePercent float64  `json:"change_percent"`
@@ -325,7 +323,7 @@ func (s *Server) handleStrongStocks(w http.ResponseWriter, r *http.Request) {
 	items := make([]item, 0, len(res.Items))
 	for _, r := range res.Items {
 		items = append(items, item{
-			StockCode:     r.Symbol,
+			TradingPair:   r.Symbol,
 			MarketType:    string(r.Market),
 			ClosePrice:    r.Close,
 			ChangePercent: r.ChangeRate,
@@ -446,6 +444,9 @@ func parseFloatDefault(s string, def float64) float64 {
 
 // generateDailyPrices 從外部來源取得 BTCUSDT 的日 K，失敗時由上層 fallback。
 func (s *Server) generateDailyPrices(ctx context.Context, tradeDate time.Time) error {
+	if s.useSynthetic {
+		return s.generateSyntheticBTC(ctx, tradeDate)
+	}
 	series, err := s.fetchBTCSeries(ctx, tradeDate)
 	if err != nil {
 		return err

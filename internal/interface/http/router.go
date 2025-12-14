@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"database/sql"
 	"net/http"
 	"time"
@@ -10,8 +11,10 @@ import (
 	"ai-auto-trade/internal/application/mvp"
 	"ai-auto-trade/internal/infra/memory"
 	"ai-auto-trade/internal/infrastructure/config"
-	pgrepo "ai-auto-trade/internal/infrastructure/persistence/postgres"
+	"ai-auto-trade/internal/infrastructure/persistence/postgres"
 )
+
+const seedTimeout = 5 * time.Second
 
 // Server 封裝 HTTP 路由與依賴。
 type Server struct {
@@ -24,6 +27,7 @@ type Server struct {
 	tokenTTL   time.Duration
 	db         *sql.DB
 	dataRepo   DataRepository
+	authRepo   auth.UserRepository
 }
 
 // NewServer 建立 API 伺服器，預設使用記憶體資料存儲；若 db 未來可用，再注入對應 repository。
@@ -32,10 +36,13 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 	store.SeedUsers()
 
 	var dataRepo DataRepository
+	var authRepo auth.UserRepository
 	if db != nil {
-		dataRepo = pgrepo.NewRepo(db)
+		dataRepo = postgres.NewRepo(db)
+		authRepo = postgres.NewAuthRepo(db)
 	} else {
 		dataRepo = memoryRepoAdapter{store: store}
+		authRepo = store
 	}
 
 	ttl := cfg.Auth.TokenTTL
@@ -43,8 +50,8 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 		ttl = 30 * time.Minute
 	}
 	tokenIssuer := memory.NewMemoryTokenIssuer(store, ttl)
-	loginUC := auth.NewLoginUseCase(store, memory.PlainHasher{}, tokenIssuer)
-	authz := auth.NewAuthorizer(store, memory.OwnerChecker{})
+	loginUC := auth.NewLoginUseCase(authRepo, memory.PlainHasher{}, tokenIssuer)
+	authz := auth.NewAuthorizer(authRepo, memory.OwnerChecker{})
 	queryUC := analysis.NewQueryUseCase(dataRepo)
 	screenerUC := mvp.NewStrongScreener(dataRepo)
 
@@ -58,6 +65,14 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 		tokenTTL:   ttl,
 		db:         db,
 		dataRepo:   dataRepo,
+		authRepo:   authRepo,
+	}
+	if db != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), seedTimeout)
+		defer cancel()
+		if err := seedAuth(ctx, authRepo); err != nil {
+			println("warning: seed auth failed:", err.Error())
+		}
 	}
 	s.registerRoutes()
 	return s

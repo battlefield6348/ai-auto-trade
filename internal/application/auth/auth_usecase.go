@@ -83,6 +83,17 @@ var RolePermissions = map[auth.Role][]Permission{
 	},
 }
 
+// RolePermissionsAsStrings 將 RolePermissions 轉為字串 map，便於 seeding。
+func RolePermissionsAsStrings() map[auth.Role][]string {
+	out := make(map[auth.Role][]string, len(RolePermissions))
+	for role, perms := range RolePermissions {
+		for _, p := range perms {
+			out[role] = append(out[role], string(p))
+		}
+	}
+	return out
+}
+
 // ResourceOwnerChecker 用於判斷資源是否屬於當前使用者。
 type ResourceOwnerChecker interface {
 	IsOwner(ctx context.Context, userID, resourceID string) bool

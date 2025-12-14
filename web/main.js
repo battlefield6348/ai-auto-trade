@@ -23,6 +23,21 @@ const pretty = (el, obj) => {
   el.textContent = obj ? JSON.stringify(obj, null, 2) : "";
 };
 
+async function initHealth() {
+  try {
+    const res = await fetch("/api/health");
+    const data = await res.json();
+    if (data.success) {
+      setStatus(
+        `健康檢查 OK ｜ DB: ${data.db} ｜ 合成資料: ${data.use_synthetic ? "ON" : "OFF"}`
+      );
+    }
+  } catch (_) {
+    // ignore
+  }
+}
+initHealth();
+
 document.getElementById("loginForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   try {
@@ -115,7 +130,7 @@ function renderTable(container, rows) {
     return;
   }
   const headers = [
-    "stock_code",
+    "trading_pair",
     "market_type",
     "close_price",
     "change_percent",

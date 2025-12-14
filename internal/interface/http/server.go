@@ -14,6 +14,7 @@ import (
 	"ai-auto-trade/internal/application/mvp"
 	analysisDomain "ai-auto-trade/internal/domain/analysis"
 	dataDomain "ai-auto-trade/internal/domain/dataingestion"
+	"ai-auto-trade/internal/infra/memory"
 )
 
 const (
@@ -26,6 +27,53 @@ const (
 	errCodeMethodNotAllowed   = "METHOD_NOT_ALLOWED"
 	errCodeInternal           = "INTERNAL_ERROR"
 )
+
+// DataRepository 定義 ingestion/analysis 讀寫與查詢接口。
+type DataRepository interface {
+	analysis.AnalysisQueryRepository
+	UpsertStock(ctx context.Context, code, name string, market dataDomain.Market, industry string) (string, error)
+	InsertDailyPrice(ctx context.Context, stockID string, price dataDomain.DailyPrice) error
+	PricesByDate(ctx context.Context, date time.Time) ([]dataDomain.DailyPrice, error)
+	PricesBySymbol(ctx context.Context, symbol string) ([]dataDomain.DailyPrice, error)
+	InsertAnalysisResult(ctx context.Context, stockID string, res analysisDomain.DailyAnalysisResult) error
+	HasAnalysisForDate(ctx context.Context, date time.Time) (bool, error)
+}
+
+// memoryRepoAdapter 讓 memory.Store 相容 DataRepository。
+type memoryRepoAdapter struct {
+	store *memory.Store
+}
+
+func (m memoryRepoAdapter) UpsertStock(ctx context.Context, code, name string, market dataDomain.Market, industry string) (string, error) {
+	return m.store.UpsertStock(code, name, market, industry), nil
+}
+func (m memoryRepoAdapter) InsertDailyPrice(ctx context.Context, stockID string, price dataDomain.DailyPrice) error {
+	m.store.InsertDailyPrice(price)
+	return nil
+}
+func (m memoryRepoAdapter) PricesByDate(ctx context.Context, date time.Time) ([]dataDomain.DailyPrice, error) {
+	return m.store.PricesByDate(date), nil
+}
+func (m memoryRepoAdapter) PricesBySymbol(ctx context.Context, symbol string) ([]dataDomain.DailyPrice, error) {
+	return m.store.PricesBySymbol(symbol), nil
+}
+func (m memoryRepoAdapter) InsertAnalysisResult(ctx context.Context, stockID string, res analysisDomain.DailyAnalysisResult) error {
+	m.store.InsertAnalysisResult(res)
+	return nil
+}
+func (m memoryRepoAdapter) HasAnalysisForDate(ctx context.Context, date time.Time) (bool, error) {
+	return m.store.HasAnalysisForDate(date), nil
+}
+
+func (m memoryRepoAdapter) FindByDate(ctx context.Context, date time.Time, filter analysis.QueryFilter, sort analysis.SortOption, pagination analysis.Pagination) ([]analysisDomain.DailyAnalysisResult, int, error) {
+	return m.store.FindByDate(ctx, date, filter, sort, pagination)
+}
+func (m memoryRepoAdapter) FindHistory(ctx context.Context, symbol string, from, to *time.Time, limit int, onlySuccess bool) ([]analysisDomain.DailyAnalysisResult, error) {
+	return m.store.FindHistory(ctx, symbol, from, to, limit, onlySuccess)
+}
+func (m memoryRepoAdapter) Get(ctx context.Context, symbol string, date time.Time) (analysisDomain.DailyAnalysisResult, error) {
+	return m.store.Get(ctx, symbol, date)
+}
 
 // --- Handlers ---
 
@@ -80,7 +128,11 @@ func (s *Server) handleIngestionDaily(w http.ResponseWriter, r *http.Request) {
 
 	start := time.Now()
 	log.Printf("ingestion daily start trade_date=%s", tradeDate.Format("2006-01-02"))
-	s.generateDailyPrices(tradeDate)
+	if err := s.generateDailyPrices(r.Context(), tradeDate); err != nil {
+		log.Printf("ingestion error: %v", err)
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "ingestion failed")
+		return
+	}
 	log.Printf("ingestion daily done trade_date=%s duration=%s", tradeDate.Format("2006-01-02"), time.Since(start))
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
@@ -106,7 +158,12 @@ func (s *Server) handleAnalysisDaily(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prices := s.store.PricesByDate(tradeDate)
+	prices, err := s.dataRepo.PricesByDate(r.Context(), tradeDate)
+	if err != nil {
+		log.Printf("analysis read prices failed: %v", err)
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "failed to read prices")
+		return
+	}
 	if len(prices) == 0 {
 		writeError(w, http.StatusConflict, errCodeIngestionNotReady, "ingestion data not ready for trade_date")
 		return
@@ -115,8 +172,16 @@ func (s *Server) handleAnalysisDaily(w http.ResponseWriter, r *http.Request) {
 	log.Printf("analysis daily start trade_date=%s prices=%d", tradeDate.Format("2006-01-02"), len(prices))
 	success := 0
 	for _, p := range prices {
-		res := s.calculateAnalysis(p)
-		s.store.InsertAnalysisResult(res)
+		stockID, err := s.dataRepo.UpsertStock(r.Context(), p.Symbol, p.Symbol, p.Market, "")
+		if err != nil {
+			log.Printf("upsert stock failed symbol=%s: %v", p.Symbol, err)
+			continue
+		}
+		res := s.calculateAnalysis(r.Context(), p)
+		if err := s.dataRepo.InsertAnalysisResult(r.Context(), stockID, res); err != nil {
+			log.Printf("write analysis failed symbol=%s date=%s: %v", p.Symbol, tradeDate.Format("2006-01-02"), err)
+			continue
+		}
 		success++
 	}
 	log.Printf("analysis daily done trade_date=%s success=%d duration=%s", tradeDate.Format("2006-01-02"), success, time.Since(start))
@@ -220,7 +285,13 @@ func (s *Server) handleStrongStocks(w http.ResponseWriter, r *http.Request) {
 	scoreMin := parseFloatDefault(r.URL.Query().Get("score_min"), 70)
 	volMin := parseFloatDefault(r.URL.Query().Get("volume_ratio_min"), 1.5)
 
-	if !s.store.HasAnalysisForDate(tradeDate) {
+	hasAnalysis, err := s.dataRepo.HasAnalysisForDate(r.Context(), tradeDate)
+	if err != nil {
+		log.Printf("check analysis ready failed: %v", err)
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "internal error")
+		return
+	}
+	if !hasAnalysis {
 		writeError(w, http.StatusNotFound, errCodeAnalysisNotReady, "analysis results not ready for trade_date")
 		return
 	}
@@ -365,20 +436,38 @@ func parseFloatDefault(s string, def float64) float64 {
 }
 
 // generateDailyPrices seeds two stocks and daily prices plus simple history for return calculation.
-func (s *Server) generateDailyPrices(tradeDate time.Time) {
-	s.store.UpsertStock("2330", "TSMC", dataDomain.MarketTWSE, "半導體")
-	s.store.UpsertStock("2317", "HonHai", dataDomain.MarketTWSE, "電子")
+func (s *Server) generateDailyPrices(ctx context.Context, tradeDate time.Time) error {
+	_, err := s.dataRepo.UpsertStock(ctx, "2330", "TSMC", dataDomain.MarketTWSE, "半導體")
+	if err != nil {
+		return err
+	}
+	_, err = s.dataRepo.UpsertStock(ctx, "2317", "HonHai", dataDomain.MarketTWSE, "電子")
+	if err != nil {
+		return err
+	}
 
-	s.insertPriceSeries("2330", dataDomain.MarketTWSE, tradeDate, 600, 610, 595, 608, 1_000_000)
-	s.insertPriceSeries("2317", dataDomain.MarketTWSE, tradeDate, 100, 105, 99, 104, 2_000_000)
+	if err := s.insertPriceSeries(ctx, "2330", dataDomain.MarketTWSE, tradeDate, 600, 610, 595, 608, 1_000_000); err != nil {
+		return err
+	}
+	if err := s.insertPriceSeries(ctx, "2317", dataDomain.MarketTWSE, tradeDate, 100, 105, 99, 104, 2_000_000); err != nil {
+		return err
+	}
+	return nil
 }
 
-func (s *Server) insertPriceSeries(code string, market dataDomain.Market, tradeDate time.Time, open, high, low, close float64, volume int64) {
+func (s *Server) insertPriceSeries(ctx context.Context, code string, market dataDomain.Market, tradeDate time.Time, open, high, low, close float64, volume int64) error {
 	// generate last 5 days synthetic if missing
 	for i := 5; i >= 1; i-- {
 		d := tradeDate.AddDate(0, 0, -i)
-		existing := s.store.PricesByDate(d)
+		existing, err := s.dataRepo.PricesByDate(ctx, d)
+		if err != nil {
+			return err
+		}
 		if len(existing) == 0 {
+			stockID, err := s.dataRepo.UpsertStock(ctx, code, code, market, "")
+			if err != nil {
+				return err
+			}
 			price := dataDomain.DailyPrice{
 				Symbol:    code,
 				Market:    market,
@@ -389,10 +478,16 @@ func (s *Server) insertPriceSeries(code string, market dataDomain.Market, tradeD
 				Close:     close - float64(5+i),
 				Volume:    volume / 2,
 			}
-			s.store.InsertDailyPrice(price)
+			if err := s.dataRepo.InsertDailyPrice(ctx, stockID, price); err != nil {
+				return err
+			}
 		}
 	}
 	// today
+	stockID, err := s.dataRepo.UpsertStock(ctx, code, code, market, "")
+	if err != nil {
+		return err
+	}
 	price := dataDomain.DailyPrice{
 		Symbol:    code,
 		Market:    market,
@@ -403,11 +498,14 @@ func (s *Server) insertPriceSeries(code string, market dataDomain.Market, tradeD
 		Close:     close,
 		Volume:    volume,
 	}
-	s.store.InsertDailyPrice(price)
+	if err := s.dataRepo.InsertDailyPrice(ctx, stockID, price); err != nil {
+		return err
+	}
+	return nil
 }
 
-func (s *Server) calculateAnalysis(p dataDomain.DailyPrice) analysisDomain.DailyAnalysisResult {
-	history := s.store.PricesBySymbol(p.Symbol)
+func (s *Server) calculateAnalysis(ctx context.Context, p dataDomain.DailyPrice) analysisDomain.DailyAnalysisResult {
+	history, _ := s.dataRepo.PricesBySymbol(ctx, p.Symbol)
 	var return5 *float64
 	var volumeRatio *float64
 	var changeRate float64

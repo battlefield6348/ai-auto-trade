@@ -10,6 +10,7 @@ import (
 	"ai-auto-trade/internal/application/mvp"
 	"ai-auto-trade/internal/infra/memory"
 	"ai-auto-trade/internal/infrastructure/config"
+	pgrepo "ai-auto-trade/internal/infrastructure/persistence/postgres"
 )
 
 // Server 封裝 HTTP 路由與依賴。
@@ -22,12 +23,20 @@ type Server struct {
 	screenerUC *mvp.StrongScreener
 	tokenTTL   time.Duration
 	db         *sql.DB
+	dataRepo   DataRepository
 }
 
 // NewServer 建立 API 伺服器，預設使用記憶體資料存儲；若 db 未來可用，再注入對應 repository。
 func NewServer(cfg config.Config, db *sql.DB) *Server {
 	store := memory.NewStore()
 	store.SeedUsers()
+
+	var dataRepo DataRepository
+	if db != nil {
+		dataRepo = pgrepo.NewRepo(db)
+	} else {
+		dataRepo = memoryRepoAdapter{store: store}
+	}
 
 	ttl := cfg.Auth.TokenTTL
 	if ttl == 0 {
@@ -36,8 +45,8 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 	tokenIssuer := memory.NewMemoryTokenIssuer(store, ttl)
 	loginUC := auth.NewLoginUseCase(store, memory.PlainHasher{}, tokenIssuer)
 	authz := auth.NewAuthorizer(store, memory.OwnerChecker{})
-	queryUC := analysis.NewQueryUseCase(store)
-	screenerUC := mvp.NewStrongScreener(store)
+	queryUC := analysis.NewQueryUseCase(dataRepo)
+	screenerUC := mvp.NewStrongScreener(dataRepo)
 
 	s := &Server{
 		mux:        http.NewServeMux(),
@@ -48,6 +57,7 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 		screenerUC: screenerUC,
 		tokenTTL:   ttl,
 		db:         db,
+		dataRepo:   dataRepo,
 	}
 	s.registerRoutes()
 	return s

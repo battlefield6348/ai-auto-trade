@@ -8,10 +8,10 @@
 
 ## 1. 目的與範圍
 
-本文件定義第一條可運作的最小端到端流程（MVP），目標是達成：
+本文件定義第一條可運作的最小端到端流程（MVP），已全面改為 **BTC 現貨（BTC/USDT）** 場景，目標是達成：
 
-> 已登入的使用者，可以呼叫一個 API，取得某一交易日的「強勢股清單」，  
-> 而這個清單是用真實台股日 K 資料、經過系統分析後產生的結果。
+> 已登入的使用者，可以呼叫 API 取得某一交易日（UTC）「BTC 分析結果」與「強勢條件清單」，  
+> 並且這些結果來自實際交易所日 K（預設 Binance 1d K 線；無法取數時以合成資料備援）。
 
 僅從既有規格擷取「必要子集」，形成可驗收的垂直流程。
 
@@ -20,18 +20,18 @@
 ## 2. MVP 整體流程概觀
 
 1. 使用者登入：Email + 密碼取得 Access Token。  
-2. 資料準備：手動觸發指定交易日的日 K 抓取，寫入 `stocks`、`daily_prices`。  
+2. 資料準備：手動觸發指定交易日的日 K 抓取，寫入 `stocks`（此處代表交易對，預設僅 BTC/USDT）、`daily_prices`。  
 3. 每日分析：手動觸發單日分析，寫入 `analysis_results`。  
 4. 分析結果查詢 API：查詢某日全市場分析結果。  
-5. 強勢股 Screener API：固定條件，回傳當日強勢股清單。
+5. 強勢 Screener API：固定條件，回傳當日強勢清單（僅 BTC/USDT，但預留多交易對擴充）。
 
 ---
 
 ## 3. 前置條件
 
-1. PostgreSQL 可用；已執行 migration，至少包含：`users`、`stocks`、`daily_prices`、`analysis_results`、`roles`、`user_roles`、`permissions`、`role_permissions`。  
-2. 至少有一個可登入帳號（角色 `user` 或 `analyst`）。  
-3. 服務提供 HTTP API，並已套用認證 middleware。
+1. PostgreSQL 可用；已執行 migration，至少包含：`users`、`stocks`（交易對）、`daily_prices`、`analysis_results`、`roles`、`user_roles`、`permissions`、`role_permissions`。  
+2. 至少有一個可登入帳號（角色 `user` 或 `analyst`）；正式環境需將 `AUTH_SECRET` 設為安全值。  
+3. 服務提供 HTTP API，並已套用 JWT 認證 middleware。
 
 ---
 
@@ -69,9 +69,9 @@
 
 - **API**：`POST /api/admin/ingestion/daily`  
   - 角色：`admin` 或 `analyst`；權限：`ingestion.trigger_daily`  
-  - Body：`trade_date` (YYYY-MM-DD)、`market`（可選）  
-  - 行為：抓取該日全市場日 K；若 `stocks` 無資料則建立；寫入/覆蓋 `daily_prices`。  
-  - 回應：`status`、`trade_date`、`total_stocks`、`success_count`、`failure_count`。
+  - Body：`trade_date` (YYYY-MM-DD)  
+  - 行為：抓取該日 BTC/USDT 1d K 線（預設 Binance）；若資料不可用則允許以合成日 K 產生備援；寫入/覆蓋 `daily_prices`（交易對=BTCUSDT）。  
+  - 回應：`status`、`trade_date`、`total_stocks`（此處固定 1）、`success_count`、`failure_count`。
 
 ### 6.3 每日分析（手動）
 
@@ -81,7 +81,7 @@
   - 行為：讀 `daily_prices`，計算最小指標：  
     - 價格/報酬：`close_price`、`change_percent`、`return_5d`（不足則無法計算）。  
     - 量能：`volume`、`volume_avg_5d`、`volume_ratio = volume / volume_avg_5d`（分母 0 則無效）。  
-    - 簡易 `score`：固定公式，輸出穩定、值域固定（如 0–100）。  
+    - 簡易 `score`：固定公式（仍為可解釋規則），值域 0–100。  
   - 寫入 `analysis_results`：`stock_id`、`trade_date`、`analysis_version`（例 `"v1-mvp"`）、上述欄位、`status`、`error_reason`（如有）。  
   - 缺歷史資料者標記失敗，不影響其他股票。  
   - 回應：`status`、`trade_date`、`total_stocks`、`success_count`、`failure_count`。
@@ -91,8 +91,8 @@
 - **API**：`GET /api/analysis/daily`  
   - 角色：`user` 以上；權限：`analysis_results.query`  
   - Query：`trade_date`(必填, YYYY-MM-DD)、`limit`(預設 100, 上限 1000)、`offset`(預設 0)  
-  - 行為：查 `analysis_results` + `stocks`，依預設排序（如 `stock_code` 升冪）分頁回傳。  
-  - 回應：`trade_date`、`total_count`、`items`（`stock_code`、`stock_name`、`market_type`、`close_price`、`change_percent`、`return_5d`、`volume`、`volume_ratio`、`score`）。
+  - 行為：查 `analysis_results` + `stocks`，依預設排序分頁回傳。  
+  - 回應：`trade_date`、`total_count`、`items`（`trading_pair`(例 BTCUSDT)、`close_price`、`change_percent`、`return_5d`、`volume`、`volume_ratio`、`score`）。
 
 ### 6.5 強勢股 Screener API（固定條件）
 
@@ -109,7 +109,7 @@
     1) 驗證 `analysis_results` 是否有該日資料。  
     2) 套用條件篩選：`score >= score_min`、`return_5d > 0`、`volume_ratio >= volume_ratio_min`、`change_percent >= 0`。  
     3) 依 `score` 由高到低排序，分數相同再依 `return_5d`。  
-    4) 回傳前 `limit` 檔。  
+    4) 回傳前 `limit` 檔（目前只有 BTCUSDT，但預留多交易對）。  
   - 回應：`trade_date`、`params`（實際門檻）、`total_count`（不受 limit）、`items`（同上欄位集合）。
 
 ---

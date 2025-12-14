@@ -11,10 +11,10 @@
 本文件將 `/docs/specs/*.md` 中與 MVP 相關的規格，轉換為「可執行的開發任務清單」，供 Codex 依序實作。
 
 目標：  
-完成一條可跑通的端到端流程（詳見 `/docs/specs/mvp_end_to_end_flow.md`）：
+完成一條可跑通的端到端流程（詳見 `/docs/specs/mvp_end_to_end_flow.md`），現已改為 **BTC 現貨（BTC/USDT）** 場景：
 
-> 已登入的使用者，可以呼叫 API，取得某一交易日的「強勢股清單」，  
-> 並且這份清單是以真實日 K 資料與分析結果計算而得。
+> 已登入的使用者，可以呼叫 API，取得某一交易日的「BTC 分析與強勢條件結果」，  
+> 並且這份清單以交易所日 K 資料（預設 Binance 1d；失敗時允許合成日 K 備援）計算而得。
 
 ---
 
@@ -25,10 +25,10 @@ MVP 需遵守以下規格文件（僅取子集實作）：
 - `/docs/specs/authentication_authorization.md`
 - `/docs/specs/roles_permissions.md`
 - `/docs/specs/database_schema.md`
-- `/docs/specs/data_ingestion.md`（MVP 子集）
-- `/docs/specs/daily_batch_analysis.md`（MVP 子集）
+- `/docs/specs/data_ingestion.md`（MVP 子集，目標來源為 Binance BTC/USDT 1d K 線；允許合成備援）
+- `/docs/specs/daily_batch_analysis.md`（MVP 子集，針對 BTC 單一交易對）
 - `/docs/specs/query_and_export.md`（MVP 子集）
-- `/docs/specs/stock_screener.md`（MVP 子集）
+- `/docs/specs/stock_screener.md`（MVP 子集；目前僅 BTCUSDT 但預留擴充）
 - `/docs/specs/mvp_end_to_end_flow.md`
 
 ---
@@ -39,11 +39,11 @@ MVP 實作分為以下階段，須依照順序：
 
 1. 基礎專案結構與 DB 連線
 2. Auth ＋ RBAC 最小實作
-3. 資料模型與 Repository 層
-4. Data Ingestion（單日抓取，MVP 版）
-5. Daily Analysis（單日批次分析，MVP 版）
+3. 資料模型與 Repository 層（交易對=BTCUSDT）
+4. Data Ingestion（單日抓取，MVP 版；Binance → 合成備援）
+5. Daily Analysis（單日批次分析，MVP 版，單一交易對）
 6. Query API（分析結果查詢）
-7. 強勢股 Screener API（固定條件版）
+7. 強勢 Screener API（固定條件版）
 8. 基礎錯誤處理與驗收
 
 以下逐一說明每個階段的任務項目。

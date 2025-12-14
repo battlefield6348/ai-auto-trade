@@ -8,7 +8,7 @@
 
 ## 1. 文件目的與範圍
 
-本文件定義「台灣股票分析服務」後端系統所需的**關聯式資料模型**，包含：
+本文件定義「BTC 現貨分析服務（預設交易對：BTC/USDT）」後端系統所需的**關聯式資料模型**，包含：
 
 - 資料表（Tables）與主要欄位
 - 主鍵與關聯關係（Relationships）
@@ -55,26 +55,24 @@
 
 ## 3. 核心市場資料（Market Data）
 
-### 3.1 股票基本資料表：`stocks`
+### 3.1 交易對基本資料表：`stocks`
 
-用途：儲存台灣股票基本資料，供所有其他模組參照。
+用途：儲存交易對基本資料（目前僅 BTC/USDT，預留多交易對），供其他模組參照。
 
 主要欄位（邏輯層）：
 
 - id：主鍵
-- stock_code：股票代碼（如 "2330"）
-- market_type：市場別（上市、上櫃等）
-- name_zh：中文名稱
-- name_en：英文名稱（可空）
-- industry：產業別（文字或標準代碼）
-- listing_date：上市／上櫃日期
-- delisting_date：下市日期（如適用）
-- status：狀態（正常、下市、暫停交易等）
-- category：種類（普通股、ETF、ETN、債、其他）
+- stock_code：交易對代碼（例 "BTCUSDT"）
+- market_type：市場別（此處使用 `CRYPTO`，預留多交易所）
+- name_zh / name_en：名稱（可空）
+- industry：可填入 "Crypto"（或保留未來分類）
+- listing_date / delisting_date：此場景可空
+- status：狀態（active 等）
+- category：種類（現貨）
 
 約束與索引：
 
-- `stock_code` + `market_type` 應為唯一
+- `stock_code` + `market_type` 應為唯一（BTC/USDT + CRYPTO）
 - 常用查詢需針對 `stock_code` 建索引
 - 其他模組多透過 `id` 與其關聯
 
@@ -82,7 +80,7 @@
 
 ### 3.2 日 K 資料表：`daily_prices`
 
-用途：儲存每檔股票的日 K 原始資料，由 Data Ingestion 寫入。
+用途：儲存每筆交易對的日 K 原始資料，由 Data Ingestion 寫入（預設 Binance 1d K 線）。
 
 主要欄位：
 

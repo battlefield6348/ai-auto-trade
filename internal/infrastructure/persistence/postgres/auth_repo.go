@@ -67,7 +67,7 @@ func (r *AuthRepo) SeedDefaults(ctx context.Context) error {
 	defer tx.Rollback()
 
 	roleIDs := map[authDomain.Role]string{}
-	roles := []authDomain.Role{authDomain.RoleAdmin, authDomain.RoleAnalyst, authDomain.RoleUser}
+	roles := []authDomain.Role{authDomain.RoleAdmin, authDomain.RoleAnalyst, authDomain.RoleUser, authDomain.RoleService}
 	for _, role := range roles {
 		id, err := upsertRoleTx(ctx, tx, string(role))
 		if err != nil {
@@ -176,7 +176,7 @@ func (r *AuthRepo) SeedPermissions(ctx context.Context, perms []string, rolePerm
 	}
 
 	roleIDs := map[authDomain.Role]string{}
-	rows, err := tx.QueryContext(ctx, `SELECT id, name FROM roles WHERE name IN ($1, $2, $3)`, string(authDomain.RoleAdmin), string(authDomain.RoleAnalyst), string(authDomain.RoleUser))
+	rows, err := tx.QueryContext(ctx, `SELECT id, name FROM roles`)
 	if err != nil {
 		return err
 	}

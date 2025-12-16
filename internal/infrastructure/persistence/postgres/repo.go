@@ -211,6 +211,7 @@ LIMIT $3 OFFSET $4;
 		var return5 sql.NullFloat64
 		var volRatio sql.NullFloat64
 		var status string
+		var errReason sql.NullString
 		if err := rows.Scan(
 			&rres.Symbol,
 			&market,
@@ -225,7 +226,7 @@ LIMIT $3 OFFSET $4;
 			&volRatio,
 			&rres.Score,
 			&status,
-			&rres.ErrorReason,
+			&errReason,
 		); err != nil {
 			return nil, 0, err
 		}
@@ -235,6 +236,9 @@ LIMIT $3 OFFSET $4;
 		}
 		if volRatio.Valid {
 			rres.VolumeMultiple = &volRatio.Float64
+		}
+		if errReason.Valid {
+			rres.ErrorReason = errReason.String
 		}
 		rres.Success = status == "success"
 		results = append(results, rres)
@@ -295,6 +299,7 @@ WHERE s.trading_pair = $1
 		var return5 sql.NullFloat64
 		var volRatio sql.NullFloat64
 		var status string
+		var errReason sql.NullString
 		if err := rows.Scan(
 			&rres.Symbol,
 			&market,
@@ -308,7 +313,7 @@ WHERE s.trading_pair = $1
 			&volRatio,
 			&rres.Score,
 			&status,
-			&rres.ErrorReason,
+			&errReason,
 		); err != nil {
 			return nil, err
 		}
@@ -318,6 +323,9 @@ WHERE s.trading_pair = $1
 		}
 		if volRatio.Valid {
 			rres.VolumeMultiple = &volRatio.Float64
+		}
+		if errReason.Valid {
+			rres.ErrorReason = errReason.String
 		}
 		rres.Success = status == "success"
 		results = append(results, rres)
@@ -340,6 +348,7 @@ LIMIT 1;
 	var return5 sql.NullFloat64
 	var volRatio sql.NullFloat64
 	var status string
+	var errReason sql.NullString
 	err := r.db.QueryRowContext(ctx, q, symbol, date).Scan(
 		&rres.Symbol,
 		&market,
@@ -353,7 +362,7 @@ LIMIT 1;
 		&volRatio,
 		&rres.Score,
 		&status,
-		&rres.ErrorReason,
+		&errReason,
 	)
 	if err != nil {
 		return analysisDomain.DailyAnalysisResult{}, err
@@ -364,6 +373,9 @@ LIMIT 1;
 	}
 	if volRatio.Valid {
 		rres.VolumeMultiple = &volRatio.Float64
+	}
+	if errReason.Valid {
+		rres.ErrorReason = errReason.String
 	}
 	rres.Success = status == "success"
 	return rres, nil

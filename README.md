@@ -33,19 +33,15 @@
 ## 快速啟動
 - 安裝 Docker / Docker Compose（僅用於啟動 Postgres、Swagger）。
 - 啟動資料庫與 Swagger：`docker compose up -d`
-- 啟動 API（本機）：  
+- 編輯 `config.yaml`（HTTP/DB/Auth/Ingestion 設定），啟動 API：  
   ```bash
-  export AUTH_SECRET=dev-secret-change-me
-  export INGESTION_USE_SYNTHETIC=true # 若需強制合成資料
-  export HTTP_ADDR=:8080
   go run ./cmd/api/main.go
   ```
 - Postgres 連線資訊：`postgres://ai:ai@localhost:5432/ai_auto_trade?sslmode=disable`，初次啟動會自動套用 `db/migrations/0001_init.sql`。
 - API 預設埠：`http://localhost:8080`；Swagger UI：`http://localhost:8081`
 - 若 DB Volume 已存在需重跑 migration，可用：`docker compose exec db psql -U ai -d ai_auto_trade -f /docker-entrypoint-initdb.d/0001_init.sql`
-- Auth：預設 `AUTH_SECRET=dev-secret-change-me`（請於正式環境改成安全值），預設帳號 `admin/analyst/user@example.com` 密碼均為 `password123`。
-- Ingestion：預設抓取 Binance BTC/USDT 1d K 線；若需強制使用合成資料（測試/離線），可設定環境變數 `INGESTION_USE_SYNTHETIC=true`。
-- 範例環境變數：見 `.env.example`，可配合 `docker compose --env-file .env.example up` 使用。
+- Auth：預設帳號 `admin/analyst/user@example.com`，密碼皆 `password123`。`config.yaml` 中 `auth.secret` 請於正式環境改成安全值。
+- Ingestion：`config.yaml` 可設定 `ingestion.use_synthetic`（true=合成日 K，false=實際取 Binance）。
 
 ## Monorepo 結構（預期）
 ```

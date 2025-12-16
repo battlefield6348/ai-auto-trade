@@ -157,9 +157,13 @@ func (s *Server) handleIngestionDaily(w http.ResponseWriter, r *http.Request) {
 
 	start := time.Now()
 	log.Printf("ingestion daily start trade_date=%s", tradeDate.Format("2006-01-02"))
-	if err := s.generateDailyPrices(r.Context(), tradeDate); err != nil {
+	err = s.generateDailyPrices(r.Context(), tradeDate)
+	fmt.Println(err)
+	if err != nil {
 		log.Printf("ingestion error: %v; fallback to synthetic BTC", err)
-		if fbErr := s.generateSyntheticBTC(r.Context(), tradeDate); fbErr != nil {
+		fbErr := s.generateSyntheticBTC(r.Context(), tradeDate)
+		fmt.Println(fbErr)
+		if fbErr != nil {
 			log.Printf("fallback ingestion failed: %v", fbErr)
 			writeError(w, http.StatusInternalServerError, errCodeInternal, "ingestion failed")
 			return
@@ -527,10 +531,13 @@ func parseFloatDefault(s string, def float64) float64 {
 
 // generateDailyPrices 從外部來源取得 BTCUSDT 的日 K，失敗時由上層 fallback。
 func (s *Server) generateDailyPrices(ctx context.Context, tradeDate time.Time) error {
+
+	fmt.Println("useSynthetic", s.useSynthetic)
 	if s.useSynthetic {
 		return s.generateSyntheticBTC(ctx, tradeDate)
 	}
 	series, err := s.fetchBTCSeries(ctx, tradeDate)
+	fmt.Println(series)
 	if err != nil {
 		return err
 	}

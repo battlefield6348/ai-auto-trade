@@ -13,3 +13,14 @@ auth:
 
 ingestion:
   use_synthetic: false
+  auto_interval: 1h
+
+notifier:
+  telegram:
+    enabled: true
+    token: "7804129905:AAHa_0Wh3VV6rCo7OlOWIT7X9I5X_G6Qgzo"
+    chat_id: -4810910740
+    interval: 1h
+    strong_limit: 5
+    score_min: 70
+    volume_ratio_min: 1.5

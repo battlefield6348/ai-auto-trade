@@ -435,6 +435,175 @@ func (s *Server) handleStrongStocks(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// --- Notifier (Telegram) ---
+
+func (s *Server) startTelegramJob() {
+	interval := s.tgConfig.Interval
+	if interval <= 0 {
+		interval = time.Hour
+	}
+	go func() {
+		// small delay to avoid competing with bootstrapping
+		time.Sleep(5 * time.Second)
+		s.pushTelegramSummary(context.Background())
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for range ticker.C {
+			s.pushTelegramSummary(context.Background())
+		}
+	}()
+}
+
+func (s *Server) pushTelegramSummary(ctx context.Context) {
+	if s.tgClient == nil {
+		return
+	}
+	latestDate, err := s.dataRepo.LatestAnalysisDate(ctx)
+	if err != nil || latestDate.IsZero() {
+		log.Printf("telegram push skipped: no analysis data yet: %v", err)
+		return
+	}
+
+	limit := s.tgConfig.StrongLimit
+	if limit <= 0 {
+		limit = 5
+	}
+	scoreMin := s.tgConfig.ScoreMin
+	if scoreMin <= 0 {
+		scoreMin = 70
+	}
+	volMin := s.tgConfig.VolumeRatioMin
+	if volMin <= 0 {
+		volMin = 1.5
+	}
+
+	res, err := s.screenerUC.Run(ctx, mvp.StrongScreenerInput{
+		TradeDate:      latestDate,
+		Limit:          limit,
+		ScoreMin:       scoreMin,
+		VolumeRatioMin: volMin,
+	})
+	if err != nil {
+		log.Printf("telegram push: screener error: %v", err)
+		return
+	}
+
+	var best analysisDomain.DailyAnalysisResult
+	if len(res.Items) > 0 {
+		best = res.Items[0]
+	} else {
+		out, err := s.queryUC.QueryByDate(ctx, analysis.QueryByDateInput{
+			Date: latestDate,
+			Filter: analysis.QueryFilter{
+				OnlySuccess: true,
+			},
+			Pagination: analysis.Pagination{Offset: 0, Limit: 100},
+		})
+		if err != nil || len(out.Results) == 0 {
+			log.Printf("telegram push skipped: no analysis results to report")
+			return
+		}
+		best = out.Results[0]
+		for _, r := range out.Results {
+			if r.Score > best.Score {
+				best = r
+			}
+		}
+	}
+
+	builder := strings.Builder{}
+	builder.WriteString(fmt.Sprintf("【BTC/USDT 強勢摘要】\n日期: %s\n", latestDate.Format("2006-01-02")))
+	builder.WriteString(fmt.Sprintf("最高分: %s | 分數 %.1f | 收盤 %.2f | 日漲跌 %s | 近5日 %s | 量能 %s\n",
+		best.Symbol,
+		best.Score,
+		best.Close,
+		formatPercent(best.ChangeRate),
+		formatOptionalPercent(best.Return5),
+		formatOptionalTimes(best.VolumeMultiple),
+	))
+
+	if len(res.Items) > 0 {
+		builder.WriteString("Top 強勢交易對:\n")
+		for i, item := range res.Items {
+			builder.WriteString(fmt.Sprintf("%d) %s | 分數 %.1f | 收盤 %.2f | 日漲跌 %s | 近5日 %s | 量能 %s\n",
+				i+1,
+				item.Symbol,
+				item.Score,
+				item.Close,
+				formatPercent(item.ChangeRate),
+				formatOptionalPercent(item.Return5),
+				formatOptionalTimes(item.VolumeMultiple),
+			))
+		}
+	} else {
+		builder.WriteString("Top 強勢交易對: 目前無符合條件的結果\n")
+	}
+
+	if err := s.tgClient.SendMessage(ctx, builder.String()); err != nil {
+		log.Printf("telegram push failed: %v", err)
+		return
+	}
+	log.Printf("telegram push sent trade_date=%s items=%d", latestDate.Format("2006-01-02"), len(res.Items))
+}
+
+// startAutoPipeline 每隔 autoInterval 自動跑當日 ingestion + analysis。
+func (s *Server) startAutoPipeline() {
+	interval := s.autoInterval
+	if interval <= 0 {
+		return
+	}
+	go func() {
+		time.Sleep(3 * time.Second)
+		s.runPipelineOnce()
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for range ticker.C {
+			s.runPipelineOnce()
+		}
+	}()
+}
+
+func (s *Server) runPipelineOnce() {
+	tradeDate := time.Now().UTC().Truncate(24 * time.Hour)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	log.Printf("auto pipeline start trade_date=%s", tradeDate.Format("2006-01-02"))
+	if err := s.generateDailyPrices(ctx, tradeDate); err != nil {
+		log.Printf("auto ingestion error: %v; fallback synthetic", err)
+		if fbErr := s.generateSyntheticBTC(ctx, tradeDate); fbErr != nil {
+			log.Printf("auto ingestion fallback failed: %v", fbErr)
+			return
+		}
+	}
+
+	prices, err := s.dataRepo.PricesByDate(ctx, tradeDate)
+	if err != nil {
+		log.Printf("auto analysis: read prices failed: %v", err)
+		return
+	}
+	if len(prices) == 0 {
+		log.Printf("auto analysis: no prices for trade_date=%s", tradeDate.Format("2006-01-02"))
+		return
+	}
+
+	success := 0
+	for _, p := range prices {
+		stockID, err := s.dataRepo.UpsertTradingPair(ctx, p.Symbol, p.Symbol, p.Market, "")
+		if err != nil {
+			log.Printf("auto pipeline upsert pair failed symbol=%s: %v", p.Symbol, err)
+			continue
+		}
+		res := s.calculateAnalysis(ctx, p)
+		if err := s.dataRepo.InsertAnalysisResult(ctx, stockID, res); err != nil {
+			log.Printf("auto pipeline write analysis failed symbol=%s: %v", p.Symbol, err)
+			continue
+		}
+		success++
+	}
+	log.Printf("auto pipeline done trade_date=%s success=%d total=%d", tradeDate.Format("2006-01-02"), success, len(prices))
+}
+
 // --- Helpers ---
 
 func (s *Server) requireAuth(perm auth.Permission, next http.Handler) http.Handler {
@@ -529,15 +698,31 @@ func parseFloatDefault(s string, def float64) float64 {
 	return f
 }
 
+func formatPercent(v float64) string {
+	return fmt.Sprintf("%.2f%%", v*100)
+}
+
+func formatOptionalPercent(v *float64) string {
+	if v == nil {
+		return "-"
+	}
+	return formatPercent(*v)
+}
+
+func formatOptionalTimes(v *float64) string {
+	if v == nil {
+		return "-"
+	}
+	return fmt.Sprintf("%.2fx", *v)
+}
+
 // generateDailyPrices 從外部來源取得 BTCUSDT 的日 K，失敗時由上層 fallback。
 func (s *Server) generateDailyPrices(ctx context.Context, tradeDate time.Time) error {
 
-	fmt.Println("useSynthetic", s.useSynthetic)
 	if s.useSynthetic {
 		return s.generateSyntheticBTC(ctx, tradeDate)
 	}
 	series, err := s.fetchBTCSeries(ctx, tradeDate)
-	fmt.Println(series)
 	if err != nil {
 		return err
 	}

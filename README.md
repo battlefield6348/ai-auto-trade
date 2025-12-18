@@ -42,6 +42,8 @@
 - 若 DB Volume 已存在需重跑 migration，可用：`docker compose exec db psql -U ai -d ai_auto_trade -f /docker-entrypoint-initdb.d/0001_init.sql`
 - Auth：預設帳號 `admin/analyst/user@example.com`，密碼皆 `password123`。`config.yaml` 中 `auth.secret` 請於正式環境改成安全值。
 - Ingestion：`config.yaml` 可設定 `ingestion.use_synthetic`（true=合成日 K，false=實際取 Binance）。
+- 自動管線：`ingestion.auto_interval` 預設每小時自動跑當日的日 K 擷取與分析，免手動呼叫 API。
+- Telegram 推播：在 `config.yaml` 設定 `notifier.telegram`（enabled/token/chat_id/interval/門檻），API 啟動後每小時將最新分析摘要與強勢交易對推送到指定 TG chat。
 
 ## Monorepo 結構（預期）
 ```

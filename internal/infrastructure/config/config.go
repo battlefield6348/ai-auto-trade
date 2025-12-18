@@ -14,6 +14,7 @@ type Config struct {
 	DB        DBConfig        `yaml:"db"`
 	Auth      AuthConfig      `yaml:"auth"`
 	Ingestion IngestionConfig `yaml:"ingestion"`
+	Notifier  NotifierConfig  `yaml:"notifier"`
 }
 
 type HTTPConfig struct {
@@ -33,7 +34,22 @@ type AuthConfig struct {
 }
 
 type IngestionConfig struct {
-	UseSynthetic bool `yaml:"use_synthetic"`
+	UseSynthetic bool          `yaml:"use_synthetic"`
+	AutoInterval time.Duration `yaml:"auto_interval"`
+}
+
+type NotifierConfig struct {
+	Telegram TelegramConfig `yaml:"telegram"`
+}
+
+type TelegramConfig struct {
+	Enabled        bool          `yaml:"enabled"`
+	Token          string        `yaml:"token"`
+	ChatID         int64         `yaml:"chat_id"`
+	Interval       time.Duration `yaml:"interval"`
+	StrongLimit    int           `yaml:"strong_limit"`
+	ScoreMin       float64       `yaml:"score_min"`
+	VolumeRatioMin float64       `yaml:"volume_ratio_min"`
 }
 
 // LoadFromFile 從 YAML 組態檔載入設定。
@@ -67,6 +83,21 @@ func applyDefaults(cfg Config) Config {
 	}
 	if cfg.Auth.Secret == "" {
 		cfg.Auth.Secret = "dev-secret-change-me"
+	}
+	if cfg.Ingestion.AutoInterval == 0 {
+		cfg.Ingestion.AutoInterval = time.Hour
+	}
+	if cfg.Notifier.Telegram.Interval == 0 {
+		cfg.Notifier.Telegram.Interval = time.Hour
+	}
+	if cfg.Notifier.Telegram.StrongLimit == 0 {
+		cfg.Notifier.Telegram.StrongLimit = 5
+	}
+	if cfg.Notifier.Telegram.ScoreMin == 0 {
+		cfg.Notifier.Telegram.ScoreMin = 70
+	}
+	if cfg.Notifier.Telegram.VolumeRatioMin == 0 {
+		cfg.Notifier.Telegram.VolumeRatioMin = 1.5
 	}
 	return cfg
 }

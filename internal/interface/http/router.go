@@ -12,6 +12,7 @@ import (
 	"ai-auto-trade/internal/infra/memory"
 	authinfra "ai-auto-trade/internal/infrastructure/auth"
 	"ai-auto-trade/internal/infrastructure/config"
+	"ai-auto-trade/internal/infrastructure/notify"
 	"ai-auto-trade/internal/infrastructure/persistence/postgres"
 )
 
@@ -19,18 +20,21 @@ const seedTimeout = 5 * time.Second
 
 // Server 封裝 HTTP 路由與依賴。
 type Server struct {
-	mux        *http.ServeMux
-	store      *memory.Store
-	loginUC    *auth.LoginUseCase
-	authz      *auth.Authorizer
-	queryUC    *analysis.QueryUseCase
-	screenerUC *mvp.StrongScreener
-	tokenTTL   time.Duration
-	db         *sql.DB
-	dataRepo   DataRepository
-	authRepo   auth.UserRepository
-	tokenSvc   *authinfra.JWTIssuer
+	mux          *http.ServeMux
+	store        *memory.Store
+	loginUC      *auth.LoginUseCase
+	authz        *auth.Authorizer
+	queryUC      *analysis.QueryUseCase
+	screenerUC   *mvp.StrongScreener
+	tokenTTL     time.Duration
+	db           *sql.DB
+	dataRepo     DataRepository
+	authRepo     auth.UserRepository
+	tokenSvc     *authinfra.JWTIssuer
 	useSynthetic bool
+	tgClient     *notify.TelegramClient
+	tgConfig     config.TelegramConfig
+	autoInterval time.Duration
 }
 
 // NewServer 建立 API 伺服器，預設使用記憶體資料存儲；若 db 未來可用，再注入對應 repository。
@@ -57,20 +61,27 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 	authz := auth.NewAuthorizer(authRepo, memory.OwnerChecker{})
 	queryUC := analysis.NewQueryUseCase(dataRepo)
 	screenerUC := mvp.NewStrongScreener(dataRepo)
+	var tgClient *notify.TelegramClient
+	if cfg.Notifier.Telegram.Enabled && cfg.Notifier.Telegram.Token != "" && cfg.Notifier.Telegram.ChatID != 0 {
+		tgClient = notify.NewTelegramClient(cfg.Notifier.Telegram.Token, cfg.Notifier.Telegram.ChatID)
+	}
 
 	s := &Server{
-		mux:        http.NewServeMux(),
-		store:      store,
-		loginUC:    loginUC,
-		authz:      authz,
-		queryUC:    queryUC,
-		screenerUC: screenerUC,
-		tokenTTL:   ttl,
-		db:         db,
-		dataRepo:   dataRepo,
-		authRepo:   authRepo,
-		tokenSvc:   tokenSvc,
+		mux:          http.NewServeMux(),
+		store:        store,
+		loginUC:      loginUC,
+		authz:        authz,
+		queryUC:      queryUC,
+		screenerUC:   screenerUC,
+		tokenTTL:     ttl,
+		db:           db,
+		dataRepo:     dataRepo,
+		authRepo:     authRepo,
+		tokenSvc:     tokenSvc,
 		useSynthetic: cfg.Ingestion.UseSynthetic,
+		tgClient:     tgClient,
+		tgConfig:     cfg.Notifier.Telegram,
+		autoInterval: cfg.Ingestion.AutoInterval,
 	}
 	if db != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), seedTimeout)
@@ -80,6 +91,12 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 		}
 	}
 	s.registerRoutes()
+	if s.tgClient != nil && s.tgConfig.Enabled {
+		go s.startTelegramJob()
+	}
+	if s.autoInterval > 0 {
+		go s.startAutoPipeline()
+	}
 	return s
 }
 

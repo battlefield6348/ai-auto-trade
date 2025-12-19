@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -29,6 +30,8 @@ const (
 	errCodeMethodNotAllowed   = "METHOD_NOT_ALLOWED"
 	errCodeInternal           = "INTERNAL_ERROR"
 )
+
+var errNoPrices = errors.New("ingestion data not ready")
 
 // DataRepository 定義 ingestion/analysis 讀寫與查詢接口。
 type DataRepository interface {
@@ -83,6 +86,18 @@ func (m memoryRepoAdapter) FindHistory(ctx context.Context, symbol string, from,
 }
 func (m memoryRepoAdapter) Get(ctx context.Context, symbol string, date time.Time) (analysisDomain.DailyAnalysisResult, error) {
 	return m.store.Get(ctx, symbol, date)
+}
+
+type analysisRunSummary struct {
+	total   int
+	success int
+	failure int
+}
+
+type backfillFailure struct {
+	TradeDate string `json:"trade_date"`
+	Stage     string `json:"stage"`
+	Reason    string `json:"reason"`
 }
 
 // --- Handlers ---
@@ -180,6 +195,84 @@ func (s *Server) handleIngestionDaily(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleIngestionBackfill(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		StartDate   string `json:"start_date"`
+		EndDate     string `json:"end_date"`
+		RunAnalysis *bool  `json:"run_analysis"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+		return
+	}
+	if body.StartDate == "" || body.EndDate == "" {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "start_date and end_date required")
+		return
+	}
+	startDate, err := time.Parse("2006-01-02", body.StartDate)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid start_date")
+		return
+	}
+	endDate, err := time.Parse("2006-01-02", body.EndDate)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid end_date")
+		return
+	}
+	if endDate.Before(startDate) {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "end_date must be after start_date")
+		return
+	}
+	runAnalysis := true
+	if body.RunAnalysis != nil {
+		runAnalysis = *body.RunAnalysis
+	}
+
+	totalDays := 0
+	ingestionSuccessDays := 0
+	analysisSuccessDays := 0
+	failures := make([]backfillFailure, 0)
+	start := time.Now()
+	log.Printf("ingestion backfill start start_date=%s end_date=%s run_analysis=%t", startDate.Format("2006-01-02"), endDate.Format("2006-01-02"), runAnalysis)
+
+	for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
+		totalDays++
+		if err := s.generateDailyPricesStrict(r.Context(), d); err != nil {
+			failures = append(failures, backfillFailure{
+				TradeDate: d.Format("2006-01-02"),
+				Stage:     "ingestion",
+				Reason:    err.Error(),
+			})
+			continue
+		}
+		ingestionSuccessDays++
+		if runAnalysis {
+			if _, err := s.runAnalysisForDate(r.Context(), d); err != nil {
+				failures = append(failures, backfillFailure{
+					TradeDate: d.Format("2006-01-02"),
+					Stage:     "analysis",
+					Reason:    err.Error(),
+				})
+				continue
+			}
+			analysisSuccessDays++
+		}
+	}
+
+	log.Printf("ingestion backfill done days=%d ingestion_success=%d analysis_success=%d failures=%d duration=%s", totalDays, ingestionSuccessDays, analysisSuccessDays, len(failures), time.Since(start))
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success":                true,
+		"start_date":             startDate.Format("2006-01-02"),
+		"end_date":               endDate.Format("2006-01-02"),
+		"total_days":             totalDays,
+		"ingestion_success_days": ingestionSuccessDays,
+		"analysis_success_days":  analysisSuccessDays,
+		"failure_days":           len(failures),
+		"analysis_enabled":       runAnalysis,
+		"failures":               failures,
+	})
+}
+
 func (s *Server) handleAnalysisDaily(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		TradeDate string `json:"trade_date"`
@@ -194,41 +287,54 @@ func (s *Server) handleAnalysisDaily(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prices, err := s.dataRepo.PricesByDate(r.Context(), tradeDate)
+	start := time.Now()
+	log.Printf("analysis daily start trade_date=%s", tradeDate.Format("2006-01-02"))
+	stats, err := s.runAnalysisForDate(r.Context(), tradeDate)
 	if err != nil {
+		if errors.Is(err, errNoPrices) {
+			writeError(w, http.StatusConflict, errCodeIngestionNotReady, "ingestion data not ready for trade_date")
+			return
+		}
 		log.Printf("analysis read prices failed: %v", err)
 		writeError(w, http.StatusInternalServerError, errCodeInternal, "failed to read prices")
 		return
 	}
-	if len(prices) == 0 {
-		writeError(w, http.StatusConflict, errCodeIngestionNotReady, "ingestion data not ready for trade_date")
-		return
-	}
-	start := time.Now()
-	log.Printf("analysis daily start trade_date=%s prices=%d", tradeDate.Format("2006-01-02"), len(prices))
-	success := 0
-	for _, p := range prices {
-		stockID, err := s.dataRepo.UpsertTradingPair(r.Context(), p.Symbol, p.Symbol, p.Market, "")
-		if err != nil {
-			log.Printf("upsert stock failed symbol=%s: %v", p.Symbol, err)
-			continue
-		}
-		res := s.calculateAnalysis(r.Context(), p)
-		if err := s.dataRepo.InsertAnalysisResult(r.Context(), stockID, res); err != nil {
-			log.Printf("write analysis failed symbol=%s date=%s: %v", p.Symbol, tradeDate.Format("2006-01-02"), err)
-			continue
-		}
-		success++
-	}
-	log.Printf("analysis daily done trade_date=%s success=%d duration=%s", tradeDate.Format("2006-01-02"), success, time.Since(start))
+	log.Printf("analysis daily done trade_date=%s success=%d duration=%s", tradeDate.Format("2006-01-02"), stats.success, time.Since(start))
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success":       true,
 		"trade_date":    tradeDate.Format("2006-01-02"),
-		"total_stocks":  len(prices),
-		"success_count": success,
-		"failure_count": 0,
+		"total_stocks":  stats.total,
+		"success_count": stats.success,
+		"failure_count": stats.failure,
 	})
+}
+
+func (s *Server) runAnalysisForDate(ctx context.Context, tradeDate time.Time) (analysisRunSummary, error) {
+	stats := analysisRunSummary{}
+	prices, err := s.dataRepo.PricesByDate(ctx, tradeDate)
+	if err != nil {
+		return stats, err
+	}
+	if len(prices) == 0 {
+		return stats, errNoPrices
+	}
+	stats.total = len(prices)
+	for _, p := range prices {
+		stockID, err := s.dataRepo.UpsertTradingPair(ctx, p.Symbol, p.Symbol, p.Market, "")
+		if err != nil {
+			log.Printf("upsert stock failed symbol=%s: %v", p.Symbol, err)
+			continue
+		}
+		res := s.calculateAnalysis(ctx, p)
+		if err := s.dataRepo.InsertAnalysisResult(ctx, stockID, res); err != nil {
+			log.Printf("write analysis failed symbol=%s date=%s: %v", p.Symbol, tradeDate.Format("2006-01-02"), err)
+			continue
+		}
+		stats.success++
+	}
+	stats.failure = stats.total - stats.success
+	return stats, nil
 }
 
 func (s *Server) handleAnalysisQuery(w http.ResponseWriter, r *http.Request) {
@@ -297,6 +403,110 @@ func (s *Server) handleAnalysisQuery(w http.ResponseWriter, r *http.Request) {
 		"success":     true,
 		"trade_date":  tradeDate.Format("2006-01-02"),
 		"total_count": out.Total,
+		"items":       items,
+	})
+}
+
+func (s *Server) handleAnalysisHistory(w http.ResponseWriter, r *http.Request) {
+	symbol := strings.TrimSpace(r.URL.Query().Get("symbol"))
+	if symbol == "" {
+		symbol = "BTCUSDT"
+	}
+
+	var startDate *time.Time
+	startDateStr := r.URL.Query().Get("start_date")
+	if startDateStr != "" {
+		val, err := time.Parse("2006-01-02", startDateStr)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid start_date")
+			return
+		}
+		startDate = &val
+	}
+	var endDate *time.Time
+	endDateStr := r.URL.Query().Get("end_date")
+	if endDateStr != "" {
+		val, err := time.Parse("2006-01-02", endDateStr)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid end_date")
+			return
+		}
+		endDate = &val
+	}
+	if startDate != nil && endDate != nil && endDate.Before(*startDate) {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "end_date must be after start_date")
+		return
+	}
+
+	limit := parseIntDefault(r.URL.Query().Get("limit"), 1000)
+	onlySuccess := parseBoolDefault(r.URL.Query().Get("only_success"), true)
+
+	out, err := s.queryUC.QueryHistory(r.Context(), analysis.QueryHistoryInput{
+		Symbol:      symbol,
+		From:        startDate,
+		To:          endDate,
+		Limit:       limit,
+		OnlySuccess: onlySuccess,
+	})
+	if err != nil {
+		log.Printf("analysis history failed symbol=%s: %v", symbol, err)
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "internal error")
+		return
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].TradeDate.Before(out[j].TradeDate)
+	})
+
+	type item struct {
+		TradingPair   string   `json:"trading_pair"`
+		MarketType    string   `json:"market_type"`
+		TradeDate     string   `json:"trade_date"`
+		ClosePrice    float64  `json:"close_price"`
+		ChangePercent float64  `json:"change_percent"`
+		Return5d      *float64 `json:"return_5d,omitempty"`
+		Volume        int64    `json:"volume"`
+		VolumeRatio   *float64 `json:"volume_ratio,omitempty"`
+		Score         float64  `json:"score"`
+		Success       bool     `json:"success"`
+	}
+	items := make([]item, 0, len(out))
+	for _, r := range out {
+		items = append(items, item{
+			TradingPair:   r.Symbol,
+			MarketType:    string(r.Market),
+			TradeDate:     r.TradeDate.Format("2006-01-02"),
+			ClosePrice:    r.Close,
+			ChangePercent: r.ChangeRate,
+			Return5d:      r.Return5,
+			Volume:        r.Volume,
+			VolumeRatio:   r.VolumeMultiple,
+			Score:         r.Score,
+			Success:       r.Success,
+		})
+	}
+
+	respStart := ""
+	respEnd := ""
+	if startDate != nil {
+		respStart = startDate.Format("2006-01-02")
+	}
+	if endDate != nil {
+		respEnd = endDate.Format("2006-01-02")
+	}
+	if respStart == "" && len(out) > 0 {
+		respStart = out[0].TradeDate.Format("2006-01-02")
+	}
+	if respEnd == "" && len(out) > 0 {
+		respEnd = out[len(out)-1].TradeDate.Format("2006-01-02")
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success":     true,
+		"symbol":      symbol,
+		"start_date":  respStart,
+		"end_date":    respEnd,
+		"total_count": len(out),
 		"items":       items,
 	})
 }
@@ -698,6 +908,17 @@ func parseFloatDefault(s string, def float64) float64 {
 	return f
 }
 
+func parseBoolDefault(s string, def bool) bool {
+	if s == "" {
+		return def
+	}
+	v, err := strconv.ParseBool(s)
+	if err != nil {
+		return def
+	}
+	return v
+}
+
 func formatPercent(v float64) string {
 	return fmt.Sprintf("%.2f%%", v*100)
 }
@@ -718,7 +939,6 @@ func formatOptionalTimes(v *float64) string {
 
 // generateDailyPrices 從外部來源取得 BTCUSDT 的日 K，失敗時由上層 fallback。
 func (s *Server) generateDailyPrices(ctx context.Context, tradeDate time.Time) error {
-
 	if s.useSynthetic {
 		return s.generateSyntheticBTC(ctx, tradeDate)
 	}
@@ -726,6 +946,18 @@ func (s *Server) generateDailyPrices(ctx context.Context, tradeDate time.Time) e
 	if err != nil {
 		return err
 	}
+	return s.storeBTCSeries(ctx, series)
+}
+
+func (s *Server) generateDailyPricesStrict(ctx context.Context, tradeDate time.Time) error {
+	series, err := s.fetchBTCSeries(ctx, tradeDate)
+	if err != nil {
+		return err
+	}
+	return s.storeBTCSeries(ctx, series)
+}
+
+func (s *Server) storeBTCSeries(ctx context.Context, series []dataDomain.DailyPrice) error {
 	for _, p := range series {
 		stockID, err := s.dataRepo.UpsertTradingPair(ctx, p.Symbol, "Bitcoin", dataDomain.MarketCrypto, "Crypto")
 		if err != nil {
@@ -832,24 +1064,27 @@ func (s *Server) calculateAnalysis(ctx context.Context, p dataDomain.DailyPrice)
 	var return5 *float64
 	var volumeRatio *float64
 	var changeRate float64
-	// find previous close
+	idx := -1
 	for i := len(history) - 1; i >= 0; i-- {
-		if history[i].TradeDate.Equal(p.TradeDate) && i > 0 {
-			prev := history[i-1]
-			if prev.Close > 0 {
-				changeRate = (p.Close - prev.Close) / prev.Close
-			}
+		if history[i].TradeDate.Equal(p.TradeDate) {
+			idx = i
 			break
 		}
 	}
-	if len(history) >= 6 {
-		// current + previous 5
-		idx := len(history) - 1
+	if idx > 0 {
+		prev := history[idx-1]
+		if prev.Close > 0 {
+			changeRate = (p.Close - prev.Close) / prev.Close
+		}
+	}
+	if idx >= 5 {
 		earlier := history[idx-5]
 		if earlier.Close > 0 {
 			val := (p.Close / earlier.Close) - 1
 			return5 = &val
 		}
+	}
+	if idx >= 5 {
 		var sumVol float64
 		for i := idx - 4; i <= idx; i++ {
 			sumVol += float64(history[i].Volume)

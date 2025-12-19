@@ -31,17 +31,18 @@ type TokenIssuer interface {
 type Permission string
 
 const (
-	PermUserManage            Permission = "user:manage"
-	PermSystemHealth          Permission = "system:health"
-	PermScreener              Permission = "screener:use"
-	PermStrategy              Permission = "strategy:write"
-	PermSubscription          Permission = "subscription:write"
-	PermInternalAPI           Permission = "internal:ops"
-	PermReportsFull           Permission = "reports:full"
-	PermAnalysisQuery         Permission = "analysis_results.query"
-	PermScreenerUse           Permission = "screener.use"
-	PermIngestionTriggerDaily Permission = "ingestion.trigger_daily"
-	PermAnalysisTriggerDaily  Permission = "analysis.trigger_daily"
+	PermUserManage               Permission = "user:manage"
+	PermSystemHealth             Permission = "system:health"
+	PermScreener                 Permission = "screener:use"
+	PermStrategy                 Permission = "strategy:write"
+	PermSubscription             Permission = "subscription:write"
+	PermInternalAPI              Permission = "internal:ops"
+	PermReportsFull              Permission = "reports:full"
+	PermAnalysisQuery            Permission = "analysis_results.query"
+	PermScreenerUse              Permission = "screener.use"
+	PermIngestionTriggerDaily    Permission = "ingestion.trigger_daily"
+	PermIngestionTriggerBackfill Permission = "ingestion.trigger_backfill"
+	PermAnalysisTriggerDaily     Permission = "analysis.trigger_daily"
 )
 
 // RolePermissions v1 簡化權限表。
@@ -57,6 +58,7 @@ var RolePermissions = map[auth.Role][]Permission{
 		PermInternalAPI,
 		PermReportsFull,
 		PermIngestionTriggerDaily,
+		PermIngestionTriggerBackfill,
 		PermAnalysisTriggerDaily,
 	},
 	auth.RoleAnalyst: {
@@ -68,6 +70,7 @@ var RolePermissions = map[auth.Role][]Permission{
 		PermSubscription,
 		PermReportsFull,
 		PermIngestionTriggerDaily,
+		PermIngestionTriggerBackfill,
 		PermAnalysisTriggerDaily,
 	},
 	auth.RoleUser: {

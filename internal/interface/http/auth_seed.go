@@ -35,6 +35,7 @@ func seedAuth(ctx context.Context, repo auth.UserRepository) error {
 		string(auth.PermInternalAPI),
 		string(auth.PermReportsFull),
 		string(auth.PermIngestionTriggerDaily),
+		string(auth.PermIngestionTriggerBackfill),
 		string(auth.PermAnalysisTriggerDaily),
 	}
 	if err := ar.SeedPermissions(ctx, allPerms, auth.RolePermissionsAsStrings()); err != nil {

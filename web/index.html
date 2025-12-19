@@ -3,76 +3,209 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI Auto Trade MVP Console</title>
+  <title>BTC/USDT 操作台｜AI Auto Trade</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header>
+  <header class="topbar">
     <div class="brand">
-      <div class="dot"></div>
-      <h1>BTC/USDT 控制台</h1>
+      <div class="brand-mark">BTC</div>
+      <div>
+        <h1>BTC/USDT 操作台</h1>
+        <p class="subtitle">AI Auto Trade MVP / 端到端流程</p>
+      </div>
     </div>
-    <div id="status" class="status">未登入</div>
+    <div class="status-stack">
+      <div id="status" class="status-pill">未登入</div>
+      <div id="healthStatus" class="status-pill subtle">系統檢查：--</div>
+    </div>
   </header>
 
-  <main>
-    <section class="card">
-      <h2>登入</h2>
+  <main class="layout">
+    <section class="panel hero span-2">
+      <div class="hero-copy">
+        <h2>市場快照與作業狀態</h2>
+        <p>集中顯示近期的擷取、分析與強勢篩選資訊，搭配走勢摘要快速判斷方向。</p>
+        <div class="meta-row">
+          <div id="overviewTime" class="meta-item">最後更新：--</div>
+          <div id="overviewMode" class="meta-item">資料來源：--</div>
+        </div>
+      </div>
+      <div class="kpi-grid">
+        <article class="kpi" id="kpiHealth">
+          <div class="kpi-title">系統狀態</div>
+          <div class="kpi-value">--</div>
+          <div class="kpi-note">等待健康檢查</div>
+        </article>
+        <article class="kpi" id="kpiIngestion">
+          <div class="kpi-title">日 K 擷取</div>
+          <div class="kpi-value">尚未執行</div>
+          <div class="kpi-note">交易日 --</div>
+        </article>
+        <article class="kpi" id="kpiAnalysis">
+          <div class="kpi-title">日批次分析</div>
+          <div class="kpi-value">尚未執行</div>
+          <div class="kpi-note">交易日 --</div>
+        </article>
+        <article class="kpi" id="kpiSummary">
+          <div class="kpi-title">趨勢摘要</div>
+          <div class="kpi-value">等待更新</div>
+          <div class="kpi-note">--</div>
+        </article>
+        <article class="kpi" id="kpiScreener">
+          <div class="kpi-title">強勢交易對</div>
+          <div class="kpi-value">尚未查詢</div>
+          <div class="kpi-note">--</div>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel" id="loginPanel">
+      <div class="panel-head">
+        <div>
+          <h2>登入與權限</h2>
+          <p>登入後可執行擷取、分析與強勢篩選。</p>
+        </div>
+      </div>
       <form id="loginForm" class="form">
-        <label>Email <input type="email" id="email" value="admin@example.com" required></label>
-        <label>密碼 <input type="password" id="password" value="password123" required></label>
-        <button type="submit">登入</button>
+        <div class="field-grid">
+          <label>帳號 Email <input type="email" id="email" value="admin@example.com" required></label>
+          <label>密碼 <input type="password" id="password" value="password123" required></label>
+        </div>
+        <div class="actions">
+          <button type="submit" class="primary">登入</button>
+          <div class="chip-row">
+            <button type="button" class="chip" data-email="admin@example.com">admin@example.com</button>
+            <button type="button" class="chip" data-email="analyst@example.com">analyst@example.com</button>
+            <button type="button" class="chip" data-email="user@example.com">user@example.com</button>
+          </div>
+        </div>
       </form>
       <p class="hint">預設帳號：admin / analyst / user，密碼皆為 <code>password123</code></p>
+      <div id="loginMessage" class="message"></div>
     </section>
 
-    <section class="card">
-      <h2>手動日 K 擷取</h2>
-      <form id="ingestForm" class="form">
-        <label>交易日 <input type="date" id="ingestDate" required></label>
-        <button type="submit">觸發 Ingestion</button>
+    <section class="panel" id="pipelinePanel">
+      <div class="panel-head">
+        <div>
+          <h2>日 K 作業</h2>
+          <p>手動觸發擷取與分析，結果會整理成摘要資訊。</p>
+        </div>
+      </div>
+      <div class="split">
+        <form id="ingestForm" class="form">
+          <h3>擷取日 K</h3>
+          <label>交易日 <input type="date" id="ingestDate" required></label>
+          <button type="submit" class="primary">觸發 Ingestion</button>
+        </form>
+        <form id="analysisForm" class="form">
+          <h3>日批次分析</h3>
+          <label>交易日 <input type="date" id="analysisDate" required></label>
+          <button type="submit" class="primary">觸發 Analysis</button>
+        </form>
+      </div>
+      <div class="result-grid two">
+        <div id="ingestResult" class="result-panel"></div>
+        <div id="analysisResult" class="result-panel"></div>
+      </div>
+    </section>
+
+    <section class="panel span-2" id="backfillPanel">
+      <div class="panel-head">
+        <div>
+          <h2>歷史資料回補</h2>
+          <p>從指定區間回補 BTC/USDT 日 K，預設會以實際資料覆蓋並同步分析。</p>
+        </div>
+      </div>
+      <form id="backfillForm" class="form inline">
+        <label>起始日期 <input type="date" id="backfillStart" required></label>
+        <label>結束日期 <input type="date" id="backfillEnd" required></label>
+        <label class="toggle">
+          <input type="checkbox" id="backfillAnalysis" checked>
+          <span>回補後立即分析</span>
+        </label>
+        <button type="submit" class="primary">開始回補</button>
       </form>
-      <pre id="ingestResult" class="result"></pre>
+      <div id="backfillResult" class="result-panel"></div>
     </section>
 
-    <section class="card">
-      <h2>單日分析</h2>
-      <form id="analysisForm" class="form">
-        <label>交易日 <input type="date" id="analysisDate" required></label>
-        <button type="submit">觸發 Analysis</button>
+    <section class="panel span-2" id="chartPanel">
+      <div class="panel-head">
+        <div>
+          <h2>BTC/USDT 走勢圖</h2>
+          <p>滑鼠移動到走勢線上，可查看當日的分析摘要。</p>
+        </div>
+      </div>
+      <form id="chartForm" class="form inline">
+        <label>起始日期 <input type="date" id="chartStart" required></label>
+        <label>結束日期 <input type="date" id="chartEnd" required></label>
+        <button type="submit" class="primary">載入走勢</button>
       </form>
-      <pre id="analysisResult" class="result"></pre>
+      <div id="chartMeta" class="meta-row"></div>
+      <div class="chart-wrap">
+        <div id="chartCanvas" class="chart-canvas"></div>
+        <div id="chartTooltip" class="chart-tooltip"></div>
+      </div>
     </section>
 
-    <section class="card">
-      <h2>分析結果查詢</h2>
-      <form id="queryForm" class="form">
+    <section class="panel" id="summaryPanel">
+      <div class="panel-head">
+        <div>
+          <h2>走勢摘要與建議</h2>
+          <p>整理最新的趨勢判讀、量能與分數摘要。</p>
+        </div>
+        <button id="summaryBtn" class="ghost">取得最新建議</button>
+      </div>
+      <div id="summaryView" class="summary-view">
+        <div class="empty-state">尚未取得摘要，點選右上按鈕即可更新。</div>
+      </div>
+    </section>
+
+    <section class="panel span-2" id="analysisPanel">
+      <div class="panel-head">
+        <div>
+          <h2>分析結果查詢</h2>
+          <p>可依交易日查詢完整分析清單，並列出重點摘要。</p>
+        </div>
+      </div>
+      <form id="queryForm" class="form inline">
         <label>交易日 <input type="date" id="queryDate" required></label>
-        <label>Limit <input type="number" id="queryLimit" value="20" min="1" max="1000"></label>
+        <label>筆數 <input type="number" id="queryLimit" value="20" min="1" max="1000"></label>
         <label>Offset <input type="number" id="queryOffset" value="0" min="0"></label>
-        <button type="submit">查詢</button>
+        <button type="submit" class="primary">查詢</button>
       </form>
+      <div id="queryMeta" class="meta-row"></div>
+      <div id="queryHighlights" class="highlight-grid"></div>
       <div id="queryTable" class="table"></div>
     </section>
 
-    <section class="card">
-      <h2>強勢交易對篩選</h2>
-      <form id="screenerForm" class="form">
+    <section class="panel span-2" id="screenerPanel">
+      <div class="panel-head">
+        <div>
+          <h2>強勢交易對篩選</h2>
+          <p>以固定條件篩出強勢清單，顯示分數與量能。</p>
+        </div>
+      </div>
+      <form id="screenerForm" class="form inline">
         <label>交易日 <input type="date" id="screenerDate" required></label>
         <label>Score ≥ <input type="number" id="scoreMin" value="70" step="0.1"></label>
-        <label>Volume Ratio ≥ <input type="number" id="volMin" value="1.5" step="0.1"></label>
-        <label>Limit <input type="number" id="screenerLimit" value="20" min="1" max="200"></label>
-        <button type="submit">查詢強勢股</button>
+        <label>量能倍率 ≥ <input type="number" id="volMin" value="1.5" step="0.1"></label>
+        <label>筆數 <input type="number" id="screenerLimit" value="20" min="1" max="200"></label>
+        <button type="submit" class="primary">查詢強勢交易對</button>
       </form>
+      <div id="screenerMeta" class="meta-row"></div>
+      <div id="screenerHighlights" class="highlight-grid"></div>
       <div id="screenerTable" class="table"></div>
     </section>
 
-    <section class="card">
-      <h2>走勢摘要與建議</h2>
-      <div class="summary">
-        <button id="summaryBtn">取得最新建議</button>
-        <div id="summaryView" class="summary-view"></div>
+    <section class="panel" id="activityPanel">
+      <div class="panel-head">
+        <div>
+          <h2>操作紀錄</h2>
+          <p>保留最近的操作記錄，方便追蹤流程。</p>
+        </div>
       </div>
+      <ul id="activityList" class="activity-list"></ul>
     </section>
   </main>
 

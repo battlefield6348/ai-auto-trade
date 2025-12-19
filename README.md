@@ -44,6 +44,14 @@
 - Ingestion：`config.yaml` 可設定 `ingestion.use_synthetic`（true=合成日 K，false=實際取 Binance）。
 - 自動管線：`ingestion.auto_interval` 預設每小時自動跑當日的日 K 擷取與分析，免手動呼叫 API。
 - Telegram 推播：在 `config.yaml` 設定 `notifier.telegram`（enabled/token/chat_id/interval/門檻），API 啟動後每小時將最新分析摘要與強勢交易對推送到指定 TG chat。
+- 歷史回補：可呼叫 `POST /api/admin/ingestion/backfill` 回補指定區間，預設會以 Binance 實際資料覆蓋既有日 K 並同步分析。  
+  ```bash
+  curl -X POST http://localhost:8080/api/admin/ingestion/backfill \
+    -H "Authorization: Bearer <token>" \
+    -H "Content-Type: application/json" \
+    -d '{"start_date":"2025-01-01","end_date":"2025-03-01","run_analysis":true}'
+  ```
+- 走勢圖資料：可呼叫 `GET /api/analysis/history?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD` 取得區間內分析序列（供前端走勢圖使用）。
 
 ## Monorepo 結構（預期）
 ```

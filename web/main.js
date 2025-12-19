@@ -1,42 +1,812 @@
 const state = {
   token: "",
+  health: null,
+  lastIngestion: null,
+  lastAnalysis: null,
+  lastSummary: null,
+  lastQuery: null,
+  lastScreener: null,
+  lastBackfill: null,
+  lastChart: null,
+  activity: [],
+  updatedAt: null,
 };
 
+const elements = {
+  status: document.getElementById("status"),
+  healthStatus: document.getElementById("healthStatus"),
+  overviewTime: document.getElementById("overviewTime"),
+  overviewMode: document.getElementById("overviewMode"),
+  loginMessage: document.getElementById("loginMessage"),
+  ingestResult: document.getElementById("ingestResult"),
+  analysisResult: document.getElementById("analysisResult"),
+  backfillResult: document.getElementById("backfillResult"),
+  chartForm: document.getElementById("chartForm"),
+  chartStart: document.getElementById("chartStart"),
+  chartEnd: document.getElementById("chartEnd"),
+  chartMeta: document.getElementById("chartMeta"),
+  chartCanvas: document.getElementById("chartCanvas"),
+  chartTooltip: document.getElementById("chartTooltip"),
+  summaryView: document.getElementById("summaryView"),
+  queryMeta: document.getElementById("queryMeta"),
+  queryHighlights: document.getElementById("queryHighlights"),
+  queryTable: document.getElementById("queryTable"),
+  screenerMeta: document.getElementById("screenerMeta"),
+  screenerHighlights: document.getElementById("screenerHighlights"),
+  screenerTable: document.getElementById("screenerTable"),
+  activityList: document.getElementById("activityList"),
+};
+
+const numberFormat = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 3 });
+const intFormat = new Intl.NumberFormat("zh-TW");
+const priceFormat = new Intl.NumberFormat("zh-TW", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+const percentFormat = new Intl.NumberFormat("zh-TW", {
+  style: "percent",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+const scoreFormat = new Intl.NumberFormat("zh-TW", {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
+const timeFormat = new Intl.DateTimeFormat("zh-TW", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "Asia/Taipei",
+});
+
 const api = async (path, options = {}) => {
-  const headers = options.headers || {};
+  const headers = { ...(options.headers || {}) };
   if (state.token) headers.Authorization = `Bearer ${state.token}`;
-  headers["Content-Type"] = headers["Content-Type"] || "application/json";
+  if (options.body && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
+  }
   const res = await fetch(path, { ...options, headers });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data.success === false) {
     const msg = data.error || res.statusText;
-    throw new Error(`${res.status} ${data.error_code || ""} ${msg}`);
+    throw new Error(`${res.status} ${data.error_code || ""} ${msg}`.trim());
   }
   return data;
 };
 
-const setStatus = (msg) => {
-  document.getElementById("status").textContent = msg;
+const fmtText = (v) => (v === null || v === undefined || v === "" ? "—" : v);
+const fmtNumber = (v) => (v === null || v === undefined ? "—" : numberFormat.format(v));
+const fmtInt = (v) => (v === null || v === undefined ? "—" : intFormat.format(v));
+const fmtPrice = (v) => (v === null || v === undefined ? "—" : priceFormat.format(v));
+const fmtPercent = (v) => (v === null || v === undefined ? "—" : percentFormat.format(v));
+const fmtScore = (v) => (v === null || v === undefined ? "—" : scoreFormat.format(v));
+const fmtRatio = (v) => (v === null || v === undefined ? "—" : `${fmtNumber(v)}x`);
+
+const deltaClass = (v) => (v > 0 ? "up" : v < 0 ? "down" : "flat");
+
+const chartState = {
+  rows: [],
+  points: [],
+  padding: null,
+  plotWidth: 0,
+  plotHeight: 0,
+  step: 0,
+  focusLine: null,
+  focusDot: null,
 };
 
-const pretty = (el, obj) => {
-  el.textContent = obj ? JSON.stringify(obj, null, 2) : "";
+const mapTrend = (trend) => {
+  if (trend === "bullish") return { label: "偏多", className: "up", tone: "good" };
+  if (trend === "bearish") return { label: "偏空", className: "down", tone: "warn" };
+  return { label: "中性", className: "flat", tone: "warn" };
 };
+
+const setStatus = (msg, tone) => {
+  elements.status.textContent = msg;
+  elements.status.classList.remove("good", "warn");
+  if (tone) elements.status.classList.add(tone);
+};
+
+const setHealthStatus = (msg, tone) => {
+  elements.healthStatus.textContent = msg;
+  elements.healthStatus.classList.remove("good", "warn");
+  if (tone) elements.healthStatus.classList.add(tone);
+};
+
+const setMessage = (el, msg, tone) => {
+  el.textContent = msg || "";
+  el.classList.remove("good", "error");
+  if (tone) el.classList.add(tone);
+};
+
+const touchUpdatedAt = () => {
+  state.updatedAt = new Date();
+  if (elements.overviewTime) {
+    elements.overviewTime.textContent = `最後更新：${timeFormat.format(state.updatedAt)}`;
+  }
+};
+
+const updateOverviewMode = () => {
+  if (!elements.overviewMode) return;
+  if (!state.health) {
+    elements.overviewMode.textContent = "資料來源：--";
+    return;
+  }
+  const source = state.health.use_synthetic ? "合成日 K" : "Binance 日 K";
+  elements.overviewMode.textContent = `資料來源：${source}`;
+};
+
+const setKpi = (id, { title, value, note, tone }) => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = `
+    <div class="kpi-title">${title}</div>
+    <div class="kpi-value ${tone || ""}">${value}</div>
+    <div class="kpi-note">${note}</div>
+  `;
+};
+
+const renderKpis = () => {
+  if (state.health) {
+    const dbStatus = String(state.health.db || "").toLowerCase();
+    const ok = dbStatus === "ok" || dbStatus === "healthy";
+    setKpi("kpiHealth", {
+      title: "系統狀態",
+      value: ok ? "運作中" : "需注意",
+      note: `DB ${state.health.db || "?"} · 合成 ${state.health.use_synthetic ? "ON" : "OFF"}`,
+      tone: ok ? "good" : "warn",
+    });
+  } else {
+    setKpi("kpiHealth", {
+      title: "系統狀態",
+      value: "尚未連線",
+      note: "等待健康檢查",
+    });
+  }
+
+  if (state.lastIngestion) {
+    const failed = Number(state.lastIngestion.failure_count || 0) > 0;
+    const total = state.lastIngestion.total_stocks ?? state.lastIngestion.success_count;
+    const success = state.lastIngestion.success_count ?? "—";
+    setKpi("kpiIngestion", {
+      title: "日 K 擷取",
+      value: `${fmtInt(success)} / ${fmtInt(total)}`,
+      note: `交易日 ${fmtText(state.lastIngestion.trade_date)} · 失敗 ${fmtInt(
+        state.lastIngestion.failure_count
+      )}`,
+      tone: failed ? "warn" : "good",
+    });
+  } else {
+    setKpi("kpiIngestion", {
+      title: "日 K 擷取",
+      value: "尚未執行",
+      note: "交易日 --",
+    });
+  }
+
+  if (state.lastAnalysis) {
+    const failed = Number(state.lastAnalysis.failure_count || 0) > 0;
+    const total = state.lastAnalysis.total_stocks ?? state.lastAnalysis.success_count;
+    const success = state.lastAnalysis.success_count ?? "—";
+    setKpi("kpiAnalysis", {
+      title: "日批次分析",
+      value: `${fmtInt(success)} / ${fmtInt(total)}`,
+      note: `交易日 ${fmtText(state.lastAnalysis.trade_date)} · 失敗 ${fmtInt(
+        state.lastAnalysis.failure_count
+      )}`,
+      tone: failed ? "warn" : "good",
+    });
+  } else {
+    setKpi("kpiAnalysis", {
+      title: "日批次分析",
+      value: "尚未執行",
+      note: "交易日 --",
+    });
+  }
+
+  if (state.lastSummary) {
+    const trend = mapTrend(state.lastSummary.trend);
+    setKpi("kpiSummary", {
+      title: "趨勢摘要",
+      value: trend.label,
+      note: `交易日 ${fmtText(state.lastSummary.trade_date)} · ${fmtText(
+        state.lastSummary.trading_pair
+      )}`,
+      tone: trend.tone,
+    });
+  } else {
+    setKpi("kpiSummary", {
+      title: "趨勢摘要",
+      value: "等待更新",
+      note: "--",
+    });
+  }
+
+  if (state.lastScreener) {
+    const count = state.lastScreener.total_count ?? state.lastScreener.items?.length ?? 0;
+    setKpi("kpiScreener", {
+      title: "強勢交易對",
+      value: `${fmtInt(count)} 檔`,
+      note: `交易日 ${fmtText(state.lastScreener.trade_date)}`,
+      tone: count > 0 ? "good" : "warn",
+    });
+  } else {
+    setKpi("kpiScreener", {
+      title: "強勢交易對",
+      value: "尚未查詢",
+      note: "--",
+    });
+  }
+};
+
+const renderJobPlaceholder = (container, label) => {
+  container.innerHTML = `
+    <div class="result-header">
+      <div>
+        <div class="result-title">${label}</div>
+        <div class="result-sub">尚未執行</div>
+      </div>
+      <span class="badge warn">待執行</span>
+    </div>
+    <div class="result-message">請先登入並選擇交易日。</div>
+  `;
+};
+
+const renderJobLoading = (container, label) => {
+  container.innerHTML = `
+    <div class="result-header">
+      <div>
+        <div class="result-title">${label}</div>
+        <div class="result-sub">執行中</div>
+      </div>
+      <span class="badge">處理中</span>
+    </div>
+    <div class="result-message">正在送出請求，請稍候。</div>
+  `;
+};
+
+const renderJobResult = (container, label, res) => {
+  const statusText = res.success ? "完成" : "未完成";
+  const badgeClass = res.success ? "good" : "warn";
+  container.innerHTML = `
+    <div class="result-header">
+      <div>
+        <div class="result-title">${label}</div>
+        <div class="result-sub">交易日 ${fmtText(res.trade_date)}</div>
+      </div>
+      <span class="badge ${badgeClass}">${statusText}</span>
+    </div>
+    <div class="result-metrics">
+      <div><span>處理筆數</span><strong>${fmtInt(res.total_stocks)}</strong></div>
+      <div><span>成功</span><strong>${fmtInt(res.success_count)}</strong></div>
+      <div><span>失敗</span><strong>${fmtInt(res.failure_count)}</strong></div>
+    </div>
+  `;
+};
+
+const renderJobError = (container, label, message) => {
+  container.innerHTML = `
+    <div class="result-header">
+      <div>
+        <div class="result-title">${label}</div>
+        <div class="result-sub">未完成</div>
+      </div>
+      <span class="badge warn">注意</span>
+    </div>
+    <div class="result-message error">${message}</div>
+  `;
+};
+
+const renderBackfillPlaceholder = () => {
+  if (!elements.backfillResult) return;
+  elements.backfillResult.innerHTML = `
+    <div class="result-header">
+      <div>
+        <div class="result-title">回補結果</div>
+        <div class="result-sub">尚未回補</div>
+      </div>
+      <span class="badge warn">待執行</span>
+    </div>
+    <div class="result-message">請設定日期區間後開始回補。</div>
+  `;
+};
+
+const renderBackfillLoading = (startDate, endDate) => {
+  if (!elements.backfillResult) return;
+  elements.backfillResult.innerHTML = `
+    <div class="result-header">
+      <div>
+        <div class="result-title">回補進行中</div>
+        <div class="result-sub">區間 ${startDate} ~ ${endDate}</div>
+      </div>
+      <span class="badge">處理中</span>
+    </div>
+    <div class="result-message">正在回補歷史資料與分析，請稍候。</div>
+  `;
+};
+
+const renderBackfillResult = (res) => {
+  if (!elements.backfillResult) return;
+  const failures = res.failures || [];
+  const statusClass = failures.length ? "warn" : "good";
+  const statusText = failures.length ? "完成（有失敗）" : "完成";
+  const analysisText = res.analysis_enabled ? fmtInt(res.analysis_success_days) : "未啟用";
+  const failureList = failures.length
+    ? `<ul class="result-list">${failures
+        .map((item) => {
+          const stageLabel = item.stage === "analysis" ? "分析" : "擷取";
+          return `<li><strong>${item.trade_date}</strong> · ${stageLabel}：${item.reason}</li>`;
+        })
+        .join("")}</ul>`
+    : `<div class="result-message">區間內資料已回補完成。</div>`;
+  elements.backfillResult.innerHTML = `
+    <div class="result-header">
+      <div>
+        <div class="result-title">回補結果</div>
+        <div class="result-sub">區間 ${res.start_date} ~ ${res.end_date}</div>
+      </div>
+      <span class="badge ${statusClass}">${statusText}</span>
+    </div>
+    <div class="result-metrics">
+      <div><span>總天數</span><strong>${fmtInt(res.total_days)}</strong></div>
+      <div><span>擷取成功</span><strong>${fmtInt(res.ingestion_success_days)}</strong></div>
+      <div><span>分析成功</span><strong>${analysisText}</strong></div>
+      <div><span>失敗</span><strong>${fmtInt(res.failure_days)}</strong></div>
+    </div>
+    ${failureList}
+  `;
+};
+
+const renderBackfillError = (message) => {
+  if (!elements.backfillResult) return;
+  elements.backfillResult.innerHTML = `
+    <div class="result-header">
+      <div>
+        <div class="result-title">回補失敗</div>
+        <div class="result-sub">請確認登入狀態與日期設定</div>
+      </div>
+      <span class="badge warn">注意</span>
+    </div>
+    <div class="result-message error">${message}</div>
+  `;
+};
+
+const renderChartPlaceholder = (message) => {
+  if (!elements.chartCanvas) return;
+  renderEmptyState(elements.chartCanvas, message || "尚未載入走勢資料");
+  if (elements.chartMeta) elements.chartMeta.innerHTML = "";
+  if (elements.chartTooltip) elements.chartTooltip.classList.remove("show");
+};
+
+const renderChartLoading = () => {
+  if (!elements.chartCanvas) return;
+  elements.chartCanvas.innerHTML = `<div class="empty-state">讀取中...</div>`;
+  if (elements.chartTooltip) elements.chartTooltip.classList.remove("show");
+};
+
+const hideChartTooltip = () => {
+  if (!elements.chartTooltip) return;
+  elements.chartTooltip.classList.remove("show");
+};
+
+const renderHistoryChart = (res) => {
+  if (!elements.chartCanvas) return;
+  const rows = res.items || [];
+  if (!rows.length) {
+    renderChartPlaceholder("尚無走勢資料");
+    return;
+  }
+
+  const closes = rows.map((row) => row.close_price);
+  const maxClose = Math.max(...closes);
+  const minClose = Math.min(...closes);
+  if (elements.chartMeta) {
+    renderMeta(elements.chartMeta, [
+      `區間：${fmtText(res.start_date)} ~ ${fmtText(res.end_date)}`,
+      `筆數：${fmtInt(res.total_count)}`,
+      `最高收盤：${fmtPrice(maxClose)}`,
+      `最低收盤：${fmtPrice(minClose)}`,
+    ]);
+  }
+
+  const canvas = elements.chartCanvas;
+  const width = canvas.clientWidth || 640;
+  const height = canvas.clientHeight || 320;
+  const padding = { top: 20, right: 24, bottom: 32, left: 48 };
+  const plotWidth = Math.max(width - padding.left - padding.right, 1);
+  const plotHeight = Math.max(height - padding.top - padding.bottom, 1);
+
+  const range = maxClose - minClose || 1;
+  const step = rows.length > 1 ? plotWidth / (rows.length - 1) : plotWidth;
+
+  const points = rows.map((row, idx) => {
+    const x = padding.left + (rows.length > 1 ? idx * step : plotWidth / 2);
+    const ratio = (row.close_price - minClose) / range;
+    const y = padding.top + (1 - ratio) * plotHeight;
+    return { x, y, row };
+  });
+
+  const linePath = points
+    .map((pt, idx) => `${idx === 0 ? "M" : "L"}${pt.x},${pt.y}`)
+    .join(" ");
+  const areaPath = `${linePath} L ${padding.left + plotWidth},${padding.top + plotHeight} L ${
+    padding.left
+  },${padding.top + plotHeight} Z`;
+
+  const tickCount = 4;
+  const gridLines = [];
+  const axisLabels = [];
+  for (let i = 0; i <= tickCount; i++) {
+    const y = padding.top + (plotHeight / tickCount) * i;
+    const value = maxClose - (range / tickCount) * i;
+    gridLines.push(`<line x1="${padding.left}" y1="${y}" x2="${padding.left + plotWidth}" y2="${y}" />`);
+    axisLabels.push(
+      `<text x="${padding.left - 6}" y="${y + 4}" text-anchor="end">${fmtPrice(value)}</text>`
+    );
+  }
+
+  const xLabels = [];
+  const labelIndexes = [0, Math.floor((rows.length - 1) / 2), rows.length - 1].filter(
+    (value, index, self) => self.indexOf(value) === index
+  );
+  labelIndexes.forEach((idx) => {
+    const pt = points[idx];
+    if (!pt) return;
+    xLabels.push(
+      `<text x="${pt.x}" y="${padding.top + plotHeight + 20}" text-anchor="middle">${pt.row.trade_date}</text>`
+    );
+  });
+
+  canvas.innerHTML = `
+    <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-label="BTC/USDT 走勢圖">
+      <g class="chart-grid">${gridLines.join("")}</g>
+      <g class="chart-axis">${axisLabels.join("")}${xLabels.join("")}</g>
+      <path class="chart-area" d="${areaPath}"></path>
+      <path class="chart-line" d="${linePath}"></path>
+      <line class="chart-focus-line" data-role="focus-line" x1="0" x2="0" y1="${padding.top}" y2="${
+        padding.top + plotHeight
+      }" style="opacity:0"></line>
+      <circle class="chart-focus-dot" data-role="focus-dot" cx="0" cy="0" r="4" style="opacity:0"></circle>
+    </svg>
+  `;
+
+  const svg = canvas.querySelector("svg");
+  chartState.rows = rows;
+  chartState.points = points;
+  chartState.padding = padding;
+  chartState.plotWidth = plotWidth;
+  chartState.plotHeight = plotHeight;
+  chartState.step = step;
+  chartState.focusLine = svg.querySelector("[data-role='focus-line']");
+  chartState.focusDot = svg.querySelector("[data-role='focus-dot']");
+
+  const handlePointer = (event) => {
+    if (!chartState.rows.length) return;
+    const rect = svg.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const plotX = Math.max(0, Math.min(x - padding.left, plotWidth));
+    const idx = chartState.rows.length > 1 ? Math.round(plotX / chartState.step) : 0;
+    const point = chartState.points[Math.max(0, Math.min(idx, chartState.points.length - 1))];
+    if (!point) return;
+
+    chartState.focusLine.setAttribute("x1", point.x);
+    chartState.focusLine.setAttribute("x2", point.x);
+    chartState.focusLine.style.opacity = "1";
+    chartState.focusDot.setAttribute("cx", point.x);
+    chartState.focusDot.setAttribute("cy", point.y);
+    chartState.focusDot.style.opacity = "1";
+
+    const tooltip = elements.chartTooltip;
+    if (!tooltip) return;
+    tooltip.innerHTML = `
+      <div class="tooltip-title">${point.row.trade_date}</div>
+      <div class="tooltip-row"><span>收盤價</span><strong>${fmtPrice(point.row.close_price)}</strong></div>
+      <div class="tooltip-row"><span>日漲跌</span><strong>${fmtPercent(
+        point.row.change_percent
+      )}</strong></div>
+      <div class="tooltip-row"><span>近 5 日</span><strong>${fmtPercent(
+        point.row.return_5d
+      )}</strong></div>
+      <div class="tooltip-row"><span>量能倍率</span><strong>${fmtRatio(
+        point.row.volume_ratio
+      )}</strong></div>
+      <div class="tooltip-row"><span>Score</span><strong>${fmtScore(point.row.score)}</strong></div>
+    `;
+
+    const tooltipRect = tooltip.getBoundingClientRect();
+    let left = point.x + 12;
+    let top = point.y - tooltipRect.height - 12;
+    const maxLeft = canvas.clientWidth - tooltipRect.width - 8;
+    if (left > maxLeft) left = maxLeft;
+    if (left < 8) left = 8;
+    if (top < 8) top = point.y + 12;
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${top}px`;
+    tooltip.classList.add("show");
+  };
+
+  svg.addEventListener("mousemove", handlePointer);
+  svg.addEventListener("mouseleave", () => {
+    hideChartTooltip();
+    if (chartState.focusLine) chartState.focusLine.style.opacity = "0";
+    if (chartState.focusDot) chartState.focusDot.style.opacity = "0";
+  });
+  svg.addEventListener("click", handlePointer);
+};
+
+const renderSummary = (el, res) => {
+  const trendInfo = mapTrend(res.trend);
+  const metrics = res.metrics || {};
+  const signals = buildSignals(metrics);
+  const changeText =
+    metrics.change_percent == null
+      ? "—"
+      : `<span class="delta ${deltaClass(metrics.change_percent)}">${fmtPercent(
+          metrics.change_percent
+        )}</span>`;
+  const returnText =
+    metrics.return_5d == null
+      ? "—"
+      : `<span class="delta ${deltaClass(metrics.return_5d)}">${fmtPercent(
+          metrics.return_5d
+        )}</span>`;
+  el.innerHTML = `
+    <div class="summary-head">
+      <div>
+        <div class="summary-title">${fmtText(res.trading_pair)} · ${fmtText(
+          res.trade_date
+        )}</div>
+        <div class="summary-sub">趨勢：<span class="trend ${trendInfo.className}">${
+          trendInfo.label
+        }</span></div>
+      </div>
+      <div class="badge ${trendInfo.tone}">${trendInfo.label}</div>
+    </div>
+    <div class="summary-metrics">
+      <div class="metric-card"><span>收盤價</span><strong>${fmtPrice(
+        metrics.close_price
+      )}</strong></div>
+      <div class="metric-card"><span>日漲跌</span><strong>${changeText}</strong></div>
+      <div class="metric-card"><span>近 5 日報酬</span><strong>${returnText}</strong></div>
+      <div class="metric-card"><span>量能倍率</span><strong>${fmtRatio(
+        metrics.volume_ratio
+      )}</strong></div>
+      <div class="metric-card"><span>Score</span><strong>${fmtScore(metrics.score)}</strong></div>
+    </div>
+    <div class="summary-signal">
+      <div class="signal-block">
+        <strong>觀察重點</strong>
+        <ul>${signals.focus.map((item) => `<li>${item}</li>`).join("")}</ul>
+      </div>
+      <div class="signal-block">
+        <strong>風險提醒</strong>
+        <ul>${signals.risk.map((item) => `<li>${item}</li>`).join("")}</ul>
+      </div>
+    </div>
+    <div class="advice">${fmtText(res.advice)}</div>
+  `;
+};
+
+const buildSignals = (metrics) => {
+  const focus = [];
+  const risk = [];
+
+  if (typeof metrics.change_percent === "number") {
+    if (metrics.change_percent >= 0.02) {
+      focus.push("日內動能偏強，注意追價節奏");
+    } else if (metrics.change_percent <= -0.02) {
+      focus.push("日內回檔幅度偏大，觀察支撐區");
+    } else {
+      focus.push("日內波動收斂，等待方向確認");
+    }
+  } else {
+    focus.push("尚無日內變動資訊");
+  }
+
+  if (typeof metrics.return_5d === "number") {
+    if (metrics.return_5d >= 0.05) {
+      focus.push("近 5 日仍偏多，趨勢延續機率較高");
+    } else if (metrics.return_5d <= -0.05) {
+      risk.push("近 5 日偏空，留意續跌風險");
+    }
+  }
+
+  if (typeof metrics.volume_ratio === "number") {
+    if (metrics.volume_ratio >= 2) {
+      focus.push("量能明顯放大，關注突破延續");
+    } else if (metrics.volume_ratio <= 0.8) {
+      risk.push("量能偏弱，訊號可靠度降低");
+    }
+  }
+
+  if (typeof metrics.score === "number") {
+    if (metrics.score >= 80) {
+      focus.push("分數進入強勢區間，可持續追蹤");
+    } else if (metrics.score <= 50) {
+      risk.push("分數偏低，留意趨勢轉弱");
+    }
+  }
+
+  if (!risk.length) {
+    risk.push("目前未見明顯風險訊號");
+  }
+
+  return {
+    focus: focus.slice(0, 3),
+    risk: risk.slice(0, 3),
+  };
+};
+
+const renderMeta = (container, items) => {
+  container.innerHTML = items.map((item) => `<div class="meta-item">${item}</div>`).join("");
+};
+
+const renderEmptyState = (container, message) => {
+  container.innerHTML = `<div class="empty-state">${message}</div>`;
+};
+
+const renderTable = (container, rows, columns) => {
+  if (!rows.length) {
+    renderEmptyState(container, "尚無資料");
+    return;
+  }
+  const thead = columns.map((col) => `<th>${col.label}</th>`).join("");
+  const tbody = rows
+    .map((row) => {
+      const tds = columns
+        .map((col) => {
+          const raw = row[col.key];
+          let content = col.format ? col.format(raw, row) : fmtText(raw);
+          if (col.delta) {
+            content = `<span class="delta ${deltaClass(raw)}">${content}</span>`;
+          }
+          return `<td class="${col.className || ""}">${content}</td>`;
+        })
+        .join("");
+      return `<tr>${tds}</tr>`;
+    })
+    .join("");
+  container.innerHTML = `<table><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>`;
+};
+
+const buildHighlightCard = (title, items, detailFn) => {
+  if (!items || !items.length) return "";
+  const list = items
+    .map((item) => {
+      const name = fmtText(item.trading_pair);
+      const detail = detailFn ? detailFn(item) : "";
+      return `<div class="highlight-item"><span class="mono">${name}</span><span>${
+        detail || ""
+      }</span></div>`;
+    })
+    .join("");
+  return `<article class="highlight-card"><h4>${title}</h4>${list}</article>`;
+};
+
+const renderHighlights = (container, rows) => {
+  if (!rows.length) {
+    renderEmptyState(container, "尚無亮點資料");
+    return;
+  }
+  const byScore = [...rows]
+    .sort((a, b) => (b.score ?? -Infinity) - (a.score ?? -Infinity))
+    .slice(0, 3);
+  const byChange = [...rows]
+    .filter((item) => typeof item.change_percent === "number")
+    .sort((a, b) => Math.abs(b.change_percent) - Math.abs(a.change_percent))[0];
+  const byVolume = [...rows]
+    .filter((item) => typeof item.volume_ratio === "number")
+    .sort((a, b) => (b.volume_ratio ?? 0) - (a.volume_ratio ?? 0))[0];
+
+  const cards = [
+    buildHighlightCard("高分排行", byScore, (item) => `Score ${fmtScore(item.score)}`),
+  ];
+  if (byChange) {
+    cards.push(
+      buildHighlightCard("波動焦點", [byChange], (item) => `日漲跌 ${fmtPercent(item.change_percent)}`)
+    );
+  }
+  if (byVolume) {
+    cards.push(
+      buildHighlightCard("量能焦點", [byVolume], (item) => `量能 ${fmtRatio(item.volume_ratio)}`)
+    );
+  }
+  container.innerHTML = cards.join("");
+};
+
+const renderActivity = () => {
+  if (!state.activity.length) {
+    elements.activityList.innerHTML = `<li class="empty-state">尚無操作紀錄</li>`;
+    return;
+  }
+  elements.activityList.innerHTML = state.activity
+    .map(
+      (item) => `
+      <li>
+        <div class="activity-title">${item.title}</div>
+        <div class="activity-detail">${item.detail}</div>
+        <div class="activity-time">${item.time}</div>
+      </li>
+    `
+    )
+    .join("");
+};
+
+const logActivity = (title, detail) => {
+  const entry = {
+    title,
+    detail,
+    time: timeFormat.format(new Date()),
+  };
+  state.activity.unshift(entry);
+  state.activity = state.activity.slice(0, 6);
+  renderActivity();
+  touchUpdatedAt();
+};
+
+const requireLogin = () => {
+  if (!state.token) throw new Error("請先登入後再操作");
+};
+
+const columns = [
+  { key: "trading_pair", label: "交易對", className: "mono" },
+  { key: "close_price", label: "收盤", format: fmtPrice },
+  { key: "change_percent", label: "日漲跌", format: fmtPercent, delta: true },
+  { key: "return_5d", label: "近 5 日", format: fmtPercent, delta: true },
+  { key: "volume", label: "成交量", format: fmtInt },
+  { key: "volume_ratio", label: "量能倍率", format: fmtRatio },
+  { key: "score", label: "Score", format: fmtScore },
+  { key: "market_type", label: "市場", format: fmtText },
+];
 
 async function initHealth() {
   try {
     const res = await fetch("/api/health");
     const data = await res.json();
     if (data.success) {
-      setStatus(
-        `健康檢查 OK ｜ DB: ${data.db} ｜ 合成資料: ${data.use_synthetic ? "ON" : "OFF"}`
+      state.health = data;
+      const ok = String(data.db || "").toLowerCase() === "ok";
+      setHealthStatus(
+        `系統檢查 OK ｜ DB: ${data.db} ｜ 合成資料: ${data.use_synthetic ? "ON" : "OFF"}`,
+        ok ? "good" : "warn"
       );
+      updateOverviewMode();
+      renderKpis();
     }
   } catch (_) {
-    // ignore
+    setHealthStatus("系統檢查失敗", "warn");
   }
 }
+
 initHealth();
+renderJobPlaceholder(elements.ingestResult, "擷取日 K");
+renderJobPlaceholder(elements.analysisResult, "日批次分析");
+renderBackfillPlaceholder();
+renderChartPlaceholder();
+renderEmptyState(elements.queryTable, "尚未查詢");
+renderEmptyState(elements.screenerTable, "尚未查詢");
+renderEmptyState(elements.queryHighlights, "尚無亮點資料");
+renderEmptyState(elements.screenerHighlights, "尚無亮點資料");
+renderActivity();
+renderKpis();
+updateOverviewMode();
+
+const today = new Date().toISOString().slice(0, 10);
+const startOfYear = new Date(Date.UTC(new Date().getUTCFullYear(), 0, 1)).toISOString().slice(0, 10);
+["ingestDate", "analysisDate", "queryDate", "screenerDate", "backfillEnd", "chartEnd"].forEach((id) => {
+  const el = document.getElementById(id);
+  if (el) el.value = today;
+});
+const backfillStart = document.getElementById("backfillStart");
+if (backfillStart) backfillStart.value = startOfYear;
+if (elements.chartStart) elements.chartStart.value = startOfYear;
+
+Array.from(document.querySelectorAll(".chip[data-email]")).forEach((chip) => {
+  chip.addEventListener("click", () => {
+    const email = chip.dataset.email;
+    document.getElementById("email").value = email;
+    document.getElementById("password").value = "password123";
+  });
+});
 
 document.getElementById("loginForm").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -48,69 +818,134 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
       body: JSON.stringify({ email, password }),
     });
     state.token = res.access_token;
-    setStatus(`已登入：${email}`);
-    alert("登入成功");
+    setStatus(`已登入：${email}`, "good");
+    setMessage(elements.loginMessage, "登入成功", "good");
+    logActivity("登入成功", `帳號 ${email}`);
   } catch (err) {
-    alert(`登入失敗：${err.message}`);
+    setMessage(elements.loginMessage, `登入失敗：${err.message}`, "error");
+    setStatus("未登入", "warn");
   }
-});
-
-const today = new Date().toISOString().slice(0, 10);
-["ingestDate", "analysisDate", "queryDate", "screenerDate"].forEach((id) => {
-  const el = document.getElementById(id);
-  if (el) el.value = today;
 });
 
 document.getElementById("ingestForm").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const out = document.getElementById("ingestResult");
   try {
+    requireLogin();
+    renderJobLoading(elements.ingestResult, "擷取日 K");
     const trade_date = document.getElementById("ingestDate").value;
     const res = await api("/api/admin/ingestion/daily", {
       method: "POST",
       body: JSON.stringify({ trade_date }),
     });
-    pretty(out, res);
+    state.lastIngestion = res;
+    renderJobResult(elements.ingestResult, "擷取日 K", res);
+    renderKpis();
+    logActivity("擷取日 K", `交易日 ${trade_date} · 成功 ${fmtInt(res.success_count)}`);
   } catch (err) {
-    out.textContent = err.message;
+    renderJobError(elements.ingestResult, "擷取日 K", err.message);
   }
 });
 
 document.getElementById("analysisForm").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const out = document.getElementById("analysisResult");
   try {
+    requireLogin();
+    renderJobLoading(elements.analysisResult, "日批次分析");
     const trade_date = document.getElementById("analysisDate").value;
     const res = await api("/api/admin/analysis/daily", {
       method: "POST",
       body: JSON.stringify({ trade_date }),
     });
-    pretty(out, res);
+    state.lastAnalysis = res;
+    renderJobResult(elements.analysisResult, "日批次分析", res);
+    renderKpis();
+    logActivity("日批次分析", `交易日 ${trade_date} · 成功 ${fmtInt(res.success_count)}`);
   } catch (err) {
-    out.textContent = err.message;
+    renderJobError(elements.analysisResult, "日批次分析", err.message);
   }
 });
 
+document.getElementById("backfillForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    requireLogin();
+    const start_date = document.getElementById("backfillStart").value;
+    const end_date = document.getElementById("backfillEnd").value;
+    const run_analysis = document.getElementById("backfillAnalysis").checked;
+    if (!start_date || !end_date) {
+      renderBackfillError("請設定起始與結束日期");
+      return;
+    }
+    renderBackfillLoading(start_date, end_date);
+    const res = await api("/api/admin/ingestion/backfill", {
+      method: "POST",
+      body: JSON.stringify({ start_date, end_date, run_analysis }),
+    });
+    state.lastBackfill = res;
+    renderBackfillResult(res);
+    logActivity(
+      "歷史回補",
+      `區間 ${start_date} ~ ${end_date} · 成功 ${fmtInt(res.ingestion_success_days)}`
+    );
+  } catch (err) {
+    renderBackfillError(err.message);
+  }
+});
+
+if (elements.chartForm) {
+  elements.chartForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      requireLogin();
+      const start_date = elements.chartStart.value;
+      const end_date = elements.chartEnd.value;
+      if (!start_date || !end_date) {
+        renderChartPlaceholder("請設定起始與結束日期");
+        return;
+      }
+      renderChartLoading();
+      const res = await api(
+        `/api/analysis/history?symbol=BTCUSDT&start_date=${start_date}&end_date=${end_date}&only_success=true`
+      );
+      state.lastChart = res;
+      renderHistoryChart(res);
+      logActivity("載入走勢圖", `區間 ${start_date} ~ ${end_date} · 筆數 ${fmtInt(res.total_count)}`);
+    } catch (err) {
+      renderChartPlaceholder(err.message);
+    }
+  });
+}
+
 document.getElementById("queryForm").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const table = document.getElementById("queryTable");
   try {
+    requireLogin();
     const trade_date = document.getElementById("queryDate").value;
     const limit = document.getElementById("queryLimit").value || 20;
     const offset = document.getElementById("queryOffset").value || 0;
     const res = await api(
       `/api/analysis/daily?trade_date=${trade_date}&limit=${limit}&offset=${offset}`
     );
-    renderTable(table, res.items || []);
+    state.lastQuery = res;
+    renderMeta(elements.queryMeta, [
+      `交易日：${fmtText(res.trade_date)}`,
+      `總筆數：${fmtInt(res.total_count)}`,
+      `顯示：${fmtInt(res.items?.length || 0)}`,
+    ]);
+    renderHighlights(elements.queryHighlights, res.items || []);
+    renderTable(elements.queryTable, res.items || [], columns);
+    logActivity("查詢分析結果", `交易日 ${trade_date} · 筆數 ${fmtInt(res.items?.length || 0)}`);
   } catch (err) {
-    table.innerHTML = `<div class="error">${err.message}</div>`;
+    renderMeta(elements.queryMeta, ["查詢失敗"]);
+    renderEmptyState(elements.queryHighlights, err.message);
+    renderEmptyState(elements.queryTable, err.message);
   }
 });
 
 document.getElementById("screenerForm").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const table = document.getElementById("screenerTable");
   try {
+    requireLogin();
     const trade_date = document.getElementById("screenerDate").value;
     const score_min = document.getElementById("scoreMin").value || 70;
     const volume_ratio_min = document.getElementById("volMin").value || 1.5;
@@ -118,79 +953,41 @@ document.getElementById("screenerForm").addEventListener("submit", async (e) => 
     const res = await api(
       `/api/screener/strong-stocks?trade_date=${trade_date}&score_min=${score_min}&volume_ratio_min=${volume_ratio_min}&limit=${limit}`
     );
-    renderTable(table, res.items || []);
+    state.lastScreener = res;
+    renderMeta(elements.screenerMeta, [
+      `交易日：${fmtText(res.trade_date)}`,
+      `條件：Score ≥ ${fmtNumber(res.params?.score_min)} · 量能 ≥ ${fmtNumber(
+        res.params?.volume_ratio_min
+      )}`,
+      `筆數：${fmtInt(res.total_count)}`,
+    ]);
+    renderHighlights(elements.screenerHighlights, res.items || []);
+    renderTable(elements.screenerTable, res.items || [], columns);
+    renderKpis();
+    logActivity("查詢強勢交易對", `交易日 ${trade_date} · 筆數 ${fmtInt(res.items?.length || 0)}`);
   } catch (err) {
-    table.innerHTML = `<div class="error">${err.message}</div>`;
+    renderMeta(elements.screenerMeta, ["查詢失敗"]);
+    renderEmptyState(elements.screenerHighlights, err.message);
+    renderEmptyState(elements.screenerTable, err.message);
   }
 });
 
 document.getElementById("summaryBtn").addEventListener("click", async () => {
-  const view = document.getElementById("summaryView");
-  view.innerHTML = "讀取中...";
   try {
+    requireLogin();
+    elements.summaryView.innerHTML = `<div class="empty-state">讀取中...</div>`;
     const res = await api("/api/analysis/summary");
-    renderSummary(view, res);
+    state.lastSummary = res;
+    renderSummary(elements.summaryView, res);
+    renderKpis();
+    logActivity("取得走勢摘要", `交易日 ${fmtText(res.trade_date)}`);
   } catch (err) {
-    view.innerHTML = `<div class="error">${err.message}</div>`;
+    elements.summaryView.innerHTML = `<div class="empty-state">${err.message}</div>`;
   }
 });
 
-function renderTable(container, rows) {
-  if (!rows.length) {
-    container.innerHTML = `<div class="pill">無資料</div>`;
-    return;
+window.addEventListener("resize", () => {
+  if (state.lastChart && state.lastChart.items && state.lastChart.items.length) {
+    renderHistoryChart(state.lastChart);
   }
-  const headers = [
-    "trading_pair",
-    "market_type",
-    "close_price",
-    "change_percent",
-    "return_5d",
-    "volume",
-    "volume_ratio",
-    "score",
-  ];
-  const thead = headers.map((h) => `<th>${h}</th>`).join("");
-  const tbody = rows
-    .map((r) => {
-      return `<tr>${headers
-        .map((h) => `<td>${fmt(r[h])}</td>`)
-        .join("")}</tr>`;
-    })
-    .join("");
-  container.innerHTML = `<table><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>`;
-}
-
-function fmt(v) {
-  if (v === null || v === undefined) return "";
-  if (typeof v === "number") {
-    return Math.abs(v) >= 1000 ? v.toLocaleString() : v.toFixed(3).replace(/\.?0+$/, "");
-  }
-  return v;
-}
-
-function renderSummary(el, res) {
-  const trendLabel =
-    res.trend === "bullish"
-      ? "偏多"
-      : res.trend === "bearish"
-      ? "偏空"
-      : "中性";
-  const ret5 = res.metrics.return_5d != null ? fmt(res.metrics.return_5d) : "N/A";
-  const volr = res.metrics.volume_ratio != null ? fmt(res.metrics.volume_ratio) : "N/A";
-  el.innerHTML = `
-    <div class="summary-pill">
-      <div>日期：${res.trade_date}</div>
-      <div>交易對：${res.trading_pair}</div>
-      <div>趨勢：${trendLabel}</div>
-    </div>
-    <div class="summary-grid">
-      <div><strong>收盤</strong><span>${fmt(res.metrics.close_price)}</span></div>
-      <div><strong>日漲跌幅</strong><span>${fmt(res.metrics.change_percent)}</span></div>
-      <div><strong>近5日報酬</strong><span>${ret5}</span></div>
-      <div><strong>量能倍率</strong><span>${volr}</span></div>
-      <div><strong>Score</strong><span>${fmt(res.metrics.score)}</span></div>
-    </div>
-    <div class="advice">${res.advice}</div>
-  `;
-}
+});

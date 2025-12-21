@@ -27,6 +27,12 @@ const elements = {
   chartMeta: document.getElementById("chartMeta"),
   chartCanvas: document.getElementById("chartCanvas"),
   chartTooltip: document.getElementById("chartTooltip"),
+  chartHighScores: document.getElementById("chartHighScores"),
+  backtestForm: document.getElementById("backtestForm"),
+  backtestSummary: document.getElementById("backtestSummary"),
+  backtestEvents: document.getElementById("backtestEvents"),
+  btConditionSelect: document.getElementById("btConditionSelect"),
+  btSelectedConditions: document.getElementById("btSelectedConditions"),
   summaryView: document.getElementById("summaryView"),
   queryMeta: document.getElementById("queryMeta"),
   queryHighlights: document.getElementById("queryHighlights"),
@@ -86,12 +92,17 @@ const deltaClass = (v) => (v > 0 ? "up" : v < 0 ? "down" : "flat");
 const chartState = {
   rows: [],
   points: [],
+  events: [],
   padding: null,
   plotWidth: 0,
   plotHeight: 0,
   step: 0,
   focusLine: null,
   focusDot: null,
+};
+
+const backtestSelections = {
+  conditions: [],
 };
 
 const mapTrend = (trend) => {
@@ -375,6 +386,9 @@ const renderChartPlaceholder = (message) => {
   renderEmptyState(elements.chartCanvas, message || "尚未載入走勢資料");
   if (elements.chartMeta) elements.chartMeta.innerHTML = "";
   if (elements.chartTooltip) elements.chartTooltip.classList.remove("show");
+  if (elements.chartHighScores) renderEmptyState(elements.chartHighScores, "尚無高分點（Score ≥ 50）");
+  if (elements.backtestSummary) elements.backtestSummary.innerHTML = "";
+  if (elements.backtestEvents) renderEmptyState(elements.backtestEvents, "尚無回測結果");
 };
 
 const renderChartLoading = () => {
@@ -388,7 +402,7 @@ const hideChartTooltip = () => {
   elements.chartTooltip.classList.remove("show");
 };
 
-const renderHistoryChart = (res) => {
+const renderHistoryChart = (res, backtestEvents = []) => {
   if (!elements.chartCanvas) return;
   const rows = res.items || [];
   if (!rows.length) {
@@ -406,6 +420,10 @@ const renderHistoryChart = (res) => {
       `最高收盤：${fmtPrice(maxClose)}`,
       `最低收盤：${fmtPrice(minClose)}`,
     ]);
+  }
+  if (elements.chartHighScores) {
+    const highRows = rows.filter((row) => typeof row.score === "number" && row.score >= 50);
+    renderHighScoreList(elements.chartHighScores, highRows);
   }
 
   const canvas = elements.chartCanvas;
@@ -472,12 +490,25 @@ const renderHistoryChart = (res) => {
   const svg = canvas.querySelector("svg");
   chartState.rows = rows;
   chartState.points = points;
+  chartState.events = backtestEvents;
   chartState.padding = padding;
   chartState.plotWidth = plotWidth;
   chartState.plotHeight = plotHeight;
   chartState.step = step;
   chartState.focusLine = svg.querySelector("[data-role='focus-line']");
   chartState.focusDot = svg.querySelector("[data-role='focus-dot']");
+
+  if (backtestEvents && backtestEvents.length) {
+    const eventDates = new Set(backtestEvents.map((e) => e.trade_date));
+    const markers = points
+      .filter((pt) => eventDates.has(pt.row.trade_date))
+      .map(
+        (pt) =>
+          `<circle cx="${pt.x}" cy="${pt.y}" r="4.5" fill="var(--accent)" stroke="#fff" stroke-width="1.5" />`
+      )
+      .join("");
+    svg.insertAdjacentHTML("beforeend", markers);
+  }
 
   const handlePointer = (event) => {
     if (!chartState.rows.length) return;
@@ -713,6 +744,138 @@ const renderHighlights = (container, rows) => {
   container.innerHTML = cards.join("");
 };
 
+const renderHighScoreList = (container, rows) => {
+  if (!container) return;
+  if (!rows.length) {
+    renderEmptyState(container, "尚無高分點（Score ≥ 50）");
+    return;
+  }
+  const list = rows
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8)
+    .map(
+      (row) => `
+        <article class="highlight-card">
+          <h4>${row.trade_date}</h4>
+          <div class="highlight-item"><span>收盤</span><span>${fmtPrice(row.close_price)}</span></div>
+          <div class="highlight-item"><span>日漲跌</span><span class="delta ${deltaClass(
+            row.change_percent
+          )}">${fmtPercent(row.change_percent)}</span></div>
+          <div class="highlight-item"><span>近 5 日</span><span class="delta ${deltaClass(
+            row.return_5d
+          )}">${fmtPercent(row.return_5d)}</span></div>
+          <div class="highlight-item"><span>量能倍率</span><span>${fmtRatio(
+            row.volume_ratio
+          )}</span></div>
+          <div class="highlight-item"><span>Score</span><span>${fmtScore(row.score)}</span></div>
+        </article>
+      `
+    )
+    .join("");
+  container.innerHTML = list;
+};
+
+const renderBacktestSummary = (res) => {
+  if (!elements.backtestSummary) return;
+  const returns = res.stats?.returns || {};
+  const chips = Object.entries(returns)
+    .map(([key, val]) => {
+      const avg = fmtPercent(val.avg_return);
+      const win = fmtPercent(val.win_rate);
+      return `<span class="meta-item">${key} 平均 ${avg} ｜ 勝率 ${win}</span>`;
+    })
+    .join("");
+  elements.backtestSummary.innerHTML = `
+    <div class="result-header">
+      <div>
+        <div class="result-title">回測結果</div>
+        <div class="result-sub">${res.start_date} ~ ${res.end_date}</div>
+      </div>
+      <span class="badge ${res.total_events ? "good" : "warn"}">命中 ${fmtInt(res.total_events)}</span>
+    </div>
+    <div class="meta-row">${chips || '<div class="meta-item">尚無統計</div>'}</div>
+  `;
+};
+
+const renderBacktestEvents = (res) => {
+  if (!elements.backtestEvents) return;
+  const rows = res.events || [];
+  if (!rows.length) {
+    renderEmptyState(elements.backtestEvents, "回測條件未命中任何日期");
+    return;
+  }
+  const cards = rows
+    .slice(0, 12)
+    .map(
+      (row) => `
+      <article class="highlight-card">
+        <h4>${row.trade_date}</h4>
+        <div class="highlight-item"><span>總分</span><span>${fmtScore(row.total_score)}</span></div>
+        <div class="highlight-item"><span>Score</span><span>${fmtScore(row.score)}</span></div>
+        <div class="highlight-item"><span>日漲跌</span><span class="delta ${deltaClass(
+          row.change_percent
+        )}">${fmtPercent(row.change_percent)}</span></div>
+        <div class="highlight-item"><span>量能倍率</span><span>${fmtRatio(row.volume_ratio)}</span></div>
+        <div class="highlight-item"><span>收盤</span><span>${fmtPrice(row.close_price)}</span></div>
+        <div class="highlight-item"><span>+3日</span><span>${fmtPercent(row.forward_returns?.d3)}</span></div>
+        <div class="highlight-item"><span>+5日</span><span>${fmtPercent(row.forward_returns?.d5)}</span></div>
+        <div class="highlight-item"><span>+10日</span><span>${fmtPercent(row.forward_returns?.d10)}</span></div>
+      </article>
+    `
+    )
+    .join("");
+  elements.backtestEvents.innerHTML = cards;
+};
+
+const renderBacktestConditions = () => {
+  if (!elements.btSelectedConditions) return;
+  if (!backtestSelections.conditions.length) {
+    renderEmptyState(elements.btSelectedConditions, "尚未選擇條件");
+    return;
+  }
+  const cards = backtestSelections.conditions
+    .map((cond) => {
+      if (cond === "change") {
+        return `
+          <div class="condition-card" data-cond="change">
+            <div class="condition-card-head">
+              <span>日漲跌條件</span>
+              <button type="button" class="condition-remove" data-remove="change">移除</button>
+            </div>
+            <div class="optional-fields">
+              <label>日漲跌加分 <input type="number" step="1" id="btChangeBonus" value="10"></label>
+              <label>漲幅門檻(%) <input type="number" step="0.1" id="btChangeMin" value="0.5"></label>
+            </div>
+          </div>
+        `;
+      }
+      if (cond === "volume") {
+        return `
+          <div class="condition-card" data-cond="volume">
+            <div class="condition-card-head">
+              <span>量能條件</span>
+              <button type="button" class="condition-remove" data-remove="volume">移除</button>
+            </div>
+            <div class="optional-fields">
+              <label>量能加分 <input type="number" step="1" id="btVolBonus" value="10"></label>
+              <label>量能門檻(倍率) <input type="number" step="0.1" id="btVolMin" value="1.2"></label>
+            </div>
+          </div>
+        `;
+      }
+      return "";
+    })
+    .join("");
+  elements.btSelectedConditions.innerHTML = cards;
+  elements.btSelectedConditions.querySelectorAll("[data-remove]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const cond = btn.dataset.remove;
+      backtestSelections.conditions = backtestSelections.conditions.filter((c) => c !== cond);
+      renderBacktestConditions();
+    });
+  });
+};
+
 const renderActivity = () => {
   if (!state.activity.length) {
     elements.activityList.innerHTML = `<li class="empty-state">尚無操作紀錄</li>`;
@@ -799,6 +962,20 @@ const startOfYear = new Date(Date.UTC(new Date().getUTCFullYear(), 0, 1)).toISOS
 const backfillStart = document.getElementById("backfillStart");
 if (backfillStart) backfillStart.value = startOfYear;
 if (elements.chartStart) elements.chartStart.value = startOfYear;
+const btStart = document.getElementById("btStart");
+const btEnd = document.getElementById("btEnd");
+if (btStart) btStart.value = startOfYear;
+if (btEnd) btEnd.value = today;
+updateOptionalFields();
+elements.btConditionSelect?.addEventListener("change", (e) => {
+  const val = e.target.value;
+  if (val && !backtestSelections.conditions.includes(val)) {
+    backtestSelections.conditions.push(val);
+    e.target.value = "";
+    updateOptionalFields();
+    renderBacktestConditions();
+  }
+});
 
 Array.from(document.querySelectorAll(".chip[data-email]")).forEach((chip) => {
   chip.addEventListener("click", () => {
@@ -908,8 +1085,69 @@ if (elements.chartForm) {
         `/api/analysis/history?symbol=BTCUSDT&start_date=${start_date}&end_date=${end_date}&only_success=true`
       );
       state.lastChart = res;
-      renderHistoryChart(res);
+      renderHistoryChart(res, state.lastBacktest?.events || []);
       logActivity("載入走勢圖", `區間 ${start_date} ~ ${end_date} · 筆數 ${fmtInt(res.total_count)}`);
+    } catch (err) {
+      renderChartPlaceholder(err.message);
+    }
+  });
+}
+
+if (elements.backtestForm) {
+  elements.backtestForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      requireLogin();
+      const start_date = document.getElementById("btStart").value;
+      const end_date = document.getElementById("btEnd").value;
+      if (!start_date || !end_date) {
+        renderChartPlaceholder("請設定回測日期區間");
+        return;
+      }
+      if (backtestSelections.conditions.length === 0) {
+        renderChartPlaceholder("請先選擇至少一個條件");
+        return;
+      }
+      const payload = {
+        symbol: "BTCUSDT",
+        start_date,
+        end_date,
+        weights: {
+          score: Number(document.getElementById("btScoreWeight").value || 1),
+          change_bonus: backtestSelections.conditions.includes("change")
+            ? Number(document.getElementById("btChangeBonus").value || 0)
+            : 0,
+          volume_bonus: backtestSelections.conditions.includes("volume")
+            ? Number(document.getElementById("btVolBonus").value || 0)
+            : 0,
+        },
+        thresholds: {
+          total_min: Number(document.getElementById("btTotalMin").value || 0),
+          change_min: backtestSelections.conditions.includes("change")
+            ? Number(document.getElementById("btChangeMin").value || 0) / 100
+            : 0,
+          volume_ratio_min: backtestSelections.conditions.includes("volume")
+            ? Number(document.getElementById("btVolMin").value || 0)
+            : 0,
+        },
+        flags: {
+          use_change: backtestSelections.conditions.includes("change"),
+          use_volume: backtestSelections.conditions.includes("volume"),
+        },
+        horizons: [3, 5, 10],
+      };
+      renderChartLoading();
+      const res = await api("/api/analysis/backtest", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      state.lastBacktest = res;
+      renderBacktestSummary(res);
+      renderBacktestEvents(res);
+      if (state.lastChart && state.lastChart.items) {
+        renderHistoryChart(state.lastChart, res.events || []);
+      }
+      logActivity("條件回測", `命中 ${fmtInt(res.total_events)} 筆`);
     } catch (err) {
       renderChartPlaceholder(err.message);
     }
@@ -988,6 +1226,15 @@ document.getElementById("summaryBtn").addEventListener("click", async () => {
 
 window.addEventListener("resize", () => {
   if (state.lastChart && state.lastChart.items && state.lastChart.items.length) {
-    renderHistoryChart(state.lastChart);
+    renderHistoryChart(state.lastChart, state.lastBacktest?.events || []);
   }
 });
+
+function updateOptionalFields() {
+  renderBacktestConditions();
+  if (elements.btConditionSelect) {
+    const options = ["change", "volume"];
+    const hasSelectable = options.some((opt) => !backtestSelections.conditions.includes(opt));
+    elements.btConditionSelect.disabled = !hasSelectable;
+  }
+}

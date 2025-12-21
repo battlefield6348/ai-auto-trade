@@ -146,6 +146,37 @@
         <div id="chartCanvas" class="chart-canvas"></div>
         <div id="chartTooltip" class="chart-tooltip"></div>
       </div>
+      <div class="subsection-title">Score ≥ 50 高分時間點</div>
+      <div id="chartHighScores" class="highlight-grid"></div>
+      <div class="subsection-title">條件回測（加權分數）</div>
+      <div class="hint-box">
+        <p>條件說明：</p>
+        <ul>
+          <li>Score 權重：分析分數的基礎權重（建議 1）。</li>
+          <li>日漲跌加分：當日漲幅 ≥「漲幅門檻(%)」時加的分數（建議 5～15，填負值可扣分）。</li>
+          <li>漲幅門檻(%)：日變動率門檻（建議 0.3%～0.8%，例 0.5=日漲幅 ≥0.5% 才加分）。</li>
+          <li>量能加分：當日量能倍率 ≥「量能門檻」時加的分數（建議 5～15）。</li>
+          <li>量能門檻(倍率)：當日量能 ÷ 近 5 日均量的倍率門檻（建議 1.2～1.5）。</li>
+          <li>總分門檻：加權總分需達到此值才算命中（短線積極 60、保守可設 70～75）。</li>
+        </ul>
+      </div>
+      <form id="backtestForm" class="form inline">
+        <label>起始日期 <input type="date" id="btStart" required></label>
+        <label>結束日期 <input type="date" id="btEnd" required></label>
+        <label>Score 權重 <input type="number" step="0.1" id="btScoreWeight" value="1"></label>
+        <label>總分門檻 <input type="number" step="1" id="btTotalMin" value="60"></label>
+        <label>新增條件
+          <select id="btConditionSelect">
+            <option value="">選擇條件…</option>
+            <option value="change">日漲跌條件</option>
+            <option value="volume">量能條件</option>
+          </select>
+        </label>
+        <div id="btSelectedConditions" class="condition-list"></div>
+        <button type="submit" class="primary">執行回測</button>
+      </form>
+      <div id="backtestSummary" class="result-panel"></div>
+      <div id="backtestEvents" class="highlight-grid"></div>
     </section>
 
     <section class="panel" id="summaryPanel">

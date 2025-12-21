@@ -259,6 +259,37 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/analysis/backtest:
+    post:
+      tags: [Analysis]
+      summary: 依加權條件回測指定區間的分析結果
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BacktestRequest'
+      responses:
+        "200":
+          description: 回測成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BacktestResponse'
+        "400":
+          description: 參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: 未登入或 token 失效
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/screener/strong-stocks:
     get:
       tags: [Screener]
@@ -567,6 +598,157 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AnalysisHistoryItem'
+    BacktestRequest:
+      type: object
+      properties:
+        symbol:
+          type: string
+          example: BTCUSDT
+        start_date:
+          type: string
+          format: date
+          example: "2025-01-01"
+        end_date:
+          type: string
+          format: date
+          example: "2025-12-31"
+        weights:
+          type: object
+          properties:
+            score:
+              type: number
+              format: float
+              example: 1
+            change_bonus:
+              type: number
+              format: float
+              example: 10
+            volume_bonus:
+              type: number
+              format: float
+              example: 10
+        thresholds:
+          type: object
+          properties:
+            total_min:
+              type: number
+              format: float
+              example: 60
+            change_min:
+              type: number
+              format: float
+              example: 0.005
+            volume_ratio_min:
+              type: number
+              format: float
+              example: 1.2
+        flags:
+          type: object
+          properties:
+            use_change:
+              type: boolean
+              default: true
+            use_volume:
+              type: boolean
+              default: true
+          description: 選擇要啟用的加分條件（未啟用者視同不計分）
+        horizons:
+          type: array
+          items:
+            type: integer
+          example: [3, 5, 10]
+      required: [start_date, end_date]
+    BacktestEvent:
+      type: object
+      properties:
+        trading_pair:
+          type: string
+          example: BTCUSDT
+        trade_date:
+          type: string
+          format: date
+          example: "2025-03-01"
+        close_price:
+          type: number
+          format: float
+          example: 50200.0
+        change_percent:
+          type: number
+          format: float
+          example: 0.012
+        return_5d:
+          type: number
+          format: float
+          nullable: true
+          example: 0.03
+        volume_ratio:
+          type: number
+          format: float
+          nullable: true
+          example: 1.8
+        score:
+          type: number
+          format: float
+          example: 75
+        total_score:
+          type: number
+          format: float
+          example: 95
+        components:
+          type: object
+          additionalProperties:
+            type: number
+            format: float
+        forward_returns:
+          type: object
+          additionalProperties:
+            type: number
+            format: float
+            nullable: true
+          example:
+            d3: 0.012
+            d5: -0.01
+            d10: 0.035
+    BacktestResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        symbol:
+          type: string
+          example: BTCUSDT
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        total_events:
+          type: integer
+          example: 12
+        config:
+          type: object
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/BacktestEvent'
+        stats:
+          type: object
+          properties:
+            returns:
+              type: object
+              additionalProperties:
+                type: object
+                properties:
+                  avg_return:
+                    type: number
+                    format: float
+                    example: 0.012
+                  win_rate:
+                    type: number
+                    format: float
+                    example: 0.55
     ScreenerItem:
       type: object
       properties:

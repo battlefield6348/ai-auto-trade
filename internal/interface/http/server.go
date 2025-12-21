@@ -94,6 +94,27 @@ type analysisRunSummary struct {
 	failure int
 }
 
+type backtestConfig struct {
+	Symbol  string `json:"symbol"`
+	Start   string `json:"start_date"`
+	End     string `json:"end_date"`
+	Weights struct {
+		Score       float64 `json:"score"`
+		ChangeBonus float64 `json:"change_bonus"`
+		VolumeBonus float64 `json:"volume_bonus"`
+	} `json:"weights"`
+	Thresholds struct {
+		TotalMin       float64 `json:"total_min"`
+		ChangeMin      float64 `json:"change_min"`
+		VolumeRatioMin float64 `json:"volume_ratio_min"`
+	} `json:"thresholds"`
+	Flags struct {
+		UseChange *bool `json:"use_change"`
+		UseVolume *bool `json:"use_volume"`
+	} `json:"flags"`
+	Horizons []int `json:"horizons"`
+}
+
 type backfillFailure struct {
 	TradeDate string `json:"trade_date"`
 	Stage     string `json:"stage"`
@@ -562,6 +583,197 @@ func (s *Server) handleAnalysisSummary(w http.ResponseWriter, r *http.Request) {
 			"return_5d":      best.Return5,
 			"volume_ratio":   best.VolumeMultiple,
 			"score":          best.Score,
+		},
+	})
+}
+
+func (s *Server) handleAnalysisBacktest(w http.ResponseWriter, r *http.Request) {
+	var body backtestConfig
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+		return
+	}
+	symbol := strings.ToUpper(strings.TrimSpace(body.Symbol))
+	if symbol == "" {
+		symbol = "BTCUSDT"
+	}
+	if body.Start == "" || body.End == "" {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "start_date and end_date required")
+		return
+	}
+	startDate, err := time.Parse("2006-01-02", body.Start)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid start_date")
+		return
+	}
+	endDate, err := time.Parse("2006-01-02", body.End)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid end_date")
+		return
+	}
+	if endDate.Before(startDate) {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "end_date must be after start_date")
+		return
+	}
+
+	weights := body.Weights
+	if weights.Score == 0 {
+		weights.Score = 1
+	}
+	if weights.ChangeBonus == 0 {
+		weights.ChangeBonus = 10
+	}
+	if weights.VolumeBonus == 0 {
+		weights.VolumeBonus = 10
+	}
+	thresholds := body.Thresholds
+	if thresholds.TotalMin == 0 {
+		thresholds.TotalMin = 60
+	}
+	if thresholds.ChangeMin == 0 {
+		thresholds.ChangeMin = 0.0
+	}
+	if thresholds.VolumeRatioMin == 0 {
+		thresholds.VolumeRatioMin = 1.0
+	}
+	horizons := body.Horizons
+	if len(horizons) == 0 {
+		horizons = []int{3, 5, 10}
+	}
+	useChange := true
+	useVolume := true
+	if body.Flags.UseChange != nil {
+		useChange = *body.Flags.UseChange
+	}
+	if body.Flags.UseVolume != nil {
+		useVolume = *body.Flags.UseVolume
+	}
+
+	out, err := s.queryUC.QueryHistory(r.Context(), analysis.QueryHistoryInput{
+		Symbol:      symbol,
+		From:        &startDate,
+		To:          &endDate,
+		Limit:       2000,
+		OnlySuccess: true,
+	})
+	if err != nil {
+		log.Printf("analysis backtest failed symbol=%s: %v", symbol, err)
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "internal error")
+		return
+	}
+	if len(out) == 0 {
+		writeError(w, http.StatusNotFound, errCodeAnalysisNotReady, "analysis results not ready")
+		return
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].TradeDate.Before(out[j].TradeDate)
+	})
+
+	type event struct {
+		TradingPair   string              `json:"trading_pair"`
+		TradeDate     string              `json:"trade_date"`
+		ClosePrice    float64             `json:"close_price"`
+		ChangePercent float64             `json:"change_percent"`
+		Return5d      *float64            `json:"return_5d,omitempty"`
+		VolumeRatio   *float64            `json:"volume_ratio,omitempty"`
+		Score         float64             `json:"score"`
+		TotalScore    float64             `json:"total_score"`
+		Components    map[string]float64  `json:"components"`
+		Forward       map[string]*float64 `json:"forward_returns"`
+	}
+
+	events := make([]event, 0)
+	retSums := make(map[int]float64)
+	retWins := make(map[int]int)
+	retCounts := make(map[int]int)
+
+	for idx, row := range out {
+		if row.Close == 0 {
+			continue
+		}
+		total := row.Score * weights.Score
+		components := map[string]float64{
+			"score": total,
+		}
+		if useChange && row.ChangeRate >= thresholds.ChangeMin {
+			total += weights.ChangeBonus
+			components["change_bonus"] = weights.ChangeBonus
+		}
+		if useVolume && row.VolumeMultiple != nil && *row.VolumeMultiple >= thresholds.VolumeRatioMin {
+			total += weights.VolumeBonus
+			components["volume_bonus"] = weights.VolumeBonus
+		}
+		if total < thresholds.TotalMin {
+			continue
+		}
+		fwd := make(map[string]*float64)
+		for _, h := range horizons {
+			targetIdx := idx + h
+			if targetIdx >= len(out) {
+				fwd[fmt.Sprintf("d%d", h)] = nil
+				continue
+			}
+			base := row.Close
+			next := out[targetIdx].Close
+			if base == 0 {
+				fwd[fmt.Sprintf("d%d", h)] = nil
+				continue
+			}
+			ret := (next / base) - 1
+			retVal := ret
+			fwd[fmt.Sprintf("d%d", h)] = &retVal
+			retSums[h] += ret
+			retCounts[h]++
+			if ret > 0 {
+				retWins[h]++
+			}
+		}
+		events = append(events, event{
+			TradingPair:   row.Symbol,
+			TradeDate:     row.TradeDate.Format("2006-01-02"),
+			ClosePrice:    row.Close,
+			ChangePercent: row.ChangeRate,
+			Return5d:      row.Return5,
+			VolumeRatio:   row.VolumeMultiple,
+			Score:         row.Score,
+			TotalScore:    total,
+			Components:    components,
+			Forward:       fwd,
+		})
+	}
+
+	statsRet := make(map[string]map[string]float64)
+	for _, h := range horizons {
+		avg := 0.0
+		winRate := 0.0
+		if retCounts[h] > 0 {
+			avg = retSums[h] / float64(retCounts[h])
+			winRate = float64(retWins[h]) / float64(retCounts[h])
+		}
+		statsRet[fmt.Sprintf("d%d", h)] = map[string]float64{
+			"avg_return": avg,
+			"win_rate":   winRate,
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success":      true,
+		"symbol":       symbol,
+		"start_date":   startDate.Format("2006-01-02"),
+		"end_date":     endDate.Format("2006-01-02"),
+		"total_events": len(events),
+		"config": map[string]interface{}{
+			"weights":    weights,
+			"thresholds": thresholds,
+			"flags": map[string]bool{
+				"use_change": useChange,
+				"use_volume": useVolume,
+			},
+			"horizons": horizons,
+		},
+		"events": events,
+		"stats": map[string]interface{}{
+			"returns": statsRet,
 		},
 	})
 }

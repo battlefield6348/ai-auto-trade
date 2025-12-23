@@ -1179,6 +1179,14 @@ func (s *Server) runPipelineOnce() {
 // --- Helpers ---
 
 func (s *Server) setRefreshCookie(w http.ResponseWriter, token string, expiry time.Time) {
+	// 若透過 https/ngrok 跨站嵌入，需允許 SameSite=None 且 Secure。
+	secure := false
+	sameSite := http.SameSiteLaxMode
+	if w != nil {
+		// 這裡無法直接讀 Origin，只能預設為安全模式；若服務啟用 https，設定 Secure+None 可避免被瀏覽器擋下。
+		secure = true
+		sameSite = http.SameSiteNoneMode
+	}
 	if token == "" {
 		http.SetCookie(w, &http.Cookie{
 			Name:     refreshCookieName,
@@ -1186,7 +1194,8 @@ func (s *Server) setRefreshCookie(w http.ResponseWriter, token string, expiry ti
 			Path:     "/",
 			MaxAge:   -1,
 			HttpOnly: true,
-			SameSite: http.SameSiteLaxMode,
+			SameSite: sameSite,
+			Secure:   secure,
 		})
 		return
 	}
@@ -1201,7 +1210,8 @@ func (s *Server) setRefreshCookie(w http.ResponseWriter, token string, expiry ti
 		Expires:  expiry,
 		MaxAge:   seconds,
 		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: sameSite,
+		Secure:   secure,
 	})
 }
 

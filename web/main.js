@@ -8,6 +8,7 @@ const state = {
   lastScreener: null,
   lastBackfill: null,
   lastChart: null,
+  lastBacktestCriteria: null,
   activity: [],
   updatedAt: null,
 };
@@ -110,6 +111,28 @@ const chartState = {
 
 const backtestSelections = {
   conditions: ["change", "volume", "return", "ma"],
+  must: {
+    change: false,
+    volume: false,
+    return: false,
+    ma: false,
+  },
+};
+
+const readMustFlags = () => {
+  const next = { ...backtestSelections.must };
+  const idMap = {
+    change: "btChangeMust",
+    volume: "btVolMust",
+    return: "btReturnMust",
+    ma: "btMaMust",
+  };
+  Object.entries(idMap).forEach(([key, id]) => {
+    const el = document.getElementById(id);
+    next[key] = !!el?.checked;
+  });
+  backtestSelections.must = next;
+  return next;
 };
 
 const refreshConditionOptions = () => {
@@ -945,10 +968,36 @@ const renderBacktestEvents = (res) => {
   elements.backtestEvents.innerHTML = cards;
 };
 
+const applyBacktestMustFilter = (res) => {
+  if (!res || !res.events || !res.events.length) return res;
+  const cfg = state.lastBacktestCriteria;
+  if (!cfg || !cfg.must) return res;
+  const { must, thresholds = {} } = cfg;
+  const activeMust = Object.entries(must).filter(([, v]) => v);
+  if (!activeMust.length) return res;
+  const hit = (row, cond) => {
+    switch (cond) {
+      case "change":
+        return row.change_percent >= (thresholds.change_min || 0);
+      case "volume":
+        return row.volume_ratio >= (thresholds.volume_ratio_min || 0);
+      case "return":
+        return (row.return_5d || 0) >= (thresholds.return5_min || 0);
+      case "ma":
+        return (row.ma_gap || 0) >= (thresholds.ma_gap_min || 0);
+      default:
+        return true;
+    }
+  };
+  const filteredEvents = res.events.filter((row) => activeMust.every(([cond]) => hit(row, cond)));
+  return { ...res, events: filteredEvents, total_events: filteredEvents.length };
+};
+
 const buildBacktestPayload = () => {
+  const mustFlags = readMustFlags();
   const start_date = document.getElementById("btStart").value;
   const end_date = document.getElementById("btEnd").value;
-  return {
+  const config = {
     symbol: "BTCUSDT",
     start_date,
     end_date,
@@ -989,6 +1038,17 @@ const buildBacktestPayload = () => {
       use_ma: backtestSelections.conditions.includes("ma"),
     },
     horizons: [3, 5, 10],
+    must: mustFlags,
+  };
+  state.lastBacktestCriteria = config;
+  return {
+    symbol: config.symbol,
+    start_date: config.start_date,
+    end_date: config.end_date,
+    weights: config.weights,
+    thresholds: config.thresholds,
+    flags: config.flags,
+    horizons: config.horizons,
   };
 };
 
@@ -1010,6 +1070,9 @@ const renderBacktestConditions = () => {
             <div class="optional-fields">
               <label>日漲跌加分 <input type="number" step="1" id="btChangeBonus" value="10"></label>
               <label>漲幅門檻(%) <input type="number" step="0.1" id="btChangeMin" value="0.5"></label>
+              <label class="inline-check"><input type="checkbox" id="btChangeMust" ${
+                backtestSelections.must.change ? "checked" : ""
+              }> 必須命中</label>
             </div>
           </div>
         `;
@@ -1024,6 +1087,9 @@ const renderBacktestConditions = () => {
             <div class="optional-fields">
               <label>量能加分 <input type="number" step="1" id="btVolBonus" value="10"></label>
               <label>量能門檻(倍率) <input type="number" step="0.1" id="btVolMin" value="1.2"></label>
+              <label class="inline-check"><input type="checkbox" id="btVolMust" ${
+                backtestSelections.must.volume ? "checked" : ""
+              }> 必須命中</label>
             </div>
           </div>
         `;
@@ -1038,6 +1104,9 @@ const renderBacktestConditions = () => {
             <div class="optional-fields">
               <label>報酬加分 <input type="number" step="1" id="btReturnBonus" value="8"></label>
               <label>報酬門檻(%) <input type="number" step="0.1" id="btReturnMin" value="1.0"></label>
+              <label class="inline-check"><input type="checkbox" id="btReturnMust" ${
+                backtestSelections.must.return ? "checked" : ""
+              }> 必須命中</label>
             </div>
           </div>
         `;
@@ -1052,6 +1121,9 @@ const renderBacktestConditions = () => {
             <div class="optional-fields">
               <label>均線加分 <input type="number" step="1" id="btMaBonus" value="5"></label>
               <label>乖離門檻(%) <input type="number" step="0.1" id="btMaGap" value="1.0"></label>
+              <label class="inline-check"><input type="checkbox" id="btMaMust" ${
+                backtestSelections.must.ma ? "checked" : ""
+              }> 必須命中</label>
             </div>
           </div>
         `;
@@ -1064,6 +1136,7 @@ const renderBacktestConditions = () => {
     btn.addEventListener("click", () => {
       const cond = btn.dataset.remove;
       backtestSelections.conditions = backtestSelections.conditions.filter((c) => c !== cond);
+      delete backtestSelections.must[cond];
       renderBacktestConditions();
       refreshConditionOptions();
     });
@@ -1214,6 +1287,12 @@ const applyBacktestPreset = (preset) => {
   if (c.flags?.use_ma) nextConds.push("ma");
   if (!nextConds.length) nextConds.push("change", "volume");
   backtestSelections.conditions = nextConds;
+  backtestSelections.must = {
+    change: false,
+    volume: false,
+    return: false,
+    ma: false,
+  };
   updateOptionalFields();
 };
 
@@ -1314,13 +1393,14 @@ if (elements.backtestForm) {
         method: "POST",
         body: JSON.stringify(payload),
       });
-      state.lastBacktest = res;
-      renderBacktestSummary(res);
-      renderBacktestEvents(res);
+      const filtered = applyBacktestMustFilter(res);
+      state.lastBacktest = filtered;
+      renderBacktestSummary(filtered);
+      renderBacktestEvents(filtered);
       if (state.lastChart && state.lastChart.items) {
-        renderHistoryChart(state.lastChart, res.events || []);
+        renderHistoryChart(state.lastChart, filtered.events || []);
       }
-      logActivity("條件回測", `命中 ${fmtInt(res.total_events)} 筆`);
+      logActivity("條件回測", `命中 ${fmtInt(filtered.total_events)} 筆`);
     } catch (err) {
       renderChartPlaceholder(err.message);
     }

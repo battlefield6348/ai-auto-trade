@@ -253,6 +253,47 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/analysis/backtest/preset:
+    get:
+      tags: [Analysis]
+      summary: 取得當前使用者的回測條件預設
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 回傳預設（若不存在 success=false）
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  preset:
+                    $ref: '#/components/schemas/BacktestRequest'
+                  message:
+                    type: string
+    post:
+      tags: [Analysis]
+      summary: 儲存回測條件預設
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BacktestRequest'
+      responses:
+        "200":
+          description: 儲存成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
   /api/screener/strong-stocks:
     get:
       tags: [Screener]
@@ -559,6 +600,14 @@ components:
               type: number
               format: float
               example: 10
+            return_bonus:
+              type: number
+              format: float
+              example: 8
+            ma_bonus:
+              type: number
+              format: float
+              example: 5
         thresholds:
           type: object
           properties:
@@ -574,6 +623,16 @@ components:
               type: number
               format: float
               example: 1.2
+            return5_min:
+              type: number
+              format: float
+              example: 0.01
+              description: 近 5 日報酬率門檻
+            ma_gap_min:
+              type: number
+              format: float
+              example: 0.01
+              description: 收盤相對 MA20 的乖離率門檻
         flags:
           type: object
           properties:
@@ -583,6 +642,12 @@ components:
             use_volume:
               type: boolean
               default: true
+            use_return:
+              type: boolean
+              default: false
+            use_ma:
+              type: boolean
+              default: false
           description: 選擇要啟用的加分條件（未啟用者視同不計分）
         horizons:
           type: array
@@ -613,6 +678,11 @@ components:
           format: float
           nullable: true
           example: 0.03
+        ma_gap:
+          type: number
+          format: float
+          nullable: true
+          description: 收盤相對 MA20 的乖離率（例 0.01=+1%）
         volume_ratio:
           type: number
           format: float

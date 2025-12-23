@@ -51,6 +51,25 @@ type memoryRepoAdapter struct {
 	store *memory.Store
 }
 
+type memoryPresetStore struct {
+	store *memory.Store
+}
+
+func (m memoryPresetStore) Save(ctx context.Context, userID string, config []byte) error {
+	return m.store.Save(ctx, config, userID)
+}
+
+func (m memoryPresetStore) Load(ctx context.Context, userID string) ([]byte, error) {
+	cfg, err := m.store.Load(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return cfg, nil
+}
+
+func (m memoryPresetStore) NotFound(err error) bool {
+	return err != nil
+}
 func (m memoryRepoAdapter) UpsertTradingPair(ctx context.Context, pair, name string, market dataDomain.Market, industry string) (string, error) {
 	return m.store.UpsertTradingPair(pair, name, market, industry), nil
 }
@@ -103,15 +122,21 @@ type backtestConfig struct {
 		Score       float64 `json:"score"`
 		ChangeBonus float64 `json:"change_bonus"`
 		VolumeBonus float64 `json:"volume_bonus"`
+		ReturnBonus float64 `json:"return_bonus"`
+		MABonus     float64 `json:"ma_bonus"`
 	} `json:"weights"`
 	Thresholds struct {
 		TotalMin       float64 `json:"total_min"`
 		ChangeMin      float64 `json:"change_min"`
 		VolumeRatioMin float64 `json:"volume_ratio_min"`
+		Return5Min     float64 `json:"return5_min"`
+		MAGapMin       float64 `json:"ma_gap_min"`
 	} `json:"thresholds"`
 	Flags struct {
 		UseChange *bool `json:"use_change"`
 		UseVolume *bool `json:"use_volume"`
+		UseReturn *bool `json:"use_return"`
+		UseMA     *bool `json:"use_ma"`
 	} `json:"flags"`
 	Horizons []int `json:"horizons"`
 }
@@ -120,6 +145,12 @@ type backfillFailure struct {
 	TradeDate string `json:"trade_date"`
 	Stage     string `json:"stage"`
 	Reason    string `json:"reason"`
+}
+
+type backtestPresetStore interface {
+	Save(ctx context.Context, userID string, config []byte) error
+	Load(ctx context.Context, userID string) ([]byte, error)
+	NotFound(err error) bool
 }
 
 // --- Handlers ---
@@ -599,6 +630,12 @@ func (s *Server) handleAnalysisBacktest(w http.ResponseWriter, r *http.Request) 
 	if weights.VolumeBonus == 0 {
 		weights.VolumeBonus = 10
 	}
+	if weights.ReturnBonus == 0 {
+		weights.ReturnBonus = 8
+	}
+	if weights.MABonus == 0 {
+		weights.MABonus = 5
+	}
 	thresholds := body.Thresholds
 	if thresholds.TotalMin == 0 {
 		thresholds.TotalMin = 60
@@ -609,17 +646,31 @@ func (s *Server) handleAnalysisBacktest(w http.ResponseWriter, r *http.Request) 
 	if thresholds.VolumeRatioMin == 0 {
 		thresholds.VolumeRatioMin = 1.0
 	}
+	if thresholds.Return5Min == 0 {
+		thresholds.Return5Min = 0.0
+	}
+	if thresholds.MAGapMin == 0 {
+		thresholds.MAGapMin = 0.0
+	}
 	horizons := body.Horizons
 	if len(horizons) == 0 {
 		horizons = []int{3, 5, 10}
 	}
 	useChange := true
 	useVolume := true
+	useReturn := false
+	useMA := false
 	if body.Flags.UseChange != nil {
 		useChange = *body.Flags.UseChange
 	}
 	if body.Flags.UseVolume != nil {
 		useVolume = *body.Flags.UseVolume
+	}
+	if body.Flags.UseReturn != nil {
+		useReturn = *body.Flags.UseReturn
+	}
+	if body.Flags.UseMA != nil {
+		useMA = *body.Flags.UseMA
 	}
 
 	out, err := s.queryUC.QueryHistory(r.Context(), analysis.QueryHistoryInput{
@@ -653,6 +704,7 @@ func (s *Server) handleAnalysisBacktest(w http.ResponseWriter, r *http.Request) 
 		TotalScore    float64             `json:"total_score"`
 		Components    map[string]float64  `json:"components"`
 		Forward       map[string]*float64 `json:"forward_returns"`
+		MAGap         *float64            `json:"ma_gap,omitempty"`
 	}
 
 	events := make([]event, 0)
@@ -675,6 +727,17 @@ func (s *Server) handleAnalysisBacktest(w http.ResponseWriter, r *http.Request) 
 		if useVolume && row.VolumeMultiple != nil && *row.VolumeMultiple >= thresholds.VolumeRatioMin {
 			total += weights.VolumeBonus
 			components["volume_bonus"] = weights.VolumeBonus
+		}
+		if useReturn && row.Return5 != nil && *row.Return5 >= thresholds.Return5Min {
+			total += weights.ReturnBonus
+			components["return_bonus"] = weights.ReturnBonus
+		}
+		if useMA && row.MA20 != nil && row.Close > 0 {
+			gap := (row.Close / *row.MA20) - 1
+			if gap >= thresholds.MAGapMin {
+				total += weights.MABonus
+				components["ma_bonus"] = weights.MABonus
+			}
 		}
 		if total < thresholds.TotalMin {
 			continue
@@ -712,6 +775,13 @@ func (s *Server) handleAnalysisBacktest(w http.ResponseWriter, r *http.Request) 
 			TotalScore:    total,
 			Components:    components,
 			Forward:       fwd,
+			MAGap: func() *float64 {
+				if row.MA20 == nil || row.Close == 0 {
+					return nil
+				}
+				g := (row.Close / *row.MA20) - 1
+				return &g
+			}(),
 		})
 	}
 
@@ -741,6 +811,8 @@ func (s *Server) handleAnalysisBacktest(w http.ResponseWriter, r *http.Request) 
 			"flags": map[string]bool{
 				"use_change": useChange,
 				"use_volume": useVolume,
+				"use_return": useReturn,
+				"use_ma":     useMA,
 			},
 			"horizons": horizons,
 		},
@@ -748,6 +820,60 @@ func (s *Server) handleAnalysisBacktest(w http.ResponseWriter, r *http.Request) 
 		"stats": map[string]interface{}{
 			"returns": statsRet,
 		},
+	})
+}
+
+func (s *Server) handleSaveBacktestPreset(w http.ResponseWriter, r *http.Request) {
+	userID := currentUserID(r)
+	if userID == "" || s.presetStore == nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "preset store not available")
+		return
+	}
+	var body backtestConfig
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+		return
+	}
+	raw, err := json.Marshal(body)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "marshal preset failed")
+		return
+	}
+	if err := s.presetStore.Save(r.Context(), userID, raw); err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "save preset failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+	})
+}
+
+func (s *Server) handleGetBacktestPreset(w http.ResponseWriter, r *http.Request) {
+	userID := currentUserID(r)
+	if userID == "" || s.presetStore == nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "preset store not available")
+		return
+	}
+	cfgRaw, err := s.presetStore.Load(r.Context(), userID)
+	if err != nil {
+		if s.presetStore.NotFound(err) {
+			writeJSON(w, http.StatusOK, map[string]interface{}{
+				"success": false,
+				"message": "preset not found",
+			})
+			return
+		}
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "load preset failed")
+		return
+	}
+	var cfg backtestConfig
+	if err := json.Unmarshal(cfgRaw, &cfg); err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "decode preset failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"preset":  cfg,
 	})
 }
 
@@ -1159,6 +1285,15 @@ func parseBearer(h string) string {
 		return ""
 	}
 	return parts[1]
+}
+
+func currentUserID(r *http.Request) string {
+	if v := r.Context().Value(ctxKeyUserID{}); v != nil {
+		if id, ok := v.(string); ok {
+			return id
+		}
+	}
+	return ""
 }
 
 func parseIntDefault(s string, def int) int {

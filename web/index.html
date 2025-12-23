@@ -113,6 +113,8 @@
           <li>漲幅門檻(%)：日變動率門檻（建議 0.3%～0.8%，例 0.5=日漲幅 ≥0.5% 才加分）。</li>
           <li>量能加分：當日量能倍率 ≥「量能門檻」時加的分數（建議 5～15）。</li>
           <li>量能門檻(倍率)：當日量能 ÷ 近 5 日均量的倍率門檻（建議 1.2～1.5）。</li>
+          <li>近 5 日報酬加分：當近 5 日報酬率 ≥「報酬門檻(%)」時加分（慣用 1% 左右）。</li>
+          <li>均線乖離加分：收盤價相對 MA20 乖離率 ≥「乖離門檻(%)」時加分（例 1% 表示站上 MA20 且超過 1%）。</li>
           <li>總分門檻：加權總分需達到此值才算命中（短線積極 60、保守可設 70～75）。</li>
         </ul>
       </div>
@@ -129,7 +131,11 @@
           </select>
         </label>
         <div id="btSelectedConditions" class="condition-list"></div>
-        <button type="submit" class="primary">執行回測</button>
+        <div class="actions">
+          <button type="button" class="ghost" id="loadPresetBtn">載入已存設定</button>
+          <button type="button" class="ghost" id="savePresetBtn">儲存目前設定</button>
+          <button type="submit" class="primary">執行回測</button>
+        </div>
       </form>
       <div id="backtestSummary" class="result-panel"></div>
       <div id="backtestEvents" class="highlight-grid"></div>

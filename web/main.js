@@ -105,7 +105,23 @@ const chartState = {
 };
 
 const backtestSelections = {
-  conditions: [],
+  conditions: ["change", "volume", "return", "ma"],
+};
+
+const refreshConditionOptions = () => {
+  if (!elements.btConditionSelect) return;
+  const options = [
+    { value: "change", label: "日漲跌條件" },
+    { value: "volume", label: "量能條件" },
+    { value: "return", label: "近 5 日報酬條件" },
+    { value: "ma", label: "均線乖離條件" },
+  ];
+  const available = options.filter((opt) => !backtestSelections.conditions.includes(opt.value));
+  const placeholder = available.length ? "選擇條件…" : "已套用所有條件";
+  elements.btConditionSelect.innerHTML = `<option value="">${placeholder}</option>${available
+    .map((opt) => `<option value="${opt.value}">${opt.label}</option>`)
+    .join("")}`;
+  elements.btConditionSelect.disabled = available.length === 0;
 };
 
 const mapTrend = (trend) => {
@@ -761,6 +777,12 @@ const renderBacktestEvents = (res) => {
           row.change_percent
         )}">${fmtPercent(row.change_percent)}</span></div>
         <div class="highlight-item"><span>量能倍率</span><span>${fmtRatio(row.volume_ratio)}</span></div>
+        <div class="highlight-item"><span>近 5 日</span><span class="delta ${deltaClass(
+          row.return_5d
+        )}">${fmtPercent(row.return_5d)}</span></div>
+        <div class="highlight-item"><span>MA20 乖離</span><span class="delta ${deltaClass(
+          row.ma_gap
+        )}">${fmtPercent(row.ma_gap)}</span></div>
         <div class="highlight-item"><span>收盤</span><span>${fmtPrice(row.close_price)}</span></div>
         <div class="highlight-item"><span>+3日</span><span>${fmtPercent(row.forward_returns?.d3)}</span></div>
         <div class="highlight-item"><span>+5日</span><span>${fmtPercent(row.forward_returns?.d5)}</span></div>
@@ -770,6 +792,53 @@ const renderBacktestEvents = (res) => {
     )
     .join("");
   elements.backtestEvents.innerHTML = cards;
+};
+
+const buildBacktestPayload = () => {
+  const start_date = document.getElementById("btStart").value;
+  const end_date = document.getElementById("btEnd").value;
+  return {
+    symbol: "BTCUSDT",
+    start_date,
+    end_date,
+    weights: {
+      score: Number(document.getElementById("btScoreWeight").value || 1),
+      change_bonus: backtestSelections.conditions.includes("change")
+        ? Number(document.getElementById("btChangeBonus").value || 0)
+        : 0,
+      volume_bonus: backtestSelections.conditions.includes("volume")
+        ? Number(document.getElementById("btVolBonus").value || 0)
+        : 0,
+      return_bonus: backtestSelections.conditions.includes("return")
+        ? Number(document.getElementById("btReturnBonus").value || 0)
+        : 0,
+      ma_bonus: backtestSelections.conditions.includes("ma")
+        ? Number(document.getElementById("btMaBonus").value || 0)
+        : 0,
+    },
+    thresholds: {
+      total_min: Number(document.getElementById("btTotalMin").value || 0),
+      change_min: backtestSelections.conditions.includes("change")
+        ? Number(document.getElementById("btChangeMin").value || 0) / 100
+        : 0,
+      volume_ratio_min: backtestSelections.conditions.includes("volume")
+        ? Number(document.getElementById("btVolMin").value || 0)
+        : 0,
+      return5_min: backtestSelections.conditions.includes("return")
+        ? Number(document.getElementById("btReturnMin").value || 0) / 100
+        : 0,
+      ma_gap_min: backtestSelections.conditions.includes("ma")
+        ? Number(document.getElementById("btMaGap").value || 0) / 100
+        : 0,
+    },
+    flags: {
+      use_change: backtestSelections.conditions.includes("change"),
+      use_volume: backtestSelections.conditions.includes("volume"),
+      use_return: backtestSelections.conditions.includes("return"),
+      use_ma: backtestSelections.conditions.includes("ma"),
+    },
+    horizons: [3, 5, 10],
+  };
 };
 
 const renderBacktestConditions = () => {
@@ -808,6 +877,34 @@ const renderBacktestConditions = () => {
           </div>
         `;
       }
+      if (cond === "return") {
+        return `
+          <div class="condition-card" data-cond="return">
+            <div class="condition-card-head">
+              <span>近 5 日報酬條件</span>
+              <button type="button" class="condition-remove" data-remove="return">移除</button>
+            </div>
+            <div class="optional-fields">
+              <label>報酬加分 <input type="number" step="1" id="btReturnBonus" value="8"></label>
+              <label>報酬門檻(%) <input type="number" step="0.1" id="btReturnMin" value="1.0"></label>
+            </div>
+          </div>
+        `;
+      }
+      if (cond === "ma") {
+        return `
+          <div class="condition-card" data-cond="ma">
+            <div class="condition-card-head">
+              <span>均線乖離條件</span>
+              <button type="button" class="condition-remove" data-remove="ma">移除</button>
+            </div>
+            <div class="optional-fields">
+              <label>均線加分 <input type="number" step="1" id="btMaBonus" value="5"></label>
+              <label>乖離門檻(%) <input type="number" step="0.1" id="btMaGap" value="1.0"></label>
+            </div>
+          </div>
+        `;
+      }
       return "";
     })
     .join("");
@@ -817,6 +914,7 @@ const renderBacktestConditions = () => {
       const cond = btn.dataset.remove;
       backtestSelections.conditions = backtestSelections.conditions.filter((c) => c !== cond);
       renderBacktestConditions();
+      refreshConditionOptions();
     });
   });
 };
@@ -894,6 +992,8 @@ renderEmptyState(elements.screenerHighlights, "尚無亮點資料");
 renderActivity();
 renderKpis();
 updateOverviewMode();
+renderBacktestConditions();
+refreshConditionOptions();
 refreshAccessToken().then((ok) => {
   if (ok) {
     setMessage(elements.loginMessage, "已自動登入，Token 已更新", "good");
@@ -909,21 +1009,24 @@ const startOfYear = new Date(Date.UTC(new Date().getUTCFullYear(), 0, 1)).toISOS
   const el = document.getElementById(id);
   if (el) el.value = today;
 });
-if (elements.chartStart) elements.chartStart.value = startOfYear;
-const btStart = document.getElementById("btStart");
-const btEnd = document.getElementById("btEnd");
-if (btStart) btStart.value = startOfYear;
-if (btEnd) btEnd.value = today;
-updateOptionalFields();
-elements.btConditionSelect?.addEventListener("change", (e) => {
-  const val = e.target.value;
-  if (val && !backtestSelections.conditions.includes(val)) {
-    backtestSelections.conditions.push(val);
-    e.target.value = "";
-    updateOptionalFields();
-    renderBacktestConditions();
-  }
-});
+  if (elements.chartStart) elements.chartStart.value = startOfYear;
+  const btStart = document.getElementById("btStart");
+  const btEnd = document.getElementById("btEnd");
+  if (btStart) btStart.value = startOfYear;
+  if (btEnd) btEnd.value = today;
+  updateOptionalFields();
+  loadPreset();
+  elements.btConditionSelect?.addEventListener("change", (e) => {
+    const val = e.target.value;
+    if (val && !backtestSelections.conditions.includes(val)) {
+      backtestSelections.conditions.push(val);
+      e.target.value = "";
+      updateOptionalFields();
+      renderBacktestConditions();
+    }
+  });
+  document.getElementById("savePresetBtn")?.addEventListener("click", savePreset);
+  document.getElementById("loadPresetBtn")?.addEventListener("click", loadPreset);
 
 Array.from(document.querySelectorAll(".chip[data-email]")).forEach((chip) => {
   chip.addEventListener("click", () => {
@@ -932,6 +1035,63 @@ Array.from(document.querySelectorAll(".chip[data-email]")).forEach((chip) => {
     document.getElementById("password").value = "password123";
   });
 });
+
+const applyBacktestPreset = (preset) => {
+  if (!preset) return;
+  const c = preset;
+  document.getElementById("btStart").value = c.start_date || document.getElementById("btStart").value;
+  document.getElementById("btEnd").value = c.end_date || document.getElementById("btEnd").value;
+  document.getElementById("btScoreWeight").value = c.weights?.score ?? 1;
+  document.getElementById("btTotalMin").value = c.thresholds?.total_min ?? 60;
+  if (c.thresholds) {
+    document.getElementById("btChangeMin").value = (c.thresholds.change_min || 0) * 100;
+    document.getElementById("btVolMin").value = c.thresholds.volume_ratio_min || 0;
+    document.getElementById("btReturnMin").value = (c.thresholds.return5_min || 0) * 100;
+    document.getElementById("btMaGap").value = (c.thresholds.ma_gap_min || 0) * 100;
+  }
+  if (c.weights) {
+    document.getElementById("btChangeBonus").value = c.weights.change_bonus || 0;
+    document.getElementById("btVolBonus").value = c.weights.volume_bonus || 0;
+    document.getElementById("btReturnBonus").value = c.weights.return_bonus || 0;
+    document.getElementById("btMaBonus").value = c.weights.ma_bonus || 0;
+  }
+  const nextConds = [];
+  if (c.flags?.use_change) nextConds.push("change");
+  if (c.flags?.use_volume) nextConds.push("volume");
+  if (c.flags?.use_return) nextConds.push("return");
+  if (c.flags?.use_ma) nextConds.push("ma");
+  if (!nextConds.length) nextConds.push("change", "volume");
+  backtestSelections.conditions = nextConds;
+  updateOptionalFields();
+};
+
+const loadPreset = async () => {
+  try {
+    requireLogin();
+    const res = await api("/api/analysis/backtest/preset");
+    if (res.success && res.preset) {
+      applyBacktestPreset(res.preset);
+      setStatus("已載入回測預設", "good");
+    }
+  } catch (err) {
+    console.warn("load preset failed", err);
+  }
+};
+
+const savePreset = async () => {
+  try {
+    requireLogin();
+    const payload = buildBacktestPayload();
+    await api("/api/analysis/backtest/preset/save", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    setStatus("已儲存回測預設", "good");
+    logActivity("儲存回測設定", `${backtestSelections.conditions.join(",")} 條件`);
+  } catch (err) {
+    setMessage(elements.loginMessage, `儲存失敗：${err.message}`, "error");
+  }
+};
 
 document.getElementById("loginForm").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -991,34 +1151,7 @@ if (elements.backtestForm) {
         renderChartPlaceholder("請先選擇至少一個條件");
         return;
       }
-      const payload = {
-        symbol: "BTCUSDT",
-        start_date,
-        end_date,
-        weights: {
-          score: Number(document.getElementById("btScoreWeight").value || 1),
-          change_bonus: backtestSelections.conditions.includes("change")
-            ? Number(document.getElementById("btChangeBonus").value || 0)
-            : 0,
-          volume_bonus: backtestSelections.conditions.includes("volume")
-            ? Number(document.getElementById("btVolBonus").value || 0)
-            : 0,
-        },
-        thresholds: {
-          total_min: Number(document.getElementById("btTotalMin").value || 0),
-          change_min: backtestSelections.conditions.includes("change")
-            ? Number(document.getElementById("btChangeMin").value || 0) / 100
-            : 0,
-          volume_ratio_min: backtestSelections.conditions.includes("volume")
-            ? Number(document.getElementById("btVolMin").value || 0)
-            : 0,
-        },
-        flags: {
-          use_change: backtestSelections.conditions.includes("change"),
-          use_volume: backtestSelections.conditions.includes("volume"),
-        },
-        horizons: [3, 5, 10],
-      };
+      const payload = buildBacktestPayload();
       renderChartLoading();
       const res = await api("/api/analysis/backtest", {
         method: "POST",
@@ -1115,9 +1248,5 @@ window.addEventListener("resize", () => {
 
 function updateOptionalFields() {
   renderBacktestConditions();
-  if (elements.btConditionSelect) {
-    const options = ["change", "volume"];
-    const hasSelectable = options.some((opt) => !backtestSelections.conditions.includes(opt));
-    elements.btConditionSelect.disabled = !hasSelectable;
-  }
+  refreshConditionOptions();
 }

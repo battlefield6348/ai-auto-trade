@@ -25,6 +25,7 @@ type Store struct {
 	pairByCode      map[string]string                                        // pair+market -> id
 	dailyPrices     map[string]map[string]dataDomain.DailyPrice              // date -> stockID -> price
 	analysisResults map[string]map[string]analysisDomain.DailyAnalysisResult // date -> stockID -> result
+	backtestPreset  map[string][]byte
 	idSeq           int64
 }
 
@@ -62,6 +63,7 @@ func NewStore() *Store {
 		pairByCode:      make(map[string]string),
 		dailyPrices:     make(map[string]map[string]dataDomain.DailyPrice),
 		analysisResults: make(map[string]map[string]analysisDomain.DailyAnalysisResult),
+		backtestPreset:  make(map[string][]byte),
 	}
 }
 
@@ -192,6 +194,24 @@ type OwnerChecker struct{}
 
 func (OwnerChecker) IsOwner(ctx context.Context, userID, resourceID string) bool {
 	return userID == resourceID
+}
+
+// BacktestPresetStore impl
+func (s *Store) Save(ctx context.Context, preset []byte, userID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.backtestPreset[userID] = preset
+	return nil
+}
+
+func (s *Store) Load(ctx context.Context, userID string) ([]byte, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	p, ok := s.backtestPreset[userID]
+	if !ok {
+		return nil, fmt.Errorf("not found")
+	}
+	return p, nil
 }
 
 // SessionStore impl

@@ -39,6 +39,7 @@ type Server struct {
 	tgConfig      config.TelegramConfig
 	autoInterval  time.Duration
 	backfillStart string
+	presetStore   backtestPresetStore
 }
 
 // NewServer 建立 API 伺服器，預設使用記憶體資料存儲；若 db 未來可用，再注入對應 repository。
@@ -49,15 +50,18 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 	var dataRepo DataRepository
 	var authRepo auth.UserRepository
 	var sessionStore authDomain.SessionStore
+	var presetStore backtestPresetStore
 	if db != nil {
 		dataRepo = postgres.NewRepo(db)
 		repo := postgres.NewAuthRepo(db)
 		authRepo = repo
 		sessionStore = repo
+		presetStore = postgres.NewBacktestPresetStore(db)
 	} else {
 		dataRepo = memoryRepoAdapter{store: store}
 		authRepo = store
 		sessionStore = store
+		presetStore = memoryPresetStore{store: store}
 	}
 
 	ttl := cfg.Auth.TokenTTL
@@ -98,6 +102,7 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 		tgConfig:      cfg.Notifier.Telegram,
 		autoInterval:  cfg.Ingestion.AutoInterval,
 		backfillStart: cfg.Ingestion.BackfillStartDate,
+		presetStore:   presetStore,
 	}
 	if db != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), seedTimeout)
@@ -139,6 +144,8 @@ func (s *Server) registerRoutes() {
 	s.mux.Handle("/api/analysis/daily", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleAnalysisQuery)))
 	s.mux.Handle("/api/analysis/history", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleAnalysisHistory)))
 	s.mux.Handle("/api/analysis/backtest", s.requireAuth(auth.PermAnalysisQuery, s.wrapPost(s.handleAnalysisBacktest)))
+	s.mux.Handle("/api/analysis/backtest/preset", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleGetBacktestPreset)))
+	s.mux.Handle("/api/analysis/backtest/preset/save", s.requireAuth(auth.PermAnalysisQuery, s.wrapPost(s.handleSaveBacktestPreset)))
 	s.mux.Handle("/api/analysis/summary", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleAnalysisSummary)))
 	s.mux.Handle("/api/screener/strong-stocks", s.requireAuth(auth.PermScreenerUse, s.wrapGet(s.handleStrongStocks)))
 	// 前端操作介面

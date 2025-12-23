@@ -18,6 +18,7 @@ const elements = {
   overviewTime: document.getElementById("overviewTime"),
   overviewMode: document.getElementById("overviewMode"),
   loginMessage: document.getElementById("loginMessage"),
+  resetZoomBtn: document.getElementById("resetZoomBtn"),
   chartForm: document.getElementById("chartForm"),
   chartStart: document.getElementById("chartStart"),
   chartEnd: document.getElementById("chartEnd"),
@@ -95,6 +96,9 @@ const deltaClass = (v) => (v > 0 ? "up" : v < 0 ? "down" : "flat");
 const chartState = {
   rows: [],
   points: [],
+  fullRows: [],
+  fullRes: null,
+  window: { start: 0, end: 0 },
   events: [],
   padding: null,
   plotWidth: 0,
@@ -136,6 +140,10 @@ const setStatus = (msg, tone) => {
   if (tone) elements.status.classList.add(tone);
 };
 
+const toggleResetZoom = (show) => {
+  if (elements.resetZoomBtn) elements.resetZoomBtn.classList.toggle("hidden", !show);
+};
+
 const refreshAccessToken = async () => {
   try {
     const res = await fetch("/api/auth/refresh", { method: "POST", credentials: "include" });
@@ -145,9 +153,11 @@ const refreshAccessToken = async () => {
     }
     state.token = data.access_token;
     setStatus("已登入（自動續期）", "good");
+    toggleProtectedSections(true);
     return true;
   } catch (_) {
     state.token = "";
+    toggleProtectedSections(false);
     return false;
   }
 };
@@ -169,6 +179,13 @@ const touchUpdatedAt = () => {
   if (elements.overviewTime) {
     elements.overviewTime.textContent = `最後更新：${timeFormat.format(state.updatedAt)}`;
   }
+};
+
+const toggleProtectedSections = (isAuth) => {
+  const loginPage = document.getElementById("loginPage");
+  const appShell = document.getElementById("appShell");
+  if (loginPage) loginPage.classList.toggle("hidden", isAuth);
+  if (appShell) appShell.classList.toggle("hidden", !isAuth);
 };
 
 const updateOverviewMode = () => {
@@ -363,7 +380,51 @@ const hideChartTooltip = () => {
   elements.chartTooltip.classList.remove("show");
 };
 
-const renderHistoryChart = (res, backtestEvents = []) => {
+function applyZoomRange(startIdx, endIdx) {
+  const baseRows = chartState.rows && chartState.rows.length ? chartState.rows : chartState.fullRows;
+  const fullRows = chartState.fullRows && chartState.fullRows.length ? chartState.fullRows : baseRows;
+  if (!baseRows || !fullRows || !baseRows.length) return;
+  const baseStart = chartState.window?.start || 0;
+  const loIdx = Math.max(0, Math.min(startIdx, endIdx));
+  const hiIdx = Math.min(baseRows.length - 1, Math.max(startIdx, endIdx));
+  if (hiIdx - loIdx < 1) return;
+  const absStart = baseStart + loIdx;
+  const absEnd = baseStart + hiIdx;
+  zoomToWindow(absStart, absEnd);
+}
+
+function resetZoom() {
+  if (!chartState.fullRes || !chartState.fullRows.length) return;
+  const fullLen = chartState.fullRows.length;
+  zoomToWindow(0, fullLen - 1);
+}
+
+function zoomToWindow(startAbs, endAbs) {
+  const fullRows = chartState.fullRows;
+  if (!fullRows || !fullRows.length) return;
+  const loAbs = Math.max(0, Math.min(startAbs, endAbs));
+  const hiAbs = Math.min(fullRows.length - 1, Math.max(startAbs, endAbs));
+  if (hiAbs - loAbs < 1) return;
+  const subRows = fullRows.slice(loAbs, hiAbs + 1);
+  const base = chartState.fullRes || {
+    start_date: subRows[0].trade_date,
+    end_date: subRows[subRows.length - 1].trade_date,
+    items: chartState.fullRows,
+    total_count: chartState.fullRows.length,
+  };
+  const next = {
+    ...base,
+    items: subRows,
+    start_date: subRows[0].trade_date,
+    end_date: subRows[subRows.length - 1].trade_date,
+    total_count: subRows.length,
+  };
+  renderHistoryChart(next, chartState.events || [], { preserveFull: true, absStart: loAbs, absEnd: hiAbs });
+  toggleResetZoom(subRows.length < fullRows.length);
+}
+
+const renderHistoryChart = (res, backtestEvents = [], options = {}) => {
+  const { preserveFull = false, absStart, absEnd } = options;
   if (!elements.chartCanvas) return;
   const rows = res.items || [];
   if (!rows.length) {
@@ -374,6 +435,19 @@ const renderHistoryChart = (res, backtestEvents = []) => {
   const closes = rows.map((row) => row.close_price);
   const maxClose = Math.max(...closes);
   const minClose = Math.min(...closes);
+  if (!preserveFull) {
+    chartState.fullRows = rows;
+    chartState.fullRes = res;
+    chartState.window = { start: 0, end: rows.length ? rows.length - 1 : 0 };
+    toggleResetZoom(false);
+  } else {
+    const fullLen = chartState.fullRows?.length || rows.length;
+    const startIdx = typeof absStart === "number" ? absStart : 0;
+    const endIdx = typeof absEnd === "number" ? absEnd : startIdx + rows.length - 1;
+    chartState.window = { start: startIdx, end: endIdx };
+    const showReset = endIdx - startIdx + 1 < fullLen;
+    toggleResetZoom(showReset);
+  }
   if (elements.chartMeta) {
     renderMeta(elements.chartMeta, [
       `區間：${fmtText(res.start_date)} ~ ${fmtText(res.end_date)}`,
@@ -446,6 +520,8 @@ const renderHistoryChart = (res, backtestEvents = []) => {
       }" style="opacity:0"></line>
       <circle class="chart-focus-dot" data-role="focus-dot" cx="0" cy="0" r="4" style="opacity:0"></circle>
     </svg>
+    <div class="chart-overlay" data-role="overlay"></div>
+    <div class="chart-selection hidden" data-role="selection"></div>
   `;
 
   const svg = canvas.querySelector("svg");
@@ -458,6 +534,8 @@ const renderHistoryChart = (res, backtestEvents = []) => {
   chartState.step = step;
   chartState.focusLine = svg.querySelector("[data-role='focus-line']");
   chartState.focusDot = svg.querySelector("[data-role='focus-dot']");
+  const overlay = canvas.querySelector("[data-role='overlay']");
+  const selectionBox = canvas.querySelector("[data-role='selection']");
 
   if (backtestEvents && backtestEvents.length) {
     const eventDates = new Set(backtestEvents.map((e) => e.trade_date));
@@ -471,9 +549,20 @@ const renderHistoryChart = (res, backtestEvents = []) => {
     svg.insertAdjacentHTML("beforeend", markers);
   }
 
+  let dragging = false;
+  const toIndex = (clientX) => {
+    if (!overlay) return 0;
+    const rect = overlay.getBoundingClientRect();
+    const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
+    const plotX = Math.max(0, Math.min(x - padding.left, plotWidth));
+    return chartState.rows.length > 1 ? Math.round(plotX / chartState.step) : 0;
+  };
+
   const handlePointer = (event) => {
+    if (dragging) return;
+    if (!overlay) return;
     if (!chartState.rows.length) return;
-    const rect = svg.getBoundingClientRect();
+    const rect = overlay.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const plotX = Math.max(0, Math.min(x - padding.left, plotWidth));
     const idx = chartState.rows.length > 1 ? Math.round(plotX / chartState.step) : 0;
@@ -516,13 +605,75 @@ const renderHistoryChart = (res, backtestEvents = []) => {
     tooltip.classList.add("show");
   };
 
-  svg.addEventListener("mousemove", handlePointer);
-  svg.addEventListener("mouseleave", () => {
-    hideChartTooltip();
-    if (chartState.focusLine) chartState.focusLine.style.opacity = "0";
-    if (chartState.focusDot) chartState.focusDot.style.opacity = "0";
-  });
-  svg.addEventListener("click", handlePointer);
+  const handleWheel = (event) => {
+    if (!overlay || !chartState.rows.length) return;
+    const fullRows = chartState.fullRows || chartState.rows;
+    if (!fullRows.length) return;
+    event.preventDefault();
+    const rect = overlay.getBoundingClientRect();
+    const x = Math.max(0, Math.min(event.clientX - rect.left, rect.width));
+    const centerIdxCurrent = toIndex(x);
+    const baseStart = chartState.window?.start || 0;
+    const centerAbs = baseStart + centerIdxCurrent;
+    const currentLen = (chartState.window?.end || chartState.rows.length - 1) - baseStart + 1;
+    const fullLen = fullRows.length;
+    const scale = event.deltaY > 0 ? 1.2 : 0.8; // down = zoom out, up = zoom in
+    const targetLen = Math.max(2, Math.min(fullLen, Math.round(currentLen * scale)));
+    const half = Math.floor(targetLen / 2);
+    let startAbs = centerAbs - half;
+    let endAbs = centerAbs + (targetLen - half - 1);
+    if (startAbs < 0) {
+      endAbs = Math.min(fullLen - 1, endAbs - startAbs);
+      startAbs = 0;
+    }
+    if (endAbs > fullLen - 1) {
+      const diff = endAbs - (fullLen - 1);
+      startAbs = Math.max(0, startAbs - diff);
+      endAbs = fullLen - 1;
+    }
+    zoomToWindow(startAbs, endAbs);
+  };
+
+  if (overlay) {
+    overlay.addEventListener("mousemove", handlePointer);
+    overlay.addEventListener("click", handlePointer);
+    overlay.addEventListener("mouseleave", () => {
+      hideChartTooltip();
+      if (chartState.focusLine) chartState.focusLine.style.opacity = "0";
+      if (chartState.focusDot) chartState.focusDot.style.opacity = "0";
+    });
+    overlay.addEventListener("wheel", handleWheel, { passive: false });
+    overlay.addEventListener("mousedown", (e) => {
+      if (!selectionBox) return;
+      dragging = true;
+      hideChartTooltip();
+      const rect = overlay.getBoundingClientRect();
+      const startX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+      selectionBox.classList.remove("hidden");
+      selectionBox.style.left = `${startX}px`;
+      selectionBox.style.width = "0px";
+      const onMove = (ev) => {
+        const currX = Math.max(0, Math.min(ev.clientX - rect.left, rect.width));
+        const left = Math.min(startX, currX);
+        const width = Math.abs(currX - startX);
+        selectionBox.style.left = `${left}px`;
+        selectionBox.style.width = `${width}px`;
+      };
+      const onUp = (ev) => {
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+        selectionBox.classList.add("hidden");
+        const endX = Math.max(0, Math.min(ev.clientX - rect.left, rect.width));
+        dragging = false;
+        if (Math.abs(endX - startX) < 6) return;
+        const startIdx = toIndex(startX);
+        const endIdx = toIndex(endX);
+        applyZoomRange(startIdx, endIdx);
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    });
+  }
 };
 
 const renderSummary = (el, res) => {
@@ -994,6 +1145,7 @@ renderKpis();
 updateOverviewMode();
 renderBacktestConditions();
 refreshConditionOptions();
+toggleProtectedSections(false);
 refreshAccessToken().then((ok) => {
   if (ok) {
     setMessage(elements.loginMessage, "已自動登入，Token 已更新", "good");
@@ -1065,9 +1217,9 @@ const applyBacktestPreset = (preset) => {
   updateOptionalFields();
 };
 
-const loadPreset = async () => {
+async function loadPreset() {
+  if (!state.token) return;
   try {
-    requireLogin();
     const res = await api("/api/analysis/backtest/preset");
     if (res.success && res.preset) {
       applyBacktestPreset(res.preset);
@@ -1076,9 +1228,9 @@ const loadPreset = async () => {
   } catch (err) {
     console.warn("load preset failed", err);
   }
-};
+}
 
-const savePreset = async () => {
+async function savePreset() {
   try {
     requireLogin();
     const payload = buildBacktestPayload();
@@ -1091,7 +1243,7 @@ const savePreset = async () => {
   } catch (err) {
     setMessage(elements.loginMessage, `儲存失敗：${err.message}`, "error");
   }
-};
+}
 
 document.getElementById("loginForm").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -1105,6 +1257,7 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
     state.token = res.access_token;
     setStatus(`已登入：${email}`, "good");
     setMessage(elements.loginMessage, "登入成功", "good");
+    toggleProtectedSections(true);
     logActivity("登入成功", `帳號 ${email}`);
   } catch (err) {
     setMessage(elements.loginMessage, `登入失敗：${err.message}`, "error");
@@ -1134,6 +1287,10 @@ if (elements.chartForm) {
       renderChartPlaceholder(err.message);
     }
   });
+}
+
+if (elements.resetZoomBtn) {
+  elements.resetZoomBtn.addEventListener("click", resetZoom);
 }
 
 if (elements.backtestForm) {

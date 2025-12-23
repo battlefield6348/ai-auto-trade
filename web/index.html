@@ -4,25 +4,68 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BTC/USDT 操作台｜AI Auto Trade</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <div class="brand-mark">BTC</div>
-      <div>
-        <h1>BTC/USDT 操作台</h1>
-        <p class="subtitle">AI Auto Trade MVP / 端到端流程</p>
+  <section id="loginPage" class="auth-page">
+    <div class="auth-shell">
+      <div class="auth-hero">
+        <div class="brand-mark">BTC</div>
+        <div>
+          <h1>BTC/USDT 操作台</h1>
+          <p class="subtitle">登入後即可操作擷取、分析與強勢篩選。</p>
+          <div class="meta-row">
+            <span class="status-pill">安全連線 · HTTPS</span>
+            <span class="status-pill">資料不外流</span>
+          </div>
+        </div>
+      </div>
+      <div class="auth-card">
+        <div class="panel-head">
+          <div>
+            <h2>登入</h2>
+            <p>使用預設帳號 admin / analyst / user，密碼皆為 password123。</p>
+          </div>
+        </div>
+        <form id="loginForm" class="form">
+          <div class="field-grid">
+            <label>帳號 Email <input type="email" id="email" value="admin@example.com" required></label>
+            <label>密碼 <input type="password" id="password" value="password123" required></label>
+          </div>
+          <div class="actions">
+            <button type="submit" class="primary">登入</button>
+            <div class="chip-row">
+              <button type="button" class="chip" data-email="admin@example.com">admin@example.com</button>
+              <button type="button" class="chip" data-email="analyst@example.com">analyst@example.com</button>
+              <button type="button" class="chip" data-email="user@example.com">user@example.com</button>
+            </div>
+          </div>
+        </form>
+        <div id="loginMessage" class="message"></div>
       </div>
     </div>
-    <div class="status-stack">
-      <div id="status" class="status-pill">未登入</div>
-      <div id="healthStatus" class="status-pill subtle">系統檢查：--</div>
-    </div>
-  </header>
+  </section>
 
-  <main class="layout">
-    <section class="panel hero span-2">
+  <div id="appShell" class="hidden">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">BTC</div>
+        <div>
+          <h1>BTC/USDT 操作台</h1>
+          <p class="subtitle">AI Auto Trade MVP / 端到端流程</p>
+        </div>
+      </div>
+      <div class="status-stack">
+        <div id="status" class="status-pill">未登入</div>
+        <div id="healthStatus" class="status-pill subtle">系統檢查：--</div>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel hero span-2">
       <div class="hero-copy">
         <h2>市場快照與作業狀態</h2>
         <p>集中顯示近期的擷取、分析與強勢篩選資訊，搭配走勢摘要快速判斷方向。</p>
@@ -60,31 +103,6 @@
       </div>
     </section>
 
-    <section class="panel" id="loginPanel">
-      <div class="panel-head">
-        <div>
-          <h2>登入與權限</h2>
-          <p>登入後可執行擷取、分析與強勢篩選。</p>
-        </div>
-      </div>
-      <form id="loginForm" class="form">
-        <div class="field-grid">
-          <label>帳號 Email <input type="email" id="email" value="admin@example.com" required></label>
-          <label>密碼 <input type="password" id="password" value="password123" required></label>
-        </div>
-        <div class="actions">
-          <button type="submit" class="primary">登入</button>
-          <div class="chip-row">
-            <button type="button" class="chip" data-email="admin@example.com">admin@example.com</button>
-            <button type="button" class="chip" data-email="analyst@example.com">analyst@example.com</button>
-            <button type="button" class="chip" data-email="user@example.com">user@example.com</button>
-          </div>
-        </div>
-      </form>
-      <p class="hint">預設帳號：admin / analyst / user，密碼皆為 <code>password123</code></p>
-      <div id="loginMessage" class="message"></div>
-    </section>
-
     <section class="panel span-2" id="chartPanel">
       <div class="panel-head">
         <div>
@@ -96,6 +114,7 @@
         <label>起始日期 <input type="date" id="chartStart" required></label>
         <label>結束日期 <input type="date" id="chartEnd" required></label>
         <button type="submit" class="primary">載入走勢</button>
+        <button type="button" id="resetZoomBtn" class="ghost btn-sm hidden">重置範圍</button>
       </form>
       <div id="chartMeta" class="meta-row"></div>
       <div class="chart-wrap">
@@ -200,7 +219,8 @@
       </div>
       <ul id="activityList" class="activity-list"></ul>
     </section>
-  </main>
+    </main>
+  </div>
 
   <script src="main.js"></script>
 </body>

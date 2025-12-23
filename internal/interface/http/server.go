@@ -203,7 +203,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("login success user_id=%s role=%s email=%s", res.User.ID, res.User.Role, res.User.Email)
 
-	s.setRefreshCookie(w, res.Token.RefreshToken, res.Token.RefreshExpiry)
+	s.setRefreshCookie(w, r, res.Token.RefreshToken, res.Token.RefreshExpiry)
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success":            true,
 		"access_token":       res.Token.AccessToken,
@@ -225,7 +225,7 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, errCodeUnauthorized, "refresh token expired or invalid")
 		return
 	}
-	s.setRefreshCookie(w, pair.RefreshToken, pair.RefreshExpiry)
+	s.setRefreshCookie(w, r, pair.RefreshToken, pair.RefreshExpiry)
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success":            true,
 		"access_token":       pair.AccessToken,
@@ -244,7 +244,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	s.setRefreshCookie(w, "", time.Now().Add(-time.Hour))
+	s.setRefreshCookie(w, r, "", time.Now().Add(-time.Hour))
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
 		"message": "logged out",
@@ -1178,13 +1178,11 @@ func (s *Server) runPipelineOnce() {
 
 // --- Helpers ---
 
-func (s *Server) setRefreshCookie(w http.ResponseWriter, token string, expiry time.Time) {
-	// 若透過 https/ngrok 跨站嵌入，需允許 SameSite=None 且 Secure。
-	secure := false
+func (s *Server) setRefreshCookie(w http.ResponseWriter, r *http.Request, token string, expiry time.Time) {
+	origin := r.Header.Get("Origin")
+	useHTTPS := r.TLS != nil || strings.HasPrefix(strings.ToLower(origin), "https")
 	sameSite := http.SameSiteLaxMode
-	if w != nil {
-		// 這裡無法直接讀 Origin，只能預設為安全模式；若服務啟用 https，設定 Secure+None 可避免被瀏覽器擋下。
-		secure = true
+	if origin != "" {
 		sameSite = http.SameSiteNoneMode
 	}
 	if token == "" {
@@ -1195,7 +1193,7 @@ func (s *Server) setRefreshCookie(w http.ResponseWriter, token string, expiry ti
 			MaxAge:   -1,
 			HttpOnly: true,
 			SameSite: sameSite,
-			Secure:   secure,
+			Secure:   useHTTPS,
 		})
 		return
 	}
@@ -1211,7 +1209,7 @@ func (s *Server) setRefreshCookie(w http.ResponseWriter, token string, expiry ti
 		MaxAge:   seconds,
 		HttpOnly: true,
 		SameSite: sameSite,
-		Secure:   secure,
+		Secure:   useHTTPS,
 	})
 }
 

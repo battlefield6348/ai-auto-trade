@@ -40,7 +40,14 @@ type fakeTokens struct {
 	revoked string
 }
 
-func (f *fakeTokens) Issue(_ context.Context, _ domain.User) (domain.TokenPair, error) {
+func (f *fakeTokens) Issue(_ context.Context, _ domain.User, _ domain.TokenMeta) (domain.TokenPair, error) {
+	if f.err != nil {
+		return domain.TokenPair{}, f.err
+	}
+	return f.pair, nil
+}
+
+func (f *fakeTokens) Refresh(_ context.Context, _ string) (domain.TokenPair, error) {
 	if f.err != nil {
 		return domain.TokenPair{}, f.err
 	}

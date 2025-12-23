@@ -29,13 +29,15 @@ type DBConfig struct {
 }
 
 type AuthConfig struct {
-	TokenTTL time.Duration `yaml:"token_ttl"`
-	Secret   string        `yaml:"secret"`
+	TokenTTL   time.Duration `yaml:"token_ttl"`
+	RefreshTTL time.Duration `yaml:"refresh_ttl"`
+	Secret     string        `yaml:"secret"`
 }
 
 type IngestionConfig struct {
-	UseSynthetic bool          `yaml:"use_synthetic"`
-	AutoInterval time.Duration `yaml:"auto_interval"`
+	UseSynthetic      bool          `yaml:"use_synthetic"`
+	AutoInterval      time.Duration `yaml:"auto_interval"`
+	BackfillStartDate string        `yaml:"backfill_start_date"`
 }
 
 type NotifierConfig struct {
@@ -80,6 +82,9 @@ func applyDefaults(cfg Config) Config {
 	}
 	if cfg.Auth.TokenTTL == 0 {
 		cfg.Auth.TokenTTL = 30 * time.Minute
+	}
+	if cfg.Auth.RefreshTTL == 0 {
+		cfg.Auth.RefreshTTL = 24 * time.Hour * 30
 	}
 	if cfg.Auth.Secret == "" {
 		cfg.Auth.Secret = "dev-secret-change-me"

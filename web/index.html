@@ -85,50 +85,6 @@
       <div id="loginMessage" class="message"></div>
     </section>
 
-    <section class="panel" id="pipelinePanel">
-      <div class="panel-head">
-        <div>
-          <h2>日 K 作業</h2>
-          <p>手動觸發擷取與分析，結果會整理成摘要資訊。</p>
-        </div>
-      </div>
-      <div class="split">
-        <form id="ingestForm" class="form">
-          <h3>擷取日 K</h3>
-          <label>交易日 <input type="date" id="ingestDate" required></label>
-          <button type="submit" class="primary">觸發 Ingestion</button>
-        </form>
-        <form id="analysisForm" class="form">
-          <h3>日批次分析</h3>
-          <label>交易日 <input type="date" id="analysisDate" required></label>
-          <button type="submit" class="primary">觸發 Analysis</button>
-        </form>
-      </div>
-      <div class="result-grid two">
-        <div id="ingestResult" class="result-panel"></div>
-        <div id="analysisResult" class="result-panel"></div>
-      </div>
-    </section>
-
-    <section class="panel span-2" id="backfillPanel">
-      <div class="panel-head">
-        <div>
-          <h2>歷史資料回補</h2>
-          <p>從指定區間回補 BTC/USDT 日 K，預設會以實際資料覆蓋並同步分析。</p>
-        </div>
-      </div>
-      <form id="backfillForm" class="form inline">
-        <label>起始日期 <input type="date" id="backfillStart" required></label>
-        <label>結束日期 <input type="date" id="backfillEnd" required></label>
-        <label class="toggle">
-          <input type="checkbox" id="backfillAnalysis" checked>
-          <span>回補後立即分析</span>
-        </label>
-        <button type="submit" class="primary">開始回補</button>
-      </form>
-      <div id="backfillResult" class="result-panel"></div>
-    </section>
-
     <section class="panel span-2" id="chartPanel">
       <div class="panel-head">
         <div>

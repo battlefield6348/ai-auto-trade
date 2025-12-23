@@ -20,6 +20,7 @@ type Store struct {
 	users           map[string]authDomain.User
 	passwords       map[string]string
 	tokens          map[string]tokenRecord
+	sessions        map[string]sessionRecord
 	tradingPairs    map[string]pairRecord                                    // id -> record
 	pairByCode      map[string]string                                        // pair+market -> id
 	dailyPrices     map[string]map[string]dataDomain.DailyPrice              // date -> stockID -> price
@@ -30,6 +31,15 @@ type Store struct {
 type tokenRecord struct {
 	UserID  string
 	Expires time.Time
+}
+
+type sessionRecord struct {
+	UserID    string
+	ExpiresAt time.Time
+	RevokedAt *time.Time
+	UserAgent string
+	IPAddress string
+	CreatedAt time.Time
 }
 
 type pairRecord struct {
@@ -47,6 +57,7 @@ func NewStore() *Store {
 		users:           make(map[string]authDomain.User),
 		passwords:       make(map[string]string),
 		tokens:          make(map[string]tokenRecord),
+		sessions:        make(map[string]sessionRecord),
 		tradingPairs:    make(map[string]pairRecord),
 		pairByCode:      make(map[string]string),
 		dailyPrices:     make(map[string]map[string]dataDomain.DailyPrice),
@@ -132,7 +143,7 @@ func NewMemoryTokenIssuer(store *Store, ttl time.Duration) *MemoryTokenIssuer {
 	return &MemoryTokenIssuer{store: store, ttl: ttl}
 }
 
-func (m *MemoryTokenIssuer) Issue(ctx context.Context, user authDomain.User) (authDomain.TokenPair, error) {
+func (m *MemoryTokenIssuer) Issue(ctx context.Context, user authDomain.User, _ authDomain.TokenMeta) (authDomain.TokenPair, error) {
 	token := fmt.Sprintf("token-%s-%d", user.ID, time.Now().UnixNano())
 	m.store.mu.Lock()
 	m.store.tokens[token] = tokenRecord{
@@ -142,10 +153,22 @@ func (m *MemoryTokenIssuer) Issue(ctx context.Context, user authDomain.User) (au
 	m.store.mu.Unlock()
 	return authDomain.TokenPair{
 		AccessToken:   token,
-		RefreshToken:  "",
+		RefreshToken:  token,
 		AccessExpiry:  time.Now().Add(m.ttl),
 		RefreshExpiry: time.Now().Add(m.ttl),
 	}, nil
+}
+
+func (m *MemoryTokenIssuer) Refresh(ctx context.Context, token string) (authDomain.TokenPair, error) {
+	rec, ok := m.store.sessions[token]
+	if !ok || rec.ExpiresAt.Before(time.Now()) || (rec.RevokedAt != nil && !rec.RevokedAt.IsZero()) {
+		return authDomain.TokenPair{}, fmt.Errorf("session not found")
+	}
+	user, ok := m.store.users[rec.UserID]
+	if !ok {
+		return authDomain.TokenPair{}, fmt.Errorf("user not found")
+	}
+	return m.Issue(ctx, user, authDomain.TokenMeta{})
 }
 
 func (m *MemoryTokenIssuer) RevokeRefresh(ctx context.Context, token string) error {
@@ -169,6 +192,52 @@ type OwnerChecker struct{}
 
 func (OwnerChecker) IsOwner(ctx context.Context, userID, resourceID string) bool {
 	return userID == resourceID
+}
+
+// SessionStore impl
+func (s *Store) SaveSession(ctx context.Context, sess authDomain.Session) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sessions[sess.Token] = sessionRecord{
+		UserID:    sess.UserID,
+		ExpiresAt: sess.ExpiresAt,
+		RevokedAt: sess.RevokedAt,
+		UserAgent: sess.UserAgent,
+		IPAddress: sess.IPAddress,
+		CreatedAt: sess.CreatedAt,
+	}
+	return nil
+}
+
+func (s *Store) GetSession(ctx context.Context, token string) (authDomain.Session, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	rec, ok := s.sessions[token]
+	if !ok {
+		return authDomain.Session{}, fmt.Errorf("session not found")
+	}
+	return authDomain.Session{
+		Token:     token,
+		UserID:    rec.UserID,
+		ExpiresAt: rec.ExpiresAt,
+		RevokedAt: rec.RevokedAt,
+		UserAgent: rec.UserAgent,
+		IPAddress: rec.IPAddress,
+		CreatedAt: rec.CreatedAt,
+	}, nil
+}
+
+func (s *Store) RevokeSession(ctx context.Context, token string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rec, ok := s.sessions[token]
+	if !ok {
+		return fmt.Errorf("session not found")
+	}
+	now := time.Now()
+	rec.RevokedAt = &now
+	s.sessions[token] = rec
+	return nil
 }
 
 // AnalysisQueryRepository impls

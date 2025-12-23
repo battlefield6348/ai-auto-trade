@@ -18,9 +18,6 @@ const elements = {
   overviewTime: document.getElementById("overviewTime"),
   overviewMode: document.getElementById("overviewMode"),
   loginMessage: document.getElementById("loginMessage"),
-  ingestResult: document.getElementById("ingestResult"),
-  analysisResult: document.getElementById("analysisResult"),
-  backfillResult: document.getElementById("backfillResult"),
   chartForm: document.getElementById("chartForm"),
   chartStart: document.getElementById("chartStart"),
   chartEnd: document.getElementById("chartEnd"),
@@ -70,8 +67,14 @@ const api = async (path, options = {}) => {
   if (options.body && !headers["Content-Type"]) {
     headers["Content-Type"] = "application/json";
   }
-  const res = await fetch(path, { ...options, headers });
+  const res = await fetch(path, { ...options, headers, credentials: "include" });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      return api(path, options);
+    }
+  }
   if (!res.ok || data.success === false) {
     const msg = data.error || res.statusText;
     throw new Error(`${res.status} ${data.error_code || ""} ${msg}`.trim());
@@ -115,6 +118,22 @@ const setStatus = (msg, tone) => {
   elements.status.textContent = msg;
   elements.status.classList.remove("good", "warn");
   if (tone) elements.status.classList.add(tone);
+};
+
+const refreshAccessToken = async () => {
+  try {
+    const res = await fetch("/api/auth/refresh", { method: "POST", credentials: "include" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.success === false || !data.access_token) {
+      throw new Error(data.error || res.statusText);
+    }
+    state.token = data.access_token;
+    setStatus("已登入（自動續期）", "good");
+    return true;
+  } catch (_) {
+    state.token = "";
+    return false;
+  }
 };
 
 const setHealthStatus = (msg, tone) => {
@@ -189,8 +208,8 @@ const renderKpis = () => {
   } else {
     setKpi("kpiIngestion", {
       title: "日 K 擷取",
-      value: "尚未執行",
-      note: "交易日 --",
+      value: "自動排程/回補",
+      note: "由自動排程或歷史回補處理",
     });
   }
 
@@ -300,80 +319,6 @@ const renderJobError = (container, label, message) => {
       <div>
         <div class="result-title">${label}</div>
         <div class="result-sub">未完成</div>
-      </div>
-      <span class="badge warn">注意</span>
-    </div>
-    <div class="result-message error">${message}</div>
-  `;
-};
-
-const renderBackfillPlaceholder = () => {
-  if (!elements.backfillResult) return;
-  elements.backfillResult.innerHTML = `
-    <div class="result-header">
-      <div>
-        <div class="result-title">回補結果</div>
-        <div class="result-sub">尚未回補</div>
-      </div>
-      <span class="badge warn">待執行</span>
-    </div>
-    <div class="result-message">請設定日期區間後開始回補。</div>
-  `;
-};
-
-const renderBackfillLoading = (startDate, endDate) => {
-  if (!elements.backfillResult) return;
-  elements.backfillResult.innerHTML = `
-    <div class="result-header">
-      <div>
-        <div class="result-title">回補進行中</div>
-        <div class="result-sub">區間 ${startDate} ~ ${endDate}</div>
-      </div>
-      <span class="badge">處理中</span>
-    </div>
-    <div class="result-message">正在回補歷史資料與分析，請稍候。</div>
-  `;
-};
-
-const renderBackfillResult = (res) => {
-  if (!elements.backfillResult) return;
-  const failures = res.failures || [];
-  const statusClass = failures.length ? "warn" : "good";
-  const statusText = failures.length ? "完成（有失敗）" : "完成";
-  const analysisText = res.analysis_enabled ? fmtInt(res.analysis_success_days) : "未啟用";
-  const failureList = failures.length
-    ? `<ul class="result-list">${failures
-        .map((item) => {
-          const stageLabel = item.stage === "analysis" ? "分析" : "擷取";
-          return `<li><strong>${item.trade_date}</strong> · ${stageLabel}：${item.reason}</li>`;
-        })
-        .join("")}</ul>`
-    : `<div class="result-message">區間內資料已回補完成。</div>`;
-  elements.backfillResult.innerHTML = `
-    <div class="result-header">
-      <div>
-        <div class="result-title">回補結果</div>
-        <div class="result-sub">區間 ${res.start_date} ~ ${res.end_date}</div>
-      </div>
-      <span class="badge ${statusClass}">${statusText}</span>
-    </div>
-    <div class="result-metrics">
-      <div><span>總天數</span><strong>${fmtInt(res.total_days)}</strong></div>
-      <div><span>擷取成功</span><strong>${fmtInt(res.ingestion_success_days)}</strong></div>
-      <div><span>分析成功</span><strong>${analysisText}</strong></div>
-      <div><span>失敗</span><strong>${fmtInt(res.failure_days)}</strong></div>
-    </div>
-    ${failureList}
-  `;
-};
-
-const renderBackfillError = (message) => {
-  if (!elements.backfillResult) return;
-  elements.backfillResult.innerHTML = `
-    <div class="result-header">
-      <div>
-        <div class="result-title">回補失敗</div>
-        <div class="result-sub">請確認登入狀態與日期設定</div>
       </div>
       <span class="badge warn">注意</span>
     </div>
@@ -941,9 +886,6 @@ async function initHealth() {
 }
 
 initHealth();
-renderJobPlaceholder(elements.ingestResult, "擷取日 K");
-renderJobPlaceholder(elements.analysisResult, "日批次分析");
-renderBackfillPlaceholder();
 renderChartPlaceholder();
 renderEmptyState(elements.queryTable, "尚未查詢");
 renderEmptyState(elements.screenerTable, "尚未查詢");
@@ -952,15 +894,21 @@ renderEmptyState(elements.screenerHighlights, "尚無亮點資料");
 renderActivity();
 renderKpis();
 updateOverviewMode();
+refreshAccessToken().then((ok) => {
+  if (ok) {
+    setMessage(elements.loginMessage, "已自動登入，Token 已更新", "good");
+    logActivity("自動登入", "沿用前一次的登入狀態");
+  } else {
+    setStatus("未登入", "warn");
+  }
+});
 
 const today = new Date().toISOString().slice(0, 10);
 const startOfYear = new Date(Date.UTC(new Date().getUTCFullYear(), 0, 1)).toISOString().slice(0, 10);
-["ingestDate", "analysisDate", "queryDate", "screenerDate", "backfillEnd", "chartEnd"].forEach((id) => {
+["queryDate", "screenerDate", "chartEnd"].forEach((id) => {
   const el = document.getElementById(id);
   if (el) el.value = today;
 });
-const backfillStart = document.getElementById("backfillStart");
-if (backfillStart) backfillStart.value = startOfYear;
 if (elements.chartStart) elements.chartStart.value = startOfYear;
 const btStart = document.getElementById("btStart");
 const btEnd = document.getElementById("btEnd");
@@ -1001,71 +949,6 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
   } catch (err) {
     setMessage(elements.loginMessage, `登入失敗：${err.message}`, "error");
     setStatus("未登入", "warn");
-  }
-});
-
-document.getElementById("ingestForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  try {
-    requireLogin();
-    renderJobLoading(elements.ingestResult, "擷取日 K");
-    const trade_date = document.getElementById("ingestDate").value;
-    const res = await api("/api/admin/ingestion/daily", {
-      method: "POST",
-      body: JSON.stringify({ trade_date }),
-    });
-    state.lastIngestion = res;
-    renderJobResult(elements.ingestResult, "擷取日 K", res);
-    renderKpis();
-    logActivity("擷取日 K", `交易日 ${trade_date} · 成功 ${fmtInt(res.success_count)}`);
-  } catch (err) {
-    renderJobError(elements.ingestResult, "擷取日 K", err.message);
-  }
-});
-
-document.getElementById("analysisForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  try {
-    requireLogin();
-    renderJobLoading(elements.analysisResult, "日批次分析");
-    const trade_date = document.getElementById("analysisDate").value;
-    const res = await api("/api/admin/analysis/daily", {
-      method: "POST",
-      body: JSON.stringify({ trade_date }),
-    });
-    state.lastAnalysis = res;
-    renderJobResult(elements.analysisResult, "日批次分析", res);
-    renderKpis();
-    logActivity("日批次分析", `交易日 ${trade_date} · 成功 ${fmtInt(res.success_count)}`);
-  } catch (err) {
-    renderJobError(elements.analysisResult, "日批次分析", err.message);
-  }
-});
-
-document.getElementById("backfillForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  try {
-    requireLogin();
-    const start_date = document.getElementById("backfillStart").value;
-    const end_date = document.getElementById("backfillEnd").value;
-    const run_analysis = document.getElementById("backfillAnalysis").checked;
-    if (!start_date || !end_date) {
-      renderBackfillError("請設定起始與結束日期");
-      return;
-    }
-    renderBackfillLoading(start_date, end_date);
-    const res = await api("/api/admin/ingestion/backfill", {
-      method: "POST",
-      body: JSON.stringify({ start_date, end_date, run_analysis }),
-    });
-    state.lastBackfill = res;
-    renderBackfillResult(res);
-    logActivity(
-      "歷史回補",
-      `區間 ${start_date} ~ ${end_date} · 成功 ${fmtInt(res.ingestion_success_days)}`
-    );
-  } catch (err) {
-    renderBackfillError(err.message);
   }
 });
 

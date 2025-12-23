@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net"
+	"time"
 
 	authDomain "ai-auto-trade/internal/domain/auth"
 	authinfra "ai-auto-trade/internal/infrastructure/auth"
@@ -56,6 +58,67 @@ LIMIT 1;
 	}
 	u.Role = authDomain.Role(roleName)
 	return u, nil
+}
+
+// SaveSession 寫入 refresh token session。
+func (r *AuthRepo) SaveSession(ctx context.Context, sess authDomain.Session) error {
+	const q = `
+INSERT INTO auth_sessions (user_id, refresh_token_id, expires_at, user_agent, ip_address)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (refresh_token_id) DO UPDATE
+SET expires_at = EXCLUDED.expires_at,
+    revoked_at = NULL,
+    user_agent = EXCLUDED.user_agent,
+    ip_address = EXCLUDED.ip_address;
+`
+	var ip interface{}
+	if sess.IPAddress != "" {
+		if parsed := net.ParseIP(sess.IPAddress); parsed != nil {
+			ip = parsed.String()
+		} else {
+			ip = sess.IPAddress
+		}
+	}
+	_, err := r.db.ExecContext(ctx, q, sess.UserID, sess.Token, sess.ExpiresAt, sess.UserAgent, ip)
+	return err
+}
+
+// GetSession 依 refresh token 查詢 session。
+func (r *AuthRepo) GetSession(ctx context.Context, token string) (authDomain.Session, error) {
+	const q = `
+SELECT user_id, refresh_token_id, expires_at, revoked_at, user_agent, COALESCE(ip_address::text, ''), created_at
+FROM auth_sessions
+WHERE refresh_token_id = $1
+LIMIT 1;
+`
+	var (
+		sess    authDomain.Session
+		tokenID string
+		revoked sql.NullTime
+		ip      sql.NullString
+	)
+	if err := r.db.QueryRowContext(ctx, q, token).Scan(&sess.UserID, &tokenID, &sess.ExpiresAt, &revoked, &sess.UserAgent, &ip, &sess.CreatedAt); err != nil {
+		return authDomain.Session{}, err
+	}
+	if revoked.Valid {
+		sess.RevokedAt = &revoked.Time
+	}
+	sess.Token = tokenID
+	if ip.Valid {
+		sess.IPAddress = ip.String
+	}
+	return sess, nil
+}
+
+// RevokeSession 標記 refresh token 為失效。
+func (r *AuthRepo) RevokeSession(ctx context.Context, token string) error {
+	const q = `
+UPDATE auth_sessions
+SET revoked_at = $2
+WHERE refresh_token_id = $1;
+`
+	_, err := r.db.ExecContext(ctx, q, token, time.Now().UTC())
+	return err
 }
 
 // SeedDefaults 建立預設角色與帳號（admin/analyst/user）。

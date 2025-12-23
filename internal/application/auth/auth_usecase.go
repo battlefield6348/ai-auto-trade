@@ -23,7 +23,8 @@ type PasswordHasher interface {
 
 // TokenIssuer 簽發/驗證 token。
 type TokenIssuer interface {
-	Issue(ctx context.Context, user auth.User) (auth.TokenPair, error)
+	Issue(ctx context.Context, user auth.User, meta auth.TokenMeta) (auth.TokenPair, error)
+	Refresh(ctx context.Context, token string) (auth.TokenPair, error)
 	RevokeRefresh(ctx context.Context, token string) error
 }
 
@@ -135,8 +136,10 @@ func NewLoginUseCase(users UserRepository, hasher PasswordHasher, tokens TokenIs
 }
 
 type LoginInput struct {
-	Email    string
-	Password string
+	Email     string
+	Password  string
+	UserAgent string
+	IP        string
 }
 
 type LoginResult struct {
@@ -162,7 +165,10 @@ func (uc *LoginUseCase) Execute(ctx context.Context, input LoginInput) (LoginRes
 		return out, errors.New("invalid credentials")
 	}
 
-	token, err := uc.tokens.Issue(ctx, user)
+	token, err := uc.tokens.Issue(ctx, user, auth.TokenMeta{
+		UserAgent: input.UserAgent,
+		IP:        input.IP,
+	})
 	if err != nil {
 		return out, fmt.Errorf("issue token: %w", err)
 	}

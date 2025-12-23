@@ -40,9 +40,10 @@
 - Postgres 連線資訊：`postgres://ai:ai@localhost:5432/ai_auto_trade?sslmode=disable`，初次啟動會自動套用 `db/migrations/0001_init.sql`。
 - API 預設埠：`http://localhost:8080`；Swagger UI：`http://localhost:8081`
 - 若 DB Volume 已存在需重跑 migration，可用：`docker compose exec db psql -U ai -d ai_auto_trade -f /docker-entrypoint-initdb.d/0001_init.sql`
-- Auth：預設帳號 `admin/analyst/user@example.com`，密碼皆 `password123`。`config.yaml` 中 `auth.secret` 請於正式環境改成安全值。
+- Auth：預設帳號 `admin/analyst/user@example.com`，密碼皆 `password123`。`config.yaml` 可調整 `auth.token_ttl`（access token）、`auth.refresh_ttl`（refresh token），refresh token 以 HttpOnly Cookie + `auth_sessions` 資料表保存，可在服務重啟後自動續期；`auth.secret` 請於正式環境改成安全值。
 - Ingestion：`config.yaml` 可設定 `ingestion.use_synthetic`（true=合成日 K，false=實際取 Binance）。
 - 自動管線：`ingestion.auto_interval` 預設每小時自動跑當日的日 K 擷取與分析，免手動呼叫 API。
+- 歷史補資料：`ingestion.backfill_start_date` 可指定啟動時自動補齊的起始日期（格式 YYYY-MM-DD），只會補尚未分析的日期，避免重複。
 - Telegram 推播：在 `config.yaml` 設定 `notifier.telegram`（enabled/token/chat_id/interval/門檻），API 啟動後每小時將最新分析摘要與強勢交易對推送到指定 TG chat。
 - 歷史回補：可呼叫 `POST /api/admin/ingestion/backfill` 回補指定區間，預設會以 Binance 實際資料覆蓋既有日 K 並同步分析。  
   ```bash
@@ -61,10 +62,10 @@
    - 瀏覽器開 `http://localhost:8080/`。
 2. 登入
    - 預設帳號：admin/analyst/user@example.com，密碼皆 `password123`（點選帳號 chip 可快速帶入）。
+   - 成功後會寫入 HttpOnly refresh token，頁面重整或服務重啟時會自動續期 access token。
 3. 日常操作
    - 健康檢查：頁首狀態顯示 DB/資料來源（實際或合成）。
-   - 手動作業：在「日 K 作業」選日期，按「觸發 Ingestion」→「觸發 Analysis」。
-   - 回補：在「歷史資料回補」選區間，勾選「回補後立即分析」按「開始回補」，結果會顯示成功/失敗天數。
+   - 回補：在「歷史資料回補」選區間，勾選「回補後立即分析」按「開始回補」，結果會顯示成功/失敗天數（亦可等待自動排程）。
 4. 查詢與走勢
    - 分析結果：在「分析結果查詢」輸入交易日，會顯示亮點卡片與完整表格。
    - 強勢清單：在「強勢交易對篩選」輸入日期/分數/量能門檻，按查詢。
@@ -76,7 +77,7 @@
      - 統計：各回測天數的平均報酬與勝率
      - 圖上標記：命中日期會在走勢圖上以小圓點標示
 6. 提示
-   - 若圖表或查詢無資料，先跑回補或手動擷取+分析。
+   - 若圖表或查詢無資料，先跑回補或等待自動排程。
    - 如果需要改用合成資料，將 `config.yaml` 的 `ingestion.use_synthetic` 設為 true。
 
 ## Monorepo 結構（預期）

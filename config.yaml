@@ -10,10 +10,12 @@ db:
 auth:
   secret: "dev-secret-change-me"
   token_ttl: 30m
+  refresh_ttl: 720h
 
 ingestion:
   use_synthetic: false
   auto_interval: 1h
+  backfill_start_date: ""
 
 notifier:
   telegram:

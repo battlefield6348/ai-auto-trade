@@ -22,7 +22,7 @@ const (
 	errAnalysisNotReady = "ANALYSIS_NOT_READY"
 )
 
-// TestMvpE2EFlow 覆蓋登入、ingestion、analysis、查詢與強勢股清單。
+// TestMvpE2EFlow 覆蓋登入、回補（含分析）、查詢與強勢股清單。
 func TestMvpE2EFlow(t *testing.T) {
 	cfg := config.Config{Auth: config.AuthConfig{Secret: "test-secret"}, Ingestion: config.IngestionConfig{UseSynthetic: true}}
 	srv := httpapi.NewServer(cfg, nil)
@@ -30,11 +30,10 @@ func TestMvpE2EFlow(t *testing.T) {
 	defer ts.Close()
 
 	adminToken := login(t, ts, "admin@example.com", "password123")
-	postJSON(t, ts, "/api/admin/ingestion/daily", adminToken, map[string]string{
-		"trade_date": "2025-12-01",
-	}, http.StatusOK)
-	postJSON(t, ts, "/api/admin/analysis/daily", adminToken, map[string]string{
-		"trade_date": "2025-12-01",
+	postJSON(t, ts, "/api/admin/ingestion/backfill", adminToken, map[string]interface{}{
+		"start_date":   "2025-12-01",
+		"end_date":     "2025-12-01",
+		"run_analysis": true,
 	}, http.StatusOK)
 
 	userToken := login(t, ts, "user@example.com", "password123")
@@ -68,8 +67,10 @@ func TestAuthErrors(t *testing.T) {
 	}
 
 	userToken := login(t, ts, "user@example.com", "password123")
-	forbidden := postJSON(t, ts, "/api/admin/ingestion/daily", userToken, map[string]string{
-		"trade_date": "2025-12-01",
+	forbidden := postJSON(t, ts, "/api/admin/ingestion/backfill", userToken, map[string]interface{}{
+		"start_date":   "2025-12-01",
+		"end_date":     "2025-12-01",
+		"run_analysis": true,
 	}, http.StatusForbidden)
 	if forbidden.ErrorCode != errForbidden {
 		t.Fatalf("expected forbidden for user")
@@ -91,11 +92,10 @@ func TestAnalysisFlow(t *testing.T) {
 		t.Fatalf("expected %s got %s", errAnalysisNotReady, notReady.ErrorCode)
 	}
 
-	postJSON(t, ts, "/api/admin/ingestion/daily", admin, map[string]string{
-		"trade_date": "2025-12-01",
-	}, http.StatusOK)
-	postJSON(t, ts, "/api/admin/analysis/daily", admin, map[string]string{
-		"trade_date": "2025-12-01",
+	postJSON(t, ts, "/api/admin/ingestion/backfill", admin, map[string]interface{}{
+		"start_date":   "2025-12-01",
+		"end_date":     "2025-12-01",
+		"run_analysis": true,
 	}, http.StatusOK)
 
 	queryResp := getJSON(t, ts, "/api/analysis/daily?trade_date=2025-12-01&limit=5", userToken, http.StatusOK)

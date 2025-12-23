@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"sort"
 	"strconv"
@@ -26,9 +27,9 @@ const (
 	errCodeUnauthorized       = "AUTH_UNAUTHORIZED"
 	errCodeForbidden          = "AUTH_FORBIDDEN"
 	errCodeAnalysisNotReady   = "ANALYSIS_NOT_READY"
-	errCodeIngestionNotReady  = "INGESTION_NOT_READY"
 	errCodeMethodNotAllowed   = "METHOD_NOT_ALLOWED"
 	errCodeInternal           = "INTERNAL_ERROR"
+	refreshCookieName         = "refresh_token"
 )
 
 var errNoPrices = errors.New("ingestion data not ready")
@@ -159,8 +160,10 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res, err := s.loginUC.Execute(r.Context(), auth.LoginInput{
-		Email:    body.Email,
-		Password: body.Password,
+		Email:     body.Email,
+		Password:  body.Password,
+		UserAgent: r.UserAgent(),
+		IP:        clientIP(r),
 	})
 	if err != nil {
 		log.Printf("login failed email=%s: %v", body.Email, err)
@@ -169,50 +172,51 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("login success user_id=%s role=%s email=%s", res.User.ID, res.User.Role, res.User.Email)
 
+	s.setRefreshCookie(w, res.Token.RefreshToken, res.Token.RefreshExpiry)
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"success":      true,
-		"access_token": res.Token.AccessToken,
-		"token_type":   "Bearer",
-		"expires_in":   int(s.tokenTTL.Seconds()),
+		"success":            true,
+		"access_token":       res.Token.AccessToken,
+		"token_type":         "Bearer",
+		"expires_in":         int(s.tokenTTL.Seconds()),
+		"refresh_expires_in": int(s.refreshTTL.Seconds()),
 	})
 }
 
-func (s *Server) handleIngestionDaily(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		TradeDate string `json:"trade_date"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie(refreshCookieName)
+	if err != nil || cookie.Value == "" {
+		writeError(w, http.StatusUnauthorized, errCodeUnauthorized, "missing refresh token")
 		return
 	}
-	tradeDate, err := time.Parse("2006-01-02", body.TradeDate)
+	pair, err := s.tokenSvc.Refresh(r.Context(), cookie.Value)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid trade_date")
+		log.Printf("refresh token failed: %v", err)
+		writeError(w, http.StatusUnauthorized, errCodeUnauthorized, "refresh token expired or invalid")
 		return
 	}
+	s.setRefreshCookie(w, pair.RefreshToken, pair.RefreshExpiry)
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success":            true,
+		"access_token":       pair.AccessToken,
+		"token_type":         "Bearer",
+		"expires_in":         int(time.Until(pair.AccessExpiry).Seconds()),
+		"refresh_expires_in": int(time.Until(pair.RefreshExpiry).Seconds()),
+	})
+}
 
-	start := time.Now()
-	log.Printf("ingestion daily start trade_date=%s", tradeDate.Format("2006-01-02"))
-	err = s.generateDailyPrices(r.Context(), tradeDate)
-	fmt.Println(err)
-	if err != nil {
-		log.Printf("ingestion error: %v; fallback to synthetic BTC", err)
-		fbErr := s.generateSyntheticBTC(r.Context(), tradeDate)
-		fmt.Println(fbErr)
-		if fbErr != nil {
-			log.Printf("fallback ingestion failed: %v", fbErr)
-			writeError(w, http.StatusInternalServerError, errCodeInternal, "ingestion failed")
-			return
+func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie(refreshCookieName)
+	if err == nil && cookie.Value != "" {
+		if s.logoutUC != nil {
+			if revokeErr := s.logoutUC.Execute(r.Context(), cookie.Value); revokeErr != nil {
+				log.Printf("logout revoke refresh failed: %v", revokeErr)
+			}
 		}
 	}
-	log.Printf("ingestion daily done trade_date=%s duration=%s", tradeDate.Format("2006-01-02"), time.Since(start))
-
+	s.setRefreshCookie(w, "", time.Now().Add(-time.Hour))
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"success":       true,
-		"trade_date":    tradeDate.Format("2006-01-02"),
-		"total_stocks":  2,
-		"success_count": 2,
-		"failure_count": 0,
+		"success": true,
+		"message": "logged out",
 	})
 }
 
@@ -258,11 +262,17 @@ func (s *Server) handleIngestionBackfill(w http.ResponseWriter, r *http.Request)
 
 	for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
 		totalDays++
-		if err := s.generateDailyPricesStrict(r.Context(), d); err != nil {
+		var ingestErr error
+		if s.useSynthetic {
+			ingestErr = s.generateDailyPrices(r.Context(), d)
+		} else {
+			ingestErr = s.generateDailyPricesStrict(r.Context(), d)
+		}
+		if ingestErr != nil {
 			failures = append(failures, backfillFailure{
 				TradeDate: d.Format("2006-01-02"),
 				Stage:     "ingestion",
-				Reason:    err.Error(),
+				Reason:    ingestErr.Error(),
 			})
 			continue
 		}
@@ -291,43 +301,6 @@ func (s *Server) handleIngestionBackfill(w http.ResponseWriter, r *http.Request)
 		"failure_days":           len(failures),
 		"analysis_enabled":       runAnalysis,
 		"failures":               failures,
-	})
-}
-
-func (s *Server) handleAnalysisDaily(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		TradeDate string `json:"trade_date"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
-		return
-	}
-	tradeDate, err := time.Parse("2006-01-02", body.TradeDate)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid trade_date")
-		return
-	}
-
-	start := time.Now()
-	log.Printf("analysis daily start trade_date=%s", tradeDate.Format("2006-01-02"))
-	stats, err := s.runAnalysisForDate(r.Context(), tradeDate)
-	if err != nil {
-		if errors.Is(err, errNoPrices) {
-			writeError(w, http.StatusConflict, errCodeIngestionNotReady, "ingestion data not ready for trade_date")
-			return
-		}
-		log.Printf("analysis read prices failed: %v", err)
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "failed to read prices")
-		return
-	}
-	log.Printf("analysis daily done trade_date=%s success=%d duration=%s", tradeDate.Format("2006-01-02"), stats.success, time.Since(start))
-
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"success":       true,
-		"trade_date":    tradeDate.Format("2006-01-02"),
-		"total_stocks":  stats.total,
-		"success_count": stats.success,
-		"failure_count": stats.failure,
 	})
 }
 
@@ -985,6 +958,57 @@ func (s *Server) startAutoPipeline() {
 	}()
 }
 
+// startConfigBackfill 依組態設定的起始日，啟動一次性補資料與分析（僅補尚未分析的日期）。
+func (s *Server) startConfigBackfill() {
+	startDateStr := s.backfillStart
+	if startDateStr == "" {
+		return
+	}
+	startDate, err := time.Parse("2006-01-02", startDateStr)
+	if err != nil {
+		log.Printf("config backfill skipped: invalid date %s", startDateStr)
+		return
+	}
+	go func() {
+		endDate := time.Now().UTC().Truncate(24 * time.Hour)
+		if startDate.After(endDate) {
+			log.Printf("config backfill skipped: start_date %s after today", startDateStr)
+			return
+		}
+		ctx := context.Background()
+		log.Printf("config backfill start from=%s to=%s synthetic=%t", startDate.Format("2006-01-02"), endDate.Format("2006-01-02"), s.useSynthetic)
+		days := 0
+		completed := 0
+		for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
+			days++
+			has, err := s.dataRepo.HasAnalysisForDate(ctx, d)
+			if err != nil {
+				log.Printf("config backfill check failed date=%s: %v", d.Format("2006-01-02"), err)
+				continue
+			}
+			if has {
+				continue
+			}
+			var ingestErr error
+			if s.useSynthetic {
+				ingestErr = s.generateDailyPrices(ctx, d)
+			} else {
+				ingestErr = s.generateDailyPricesStrict(ctx, d)
+			}
+			if ingestErr != nil {
+				log.Printf("config backfill ingestion failed date=%s: %v", d.Format("2006-01-02"), ingestErr)
+				continue
+			}
+			if _, err := s.runAnalysisForDate(ctx, d); err != nil {
+				log.Printf("config backfill analysis failed date=%s: %v", d.Format("2006-01-02"), err)
+				continue
+			}
+			completed++
+		}
+		log.Printf("config backfill done total_days=%d completed=%d", days, completed)
+	}()
+}
+
 func (s *Server) runPipelineOnce() {
 	tradeDate := time.Now().UTC().Truncate(24 * time.Hour)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -1027,6 +1051,45 @@ func (s *Server) runPipelineOnce() {
 }
 
 // --- Helpers ---
+
+func (s *Server) setRefreshCookie(w http.ResponseWriter, token string, expiry time.Time) {
+	if token == "" {
+		http.SetCookie(w, &http.Cookie{
+			Name:     refreshCookieName,
+			Value:    "",
+			Path:     "/",
+			MaxAge:   -1,
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+		})
+		return
+	}
+	seconds := int(time.Until(expiry).Seconds())
+	if seconds <= 0 {
+		seconds = 0
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     refreshCookieName,
+		Value:    token,
+		Path:     "/",
+		Expires:  expiry,
+		MaxAge:   seconds,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+func clientIP(r *http.Request) string {
+	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+		parts := strings.Split(fwd, ",")
+		return strings.TrimSpace(parts[0])
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err == nil {
+		return host
+	}
+	return r.RemoteAddr
+}
 
 func (s *Server) requireAuth(perm auth.Permission, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -3,7 +3,7 @@ info:
   title: AI Auto Trade MVP API
   version: "1.0.0"
   description: |
-    MVP 端到端流程的 HTTP API。涵蓋登入、手動日 K 擷取、日批次分析、分析結果查詢與固定條件的強勢股篩選。
+    MVP 端到端流程的 HTTP API。涵蓋登入、歷史回補（可同步分析）、分析結果查詢與固定條件的強勢股篩選。
 servers:
   - url: http://localhost:8080
     description: Local server
@@ -30,6 +30,7 @@ paths:
     post:
       tags: [Auth]
       summary: 使用 Email/Password 登入並取得 Access Token
+      description: 成功登入後會在回應中帶回 access token，並以 HttpOnly Cookie 寫入 refresh token，方便服務重啟後自動續期。
       requestBody:
         required: true
         content:
@@ -49,37 +50,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-  /api/admin/ingestion/daily:
+  /api/auth/refresh:
     post:
-      tags: [Ingestion]
-      summary: 手動觸發單日日 K 擷取
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TradeDateRequest'
+      tags: [Auth]
+      summary: 使用 refresh token 續期 access token
+      description: 需附帶伺服器簽發的 HttpOnly Cookie `refresh_token`，成功後會回傳新的 access token 並更新 cookie。
       responses:
         "200":
-          description: 執行成功
+          description: 續期成功
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/IngestionResponse'
+                $ref: '#/components/schemas/LoginResponse'
         "401":
-          description: 未登入或 token 失效
+          description: refresh token 過期或無效
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-        "403":
-          description: 權限不足（需 admin 或 analyst，且具 ingestion.trigger_daily）
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      summary: 登出並撤銷 refresh token
+      description: 會將 refresh token 標記為失效並清除瀏覽器 Cookie。
+      responses:
+        "200":
+          description: 登出完成
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/LogoutResponse'
   /api/admin/ingestion/backfill:
     post:
       tags: [Ingestion]
@@ -113,43 +113,6 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         "403":
           description: 權限不足（需 admin 或 analyst，且具 ingestion.trigger_backfill）
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-  /api/admin/analysis/daily:
-    post:
-      tags: [Analysis]
-      summary: 手動觸發單日分析
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TradeDateRequest'
-      responses:
-        "200":
-          description: 執行成功
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AnalysisJobResponse'
-        "401":
-          description: 未登入或 token 失效
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "403":
-          description: 權限不足（需 admin 或 analyst，且具 analysis.trigger_daily）
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "409":
-          description: 缺少 ingestion 資料
           content:
             application/json:
               schema:
@@ -382,32 +345,19 @@ components:
           type: integer
           description: 秒數
           example: 1800
-    TradeDateRequest:
-      type: object
-      properties:
-        trade_date:
-          type: string
-          format: date
-          example: "2025-12-01"
-      required: [trade_date]
-    IngestionResponse:
+        refresh_expires_in:
+          type: integer
+          description: refresh token 剩餘秒數
+          example: 2592000
+    LogoutResponse:
       type: object
       properties:
         success:
           type: boolean
           example: true
-        trade_date:
+        message:
           type: string
-          format: date
-        total_stocks:
-          type: integer
-          example: 1
-        success_count:
-          type: integer
-          example: 2
-        failure_count:
-          type: integer
-          example: 0
+          example: logged out
     BackfillRequest:
       type: object
       properties:
@@ -467,24 +417,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BackfillFailure'
-    AnalysisJobResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-          example: true
-        trade_date:
-          type: string
-          format: date
-        total_stocks:
-          type: integer
-          example: 2
-        success_count:
-          type: integer
-          example: 2
-        failure_count:
-          type: integer
-          example: 0
     AnalysisItem:
       type: object
       properties:

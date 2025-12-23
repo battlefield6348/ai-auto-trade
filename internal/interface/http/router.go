@@ -9,6 +9,7 @@ import (
 	"ai-auto-trade/internal/application/analysis"
 	"ai-auto-trade/internal/application/auth"
 	"ai-auto-trade/internal/application/mvp"
+	authDomain "ai-auto-trade/internal/domain/auth"
 	"ai-auto-trade/internal/infra/memory"
 	authinfra "ai-auto-trade/internal/infrastructure/auth"
 	"ai-auto-trade/internal/infrastructure/config"
@@ -20,21 +21,24 @@ const seedTimeout = 5 * time.Second
 
 // Server 封裝 HTTP 路由與依賴。
 type Server struct {
-	mux          *http.ServeMux
-	store        *memory.Store
-	loginUC      *auth.LoginUseCase
-	authz        *auth.Authorizer
-	queryUC      *analysis.QueryUseCase
-	screenerUC   *mvp.StrongScreener
-	tokenTTL     time.Duration
-	db           *sql.DB
-	dataRepo     DataRepository
-	authRepo     auth.UserRepository
-	tokenSvc     *authinfra.JWTIssuer
-	useSynthetic bool
-	tgClient     *notify.TelegramClient
-	tgConfig     config.TelegramConfig
-	autoInterval time.Duration
+	mux           *http.ServeMux
+	store         *memory.Store
+	loginUC       *auth.LoginUseCase
+	logoutUC      *auth.LogoutUseCase
+	authz         *auth.Authorizer
+	queryUC       *analysis.QueryUseCase
+	screenerUC    *mvp.StrongScreener
+	tokenTTL      time.Duration
+	refreshTTL    time.Duration
+	db            *sql.DB
+	dataRepo      DataRepository
+	authRepo      auth.UserRepository
+	tokenSvc      *authinfra.JWTIssuer
+	useSynthetic  bool
+	tgClient      *notify.TelegramClient
+	tgConfig      config.TelegramConfig
+	autoInterval  time.Duration
+	backfillStart string
 }
 
 // NewServer 建立 API 伺服器，預設使用記憶體資料存儲；若 db 未來可用，再注入對應 repository。
@@ -44,20 +48,29 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 
 	var dataRepo DataRepository
 	var authRepo auth.UserRepository
+	var sessionStore authDomain.SessionStore
 	if db != nil {
 		dataRepo = postgres.NewRepo(db)
-		authRepo = postgres.NewAuthRepo(db)
+		repo := postgres.NewAuthRepo(db)
+		authRepo = repo
+		sessionStore = repo
 	} else {
 		dataRepo = memoryRepoAdapter{store: store}
 		authRepo = store
+		sessionStore = store
 	}
 
 	ttl := cfg.Auth.TokenTTL
 	if ttl == 0 {
 		ttl = 30 * time.Minute
 	}
-	tokenSvc := authinfra.NewJWTIssuer(cfg.Auth.Secret, ttl)
+	refreshTTL := cfg.Auth.RefreshTTL
+	if refreshTTL == 0 {
+		refreshTTL = 30 * 24 * time.Hour
+	}
+	tokenSvc := authinfra.NewJWTIssuer(cfg.Auth.Secret, ttl, refreshTTL, sessionStore, authRepo)
 	loginUC := auth.NewLoginUseCase(authRepo, authinfra.BcryptHasher{}, tokenSvc)
+	logoutUC := auth.NewLogoutUseCase(tokenSvc)
 	authz := auth.NewAuthorizer(authRepo, memory.OwnerChecker{})
 	queryUC := analysis.NewQueryUseCase(dataRepo)
 	screenerUC := mvp.NewStrongScreener(dataRepo)
@@ -67,21 +80,24 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 	}
 
 	s := &Server{
-		mux:          http.NewServeMux(),
-		store:        store,
-		loginUC:      loginUC,
-		authz:        authz,
-		queryUC:      queryUC,
-		screenerUC:   screenerUC,
-		tokenTTL:     ttl,
-		db:           db,
-		dataRepo:     dataRepo,
-		authRepo:     authRepo,
-		tokenSvc:     tokenSvc,
-		useSynthetic: cfg.Ingestion.UseSynthetic,
-		tgClient:     tgClient,
-		tgConfig:     cfg.Notifier.Telegram,
-		autoInterval: cfg.Ingestion.AutoInterval,
+		mux:           http.NewServeMux(),
+		store:         store,
+		loginUC:       loginUC,
+		logoutUC:      logoutUC,
+		authz:         authz,
+		queryUC:       queryUC,
+		screenerUC:    screenerUC,
+		tokenTTL:      ttl,
+		refreshTTL:    refreshTTL,
+		db:            db,
+		dataRepo:      dataRepo,
+		authRepo:      authRepo,
+		tokenSvc:      tokenSvc,
+		useSynthetic:  cfg.Ingestion.UseSynthetic,
+		tgClient:      tgClient,
+		tgConfig:      cfg.Notifier.Telegram,
+		autoInterval:  cfg.Ingestion.AutoInterval,
+		backfillStart: cfg.Ingestion.BackfillStartDate,
 	}
 	if db != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), seedTimeout)
@@ -96,6 +112,9 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 	}
 	if s.autoInterval > 0 {
 		go s.startAutoPipeline()
+	}
+	if s.backfillStart != "" {
+		go s.startConfigBackfill()
 	}
 	return s
 }
@@ -114,9 +133,9 @@ func (s *Server) registerRoutes() {
 	s.mux.Handle("/api/ping", s.wrapGet(s.handlePing))
 	s.mux.Handle("/api/health", s.wrapGet(s.handleHealth))
 	s.mux.Handle("/api/auth/login", s.wrapPost(s.handleLogin))
-	s.mux.Handle("/api/admin/ingestion/daily", s.requireAuth(auth.PermIngestionTriggerDaily, s.wrapPost(s.handleIngestionDaily)))
+	s.mux.Handle("/api/auth/refresh", s.wrapPost(s.handleRefresh))
+	s.mux.Handle("/api/auth/logout", s.wrapPost(s.handleLogout))
 	s.mux.Handle("/api/admin/ingestion/backfill", s.requireAuth(auth.PermIngestionTriggerBackfill, s.wrapPost(s.handleIngestionBackfill)))
-	s.mux.Handle("/api/admin/analysis/daily", s.requireAuth(auth.PermAnalysisTriggerDaily, s.wrapPost(s.handleAnalysisDaily)))
 	s.mux.Handle("/api/analysis/daily", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleAnalysisQuery)))
 	s.mux.Handle("/api/analysis/history", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleAnalysisHistory)))
 	s.mux.Handle("/api/analysis/backtest", s.requireAuth(auth.PermAnalysisQuery, s.wrapPost(s.handleAnalysisBacktest)))

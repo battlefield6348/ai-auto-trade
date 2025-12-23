@@ -1179,12 +1179,9 @@ func (s *Server) runPipelineOnce() {
 // --- Helpers ---
 
 func (s *Server) setRefreshCookie(w http.ResponseWriter, r *http.Request, token string, expiry time.Time) {
-	origin := r.Header.Get("Origin")
-	useHTTPS := r.TLS != nil || strings.HasPrefix(strings.ToLower(origin), "https")
-	sameSite := http.SameSiteLaxMode
-	if origin != "" {
-		sameSite = http.SameSiteNoneMode
-	}
+	// 為了透過 ngrok/https 跨網域攜帶 cookie，強制使用 SameSite=None 且 Secure=true。
+	sameSite := http.SameSiteNoneMode
+	useHTTPS := true
 	if token == "" {
 		http.SetCookie(w, &http.Cookie{
 			Name:     refreshCookieName,

@@ -8,7 +8,6 @@ const state = {
   lastScreener: null,
   lastBackfill: null,
   lastChart: null,
-  lastBacktestCriteria: null,
   activity: [],
   updatedAt: null,
 };
@@ -111,28 +110,6 @@ const chartState = {
 
 const backtestSelections = {
   conditions: ["change", "volume", "return", "ma"],
-  must: {
-    change: false,
-    volume: false,
-    return: false,
-    ma: false,
-  },
-};
-
-const readMustFlags = () => {
-  const next = { ...backtestSelections.must };
-  const idMap = {
-    change: "btChangeMust",
-    volume: "btVolMust",
-    return: "btReturnMust",
-    ma: "btMaMust",
-  };
-  Object.entries(idMap).forEach(([key, id]) => {
-    const el = document.getElementById(id);
-    next[key] = !!el?.checked;
-  });
-  backtestSelections.must = next;
-  return next;
 };
 
 const refreshConditionOptions = () => {
@@ -968,69 +945,85 @@ const renderBacktestEvents = (res) => {
   elements.backtestEvents.innerHTML = cards;
 };
 
-const applyBacktestMustFilter = (res) => {
-  if (!res || !res.events || !res.events.length) return res;
-  const cfg = state.lastBacktestCriteria;
-  if (!cfg || !cfg.must) return res;
-  const { must, thresholds = {} } = cfg;
-  const activeMust = Object.entries(must).filter(([, v]) => v);
-  if (!activeMust.length) return res;
-  const hit = (row, cond) => {
-    switch (cond) {
-      case "change":
-        return row.change_percent >= (thresholds.change_min || 0);
-      case "volume":
-        return row.volume_ratio >= (thresholds.volume_ratio_min || 0);
-      case "return":
-        return (row.return_5d || 0) >= (thresholds.return5_min || 0);
-      case "ma":
-        return (row.ma_gap || 0) >= (thresholds.ma_gap_min || 0);
-      default:
-        return true;
-    }
+const numInput = (id, fallback = 0) => {
+  const raw = document.getElementById(id)?.value;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const readWeightConfig = () => ({
+  score: numInput("btScoreWeight", 1),
+  change_bonus: backtestSelections.conditions.includes("change") ? numInput("btChangeBonus", 0) : 0,
+  change_weight: backtestSelections.conditions.includes("change") ? numInput("btChangeWeight", 1) : 0,
+  volume_bonus: backtestSelections.conditions.includes("volume") ? numInput("btVolBonus", 0) : 0,
+  volume_weight: backtestSelections.conditions.includes("volume") ? numInput("btVolWeight", 1) : 0,
+  return_bonus: backtestSelections.conditions.includes("return") ? numInput("btReturnBonus", 0) : 0,
+  return_weight: backtestSelections.conditions.includes("return") ? numInput("btReturnWeight", 1) : 0,
+  ma_bonus: backtestSelections.conditions.includes("ma") ? numInput("btMaBonus", 0) : 0,
+  ma_weight: backtestSelections.conditions.includes("ma") ? numInput("btMaWeight", 1) : 0,
+});
+
+const readThresholds = () => ({
+  total_min: numInput("btTotalMin", 0),
+  change_min: backtestSelections.conditions.includes("change") ? numInput("btChangeMin", 0) / 100 : 0,
+  volume_ratio_min: backtestSelections.conditions.includes("volume") ? numInput("btVolMin", 0) : 0,
+  return5_min: backtestSelections.conditions.includes("return") ? numInput("btReturnMin", 0) / 100 : 0,
+  ma_gap_min: backtestSelections.conditions.includes("ma") ? numInput("btMaGap", 0) / 100 : 0,
+});
+
+const applyWeightedScoring = (res) => {
+  if (!res || !res.events) return res;
+  const weights = readWeightConfig();
+  const thresholds = readThresholds();
+  const flags = {
+    change: backtestSelections.conditions.includes("change"),
+    volume: backtestSelections.conditions.includes("volume"),
+    return: backtestSelections.conditions.includes("return"),
+    ma: backtestSelections.conditions.includes("ma"),
   };
-  const filteredEvents = res.events.filter((row) => activeMust.every(([cond]) => hit(row, cond)));
-  return { ...res, events: filteredEvents, total_events: filteredEvents.length };
+  const events = (res.events || []).map((row) => {
+    let total = 0;
+    const comp = { ...(row.components || {}) };
+    const baseScore = (row.score || 0) * (weights.score || 0);
+    comp.base = baseScore;
+    total += baseScore;
+    if (flags.change && row.change_percent >= thresholds.change_min) {
+      const v = weights.change_bonus * (weights.change_weight || 1);
+      comp.change = v;
+      total += v;
+    }
+    if (flags.volume && row.volume_ratio >= thresholds.volume_ratio_min) {
+      const v = weights.volume_bonus * (weights.volume_weight || 1);
+      comp.volume = v;
+      total += v;
+    }
+    if (flags.return && (row.return_5d || 0) >= thresholds.return5_min) {
+      const v = weights.return_bonus * (weights.return_weight || 1);
+      comp.return = v;
+      total += v;
+    }
+    if (flags.ma && (row.ma_gap || 0) >= thresholds.ma_gap_min) {
+      const v = weights.ma_bonus * (weights.ma_weight || 1);
+      comp.ma = v;
+      total += v;
+    }
+    return { ...row, total_score: total, components: comp };
+  });
+  const filtered = events.filter((ev) => ev.total_score >= thresholds.total_min);
+  return { ...res, events: filtered, total_events: filtered.length };
 };
 
 const buildBacktestPayload = () => {
-  const mustFlags = readMustFlags();
+  const weights = readWeightConfig();
   const start_date = document.getElementById("btStart").value;
   const end_date = document.getElementById("btEnd").value;
-  const config = {
+  const thresholds = readThresholds();
+  return {
     symbol: "BTCUSDT",
     start_date,
     end_date,
-    weights: {
-      score: Number(document.getElementById("btScoreWeight").value || 1),
-      change_bonus: backtestSelections.conditions.includes("change")
-        ? Number(document.getElementById("btChangeBonus").value || 0)
-        : 0,
-      volume_bonus: backtestSelections.conditions.includes("volume")
-        ? Number(document.getElementById("btVolBonus").value || 0)
-        : 0,
-      return_bonus: backtestSelections.conditions.includes("return")
-        ? Number(document.getElementById("btReturnBonus").value || 0)
-        : 0,
-      ma_bonus: backtestSelections.conditions.includes("ma")
-        ? Number(document.getElementById("btMaBonus").value || 0)
-        : 0,
-    },
-    thresholds: {
-      total_min: Number(document.getElementById("btTotalMin").value || 0),
-      change_min: backtestSelections.conditions.includes("change")
-        ? Number(document.getElementById("btChangeMin").value || 0) / 100
-        : 0,
-      volume_ratio_min: backtestSelections.conditions.includes("volume")
-        ? Number(document.getElementById("btVolMin").value || 0)
-        : 0,
-      return5_min: backtestSelections.conditions.includes("return")
-        ? Number(document.getElementById("btReturnMin").value || 0) / 100
-        : 0,
-      ma_gap_min: backtestSelections.conditions.includes("ma")
-        ? Number(document.getElementById("btMaGap").value || 0) / 100
-        : 0,
-    },
+    weights,
+    thresholds,
     flags: {
       use_change: backtestSelections.conditions.includes("change"),
       use_volume: backtestSelections.conditions.includes("volume"),
@@ -1038,17 +1031,6 @@ const buildBacktestPayload = () => {
       use_ma: backtestSelections.conditions.includes("ma"),
     },
     horizons: [3, 5, 10],
-    must: mustFlags,
-  };
-  state.lastBacktestCriteria = config;
-  return {
-    symbol: config.symbol,
-    start_date: config.start_date,
-    end_date: config.end_date,
-    weights: config.weights,
-    thresholds: config.thresholds,
-    flags: config.flags,
-    horizons: config.horizons,
   };
 };
 
@@ -1058,6 +1040,7 @@ const renderBacktestConditions = () => {
     renderEmptyState(elements.btSelectedConditions, "尚未選擇條件");
     return;
   }
+  const current = (id, fallback) => document.getElementById(id)?.value ?? fallback;
   const cards = backtestSelections.conditions
     .map((cond) => {
       if (cond === "change") {
@@ -1068,11 +1051,18 @@ const renderBacktestConditions = () => {
               <button type="button" class="condition-remove" data-remove="change">移除</button>
             </div>
             <div class="optional-fields">
-              <label>日漲跌加分 <input type="number" step="1" id="btChangeBonus" value="10"></label>
-              <label>漲幅門檻(%) <input type="number" step="0.1" id="btChangeMin" value="0.5"></label>
-              <label class="inline-check"><input type="checkbox" id="btChangeMust" ${
-                backtestSelections.must.change ? "checked" : ""
-              }> 必須命中</label>
+              <label>日漲跌加分 <input type="number" step="1" id="btChangeBonus" value="${current(
+                "btChangeBonus",
+                10
+              )}"></label>
+              <label>漲幅門檻(%) <input type="number" step="0.1" id="btChangeMin" value="${current(
+                "btChangeMin",
+                0.5
+              )}"></label>
+              <label>條件加權 <input type="number" step="0.1" id="btChangeWeight" value="${current(
+                "btChangeWeight",
+                1
+              )}"></label>
             </div>
           </div>
         `;
@@ -1085,11 +1075,18 @@ const renderBacktestConditions = () => {
               <button type="button" class="condition-remove" data-remove="volume">移除</button>
             </div>
             <div class="optional-fields">
-              <label>量能加分 <input type="number" step="1" id="btVolBonus" value="10"></label>
-              <label>量能門檻(倍率) <input type="number" step="0.1" id="btVolMin" value="1.2"></label>
-              <label class="inline-check"><input type="checkbox" id="btVolMust" ${
-                backtestSelections.must.volume ? "checked" : ""
-              }> 必須命中</label>
+              <label>量能加分 <input type="number" step="1" id="btVolBonus" value="${current(
+                "btVolBonus",
+                10
+              )}"></label>
+              <label>量能門檻(倍率) <input type="number" step="0.1" id="btVolMin" value="${current(
+                "btVolMin",
+                1.2
+              )}"></label>
+              <label>條件加權 <input type="number" step="0.1" id="btVolWeight" value="${current(
+                "btVolWeight",
+                1
+              )}"></label>
             </div>
           </div>
         `;
@@ -1102,11 +1099,18 @@ const renderBacktestConditions = () => {
               <button type="button" class="condition-remove" data-remove="return">移除</button>
             </div>
             <div class="optional-fields">
-              <label>報酬加分 <input type="number" step="1" id="btReturnBonus" value="8"></label>
-              <label>報酬門檻(%) <input type="number" step="0.1" id="btReturnMin" value="1.0"></label>
-              <label class="inline-check"><input type="checkbox" id="btReturnMust" ${
-                backtestSelections.must.return ? "checked" : ""
-              }> 必須命中</label>
+              <label>報酬加分 <input type="number" step="1" id="btReturnBonus" value="${current(
+                "btReturnBonus",
+                8
+              )}"></label>
+              <label>報酬門檻(%) <input type="number" step="0.1" id="btReturnMin" value="${current(
+                "btReturnMin",
+                1.0
+              )}"></label>
+              <label>條件加權 <input type="number" step="0.1" id="btReturnWeight" value="${current(
+                "btReturnWeight",
+                1
+              )}"></label>
             </div>
           </div>
         `;
@@ -1119,11 +1123,18 @@ const renderBacktestConditions = () => {
               <button type="button" class="condition-remove" data-remove="ma">移除</button>
             </div>
             <div class="optional-fields">
-              <label>均線加分 <input type="number" step="1" id="btMaBonus" value="5"></label>
-              <label>乖離門檻(%) <input type="number" step="0.1" id="btMaGap" value="1.0"></label>
-              <label class="inline-check"><input type="checkbox" id="btMaMust" ${
-                backtestSelections.must.ma ? "checked" : ""
-              }> 必須命中</label>
+              <label>均線加分 <input type="number" step="1" id="btMaBonus" value="${current(
+                "btMaBonus",
+                5
+              )}"></label>
+              <label>乖離門檻(%) <input type="number" step="0.1" id="btMaGap" value="${current(
+                "btMaGap",
+                1.0
+              )}"></label>
+              <label>條件加權 <input type="number" step="0.1" id="btMaWeight" value="${current(
+                "btMaWeight",
+                1
+              )}"></label>
             </div>
           </div>
         `;
@@ -1136,7 +1147,6 @@ const renderBacktestConditions = () => {
     btn.addEventListener("click", () => {
       const cond = btn.dataset.remove;
       backtestSelections.conditions = backtestSelections.conditions.filter((c) => c !== cond);
-      delete backtestSelections.must[cond];
       renderBacktestConditions();
       refreshConditionOptions();
     });
@@ -1279,6 +1289,10 @@ const applyBacktestPreset = (preset) => {
     document.getElementById("btVolBonus").value = c.weights.volume_bonus || 0;
     document.getElementById("btReturnBonus").value = c.weights.return_bonus || 0;
     document.getElementById("btMaBonus").value = c.weights.ma_bonus || 0;
+    document.getElementById("btChangeWeight").value = c.weights.change_weight || 1;
+    document.getElementById("btVolWeight").value = c.weights.volume_weight || 1;
+    document.getElementById("btReturnWeight").value = c.weights.return_weight || 1;
+    document.getElementById("btMaWeight").value = c.weights.ma_weight || 1;
   }
   const nextConds = [];
   if (c.flags?.use_change) nextConds.push("change");
@@ -1287,12 +1301,6 @@ const applyBacktestPreset = (preset) => {
   if (c.flags?.use_ma) nextConds.push("ma");
   if (!nextConds.length) nextConds.push("change", "volume");
   backtestSelections.conditions = nextConds;
-  backtestSelections.must = {
-    change: false,
-    volume: false,
-    return: false,
-    ma: false,
-  };
   updateOptionalFields();
 };
 
@@ -1383,27 +1391,27 @@ if (elements.backtestForm) {
         renderChartPlaceholder("請設定回測日期區間");
         return;
       }
-      if (backtestSelections.conditions.length === 0) {
-        renderChartPlaceholder("請先選擇至少一個條件");
-        return;
-      }
-      const payload = buildBacktestPayload();
-      renderChartLoading();
-      const res = await api("/api/analysis/backtest", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-      const filtered = applyBacktestMustFilter(res);
-      state.lastBacktest = filtered;
-      renderBacktestSummary(filtered);
-      renderBacktestEvents(filtered);
-      if (state.lastChart && state.lastChart.items) {
-        renderHistoryChart(state.lastChart, filtered.events || []);
-      }
-      logActivity("條件回測", `命中 ${fmtInt(filtered.total_events)} 筆`);
-    } catch (err) {
-      renderChartPlaceholder(err.message);
-    }
+  if (backtestSelections.conditions.length === 0) {
+    renderChartPlaceholder("請先選擇至少一個條件");
+    return;
+  }
+  const payload = buildBacktestPayload();
+  renderChartLoading();
+  const res = await api("/api/analysis/backtest", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  const weighted = applyWeightedScoring(res);
+  state.lastBacktest = weighted;
+  renderBacktestSummary(weighted);
+  renderBacktestEvents(weighted);
+  if (state.lastChart && state.lastChart.items) {
+    renderHistoryChart(state.lastChart, weighted.events || []);
+  }
+  logActivity("條件回測", `命中 ${fmtInt(weighted.total_events)} 筆`);
+} catch (err) {
+  renderChartPlaceholder(err.message);
+}
   });
 }
 

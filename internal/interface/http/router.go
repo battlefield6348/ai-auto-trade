@@ -56,7 +56,7 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 		repo := postgres.NewAuthRepo(db)
 		authRepo = repo
 		sessionStore = repo
-		presetStore = postgres.NewBacktestPresetStore(db)
+		presetStore = pgPresetStore{repo: postgres.NewBacktestPresetStore(db)}
 	} else {
 		dataRepo = memoryRepoAdapter{store: store}
 		authRepo = store

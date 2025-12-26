@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 	analysisDomain "ai-auto-trade/internal/domain/analysis"
 	dataDomain "ai-auto-trade/internal/domain/dataingestion"
 	"ai-auto-trade/internal/infra/memory"
+	"ai-auto-trade/internal/infrastructure/persistence/postgres"
 )
 
 const (
@@ -53,6 +55,10 @@ type memoryRepoAdapter struct {
 
 type memoryPresetStore struct {
 	store *memory.Store
+}
+
+type pgPresetStore struct {
+	repo *postgres.BacktestPresetStore
 }
 
 func (m memoryPresetStore) Save(ctx context.Context, userID string, config []byte) error {
@@ -96,6 +102,45 @@ func (m memoryPresetStore) List(ctx context.Context, userID string) ([]presetRec
 func (m memoryPresetStore) Delete(ctx context.Context, userID, id string) error {
 	return m.store.DeletePreset(ctx, userID, id)
 }
+
+func (p pgPresetStore) Save(ctx context.Context, userID string, config []byte) error {
+	return p.repo.Save(ctx, userID, config)
+}
+
+func (p pgPresetStore) Load(ctx context.Context, userID string) ([]byte, error) {
+	return p.repo.Load(ctx, userID)
+}
+
+func (p pgPresetStore) SaveNamed(ctx context.Context, userID, name string, config []byte) (string, error) {
+	return p.repo.SaveNamed(ctx, userID, name, config)
+}
+
+func (p pgPresetStore) List(ctx context.Context, userID string) ([]presetRecord, error) {
+	rows, err := p.repo.List(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]presetRecord, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, presetRecord{
+			ID:        r.ID,
+			Name:      r.Name,
+			Config:    r.Config,
+			CreatedAt: r.CreatedAt,
+			UpdatedAt: r.UpdatedAt,
+		})
+	}
+	return out, nil
+}
+
+func (p pgPresetStore) Delete(ctx context.Context, userID, id string) error {
+	return p.repo.Delete(ctx, userID, id)
+}
+
+func (p pgPresetStore) NotFound(err error) bool {
+	return errors.Is(err, sql.ErrNoRows)
+}
+
 func (m memoryRepoAdapter) UpsertTradingPair(ctx context.Context, pair, name string, market dataDomain.Market, industry string) (string, error) {
 	return m.store.UpsertTradingPair(pair, name, market, industry), nil
 }

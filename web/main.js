@@ -18,6 +18,11 @@ const elements = {
   overviewTime: document.getElementById("overviewTime"),
   overviewMode: document.getElementById("overviewMode"),
   loginMessage: document.getElementById("loginMessage"),
+  comboName: document.getElementById("comboName"),
+  comboSelect: document.getElementById("comboSelect"),
+  comboSaveBtn: document.getElementById("comboSaveBtn"),
+  comboApplyBtn: document.getElementById("comboApplyBtn"),
+  comboDeleteBtn: document.getElementById("comboDeleteBtn"),
   resetZoomBtn: document.getElementById("resetZoomBtn"),
   chartForm: document.getElementById("chartForm"),
   chartStart: document.getElementById("chartStart"),
@@ -1010,7 +1015,7 @@ const applyWeightedScoring = (res) => {
     return { ...row, total_score: total, components: comp };
   });
   const filtered = events.filter((ev) => ev.total_score >= thresholds.total_min);
-  return { ...res, events: filtered, total_events: filtered.length };
+  return { ...res, events: filtered, total_events: filtered.length, params: { weights, thresholds } };
 };
 
 const buildBacktestPayload = () => {
@@ -1030,6 +1035,7 @@ const buildBacktestPayload = () => {
       use_return: backtestSelections.conditions.includes("return"),
       use_ma: backtestSelections.conditions.includes("ma"),
     },
+    conditions: [...backtestSelections.conditions],
     horizons: [3, 5, 10],
   };
 };
@@ -1380,6 +1386,68 @@ if (elements.resetZoomBtn) {
   elements.resetZoomBtn.addEventListener("click", resetZoom);
 }
 
+const comboKey = "btCombos";
+const comboStore = {
+  list: [],
+};
+
+const loadCombos = () => {
+  try {
+    const raw = localStorage.getItem(comboKey);
+    comboStore.list = raw ? JSON.parse(raw) : [];
+  } catch (_) {
+    comboStore.list = [];
+  }
+  renderComboList();
+};
+
+const renderComboList = () => {
+  if (!elements.comboSelect) return;
+  const options =
+    comboStore.list.length === 0
+      ? `<option value="">尚未儲存組合</option>`
+      : `<option value="">選擇組合套用…</option>` +
+        comboStore.list
+          .map((c) => `<option value="${c.id}">${c.name || "未命名組合"}</option>`)
+          .join("");
+  elements.comboSelect.innerHTML = options;
+};
+
+const saveCombo = () => {
+  const name = (elements.comboName?.value || "").trim() || "未命名組合";
+  const payload = buildBacktestPayload();
+  const combo = {
+    id: `combo_${Date.now()}`,
+    name,
+    payload,
+    created_at: new Date().toISOString(),
+  };
+  comboStore.list.unshift(combo);
+  localStorage.setItem(comboKey, JSON.stringify(comboStore.list));
+  renderComboList();
+  setStatus(`已儲存組合：${name}`, "good");
+};
+
+const findCombo = (id) => comboStore.list.find((c) => c.id === id);
+
+const applyCombo = () => {
+  const id = elements.comboSelect?.value;
+  if (!id) return;
+  const combo = findCombo(id);
+  if (!combo) return;
+  applyBacktestConfig(combo.payload);
+  setStatus(`已套用組合：${combo.name}`, "good");
+};
+
+const deleteCombo = () => {
+  const id = elements.comboSelect?.value;
+  if (!id) return;
+  comboStore.list = comboStore.list.filter((c) => c.id !== id);
+  localStorage.setItem(comboKey, JSON.stringify(comboStore.list));
+  renderComboList();
+  setStatus("組合已刪除", "warn");
+};
+
 if (elements.backtestForm) {
   elements.backtestForm.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -1403,16 +1471,28 @@ if (elements.backtestForm) {
   });
   const weighted = applyWeightedScoring(res);
   state.lastBacktest = weighted;
-  renderBacktestSummary(weighted);
-  renderBacktestEvents(weighted);
-  if (state.lastChart && state.lastChart.items) {
-    renderHistoryChart(state.lastChart, weighted.events || []);
-  }
-  logActivity("條件回測", `命中 ${fmtInt(weighted.total_events)} 筆`);
-} catch (err) {
-  renderChartPlaceholder(err.message);
-}
+      renderBacktestSummary(weighted);
+      renderBacktestEvents(weighted);
+      if (state.lastChart && state.lastChart.items) {
+        renderHistoryChart(state.lastChart, weighted.events || []);
+      }
+      logActivity("條件回測", `命中 ${fmtInt(weighted.total_events)} 筆`);
+    } catch (err) {
+      renderChartPlaceholder(err.message);
+    }
   });
+}
+
+if (elements.comboSaveBtn) {
+  elements.comboSaveBtn.addEventListener("click", saveCombo);
+}
+
+if (elements.comboApplyBtn) {
+  elements.comboApplyBtn.addEventListener("click", applyCombo);
+}
+
+if (elements.comboDeleteBtn) {
+  elements.comboDeleteBtn.addEventListener("click", deleteCombo);
 }
 
 document.getElementById("queryForm").addEventListener("submit", async (e) => {
@@ -1495,3 +1575,42 @@ function updateOptionalFields() {
   renderBacktestConditions();
   refreshConditionOptions();
 }
+
+function applyBacktestConfig(cfg) {
+  if (!cfg) return;
+  document.getElementById("btStart").value = cfg.start_date || document.getElementById("btStart").value;
+  document.getElementById("btEnd").value = cfg.end_date || document.getElementById("btEnd").value;
+  if (cfg.weights) {
+    document.getElementById("btScoreWeight").value = cfg.weights.score ?? 1;
+    document.getElementById("btChangeBonus").value = cfg.weights.change_bonus ?? 0;
+    document.getElementById("btVolBonus").value = cfg.weights.volume_bonus ?? 0;
+    document.getElementById("btReturnBonus").value = cfg.weights.return_bonus ?? 0;
+    document.getElementById("btMaBonus").value = cfg.weights.ma_bonus ?? 0;
+    document.getElementById("btChangeWeight").value = cfg.weights.change_weight ?? 1;
+    document.getElementById("btVolWeight").value = cfg.weights.volume_weight ?? 1;
+    document.getElementById("btReturnWeight").value = cfg.weights.return_weight ?? 1;
+    document.getElementById("btMaWeight").value = cfg.weights.ma_weight ?? 1;
+  }
+  if (cfg.thresholds) {
+    document.getElementById("btTotalMin").value = cfg.thresholds.total_min ?? 60;
+    document.getElementById("btChangeMin").value = (cfg.thresholds.change_min || 0) * 100;
+    document.getElementById("btVolMin").value = cfg.thresholds.volume_ratio_min || 0;
+    document.getElementById("btReturnMin").value = (cfg.thresholds.return5_min || 0) * 100;
+    document.getElementById("btMaGap").value = (cfg.thresholds.ma_gap_min || 0) * 100;
+  }
+  let nextConds = [];
+  if (cfg.conditions && cfg.conditions.length) {
+    nextConds = [...cfg.conditions];
+  } else if (cfg.flags) {
+    if (cfg.flags.use_change) nextConds.push("change");
+    if (cfg.flags.use_volume) nextConds.push("volume");
+    if (cfg.flags.use_return) nextConds.push("return");
+    if (cfg.flags.use_ma) nextConds.push("ma");
+  }
+  if (!nextConds.length) nextConds.push("change", "volume");
+  backtestSelections.conditions = nextConds;
+  renderBacktestConditions();
+  refreshConditionOptions();
+}
+
+loadCombos();

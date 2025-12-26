@@ -1239,6 +1239,7 @@ refreshAccessToken().then((ok) => {
   if (ok) {
     setMessage(elements.loginMessage, "已自動登入，Token 已更新", "good");
     logActivity("自動登入", "沿用前一次的登入狀態");
+    fetchCombos();
   } else {
     setStatus("未登入", "warn");
   }
@@ -1352,6 +1353,7 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
     setMessage(elements.loginMessage, "登入成功", "good");
     toggleProtectedSections(true);
     logActivity("登入成功", `帳號 ${email}`);
+    fetchCombos();
   } catch (err) {
     setMessage(elements.loginMessage, `登入失敗：${err.message}`, "error");
     setStatus("未登入", "warn");
@@ -1386,19 +1388,8 @@ if (elements.resetZoomBtn) {
   elements.resetZoomBtn.addEventListener("click", resetZoom);
 }
 
-const comboKey = "btCombos";
 const comboStore = {
   list: [],
-};
-
-const loadCombos = () => {
-  try {
-    const raw = localStorage.getItem(comboKey);
-    comboStore.list = raw ? JSON.parse(raw) : [];
-  } catch (_) {
-    comboStore.list = [];
-  }
-  renderComboList();
 };
 
 const renderComboList = () => {
@@ -1413,39 +1404,55 @@ const renderComboList = () => {
   elements.comboSelect.innerHTML = options;
 };
 
-const saveCombo = () => {
-  const name = (elements.comboName?.value || "").trim() || "未命名組合";
-  const payload = buildBacktestPayload();
-  const combo = {
-    id: `combo_${Date.now()}`,
-    name,
-    payload,
-    created_at: new Date().toISOString(),
-  };
-  comboStore.list.unshift(combo);
-  localStorage.setItem(comboKey, JSON.stringify(comboStore.list));
-  renderComboList();
-  setStatus(`已儲存組合：${name}`, "good");
+const fetchCombos = async () => {
+  if (!state.token) return;
+  try {
+    const res = await api("/api/analysis/backtest/presets");
+    if (res.success) {
+      comboStore.list = res.items || [];
+      renderComboList();
+    }
+  } catch (err) {
+    console.warn("fetch combos failed", err);
+  }
 };
 
-const findCombo = (id) => comboStore.list.find((c) => c.id === id);
+const saveCombo = async () => {
+  try {
+    requireLogin();
+    const name = (elements.comboName?.value || "").trim() || "未命名組合";
+    const payload = buildBacktestPayload();
+    await api("/api/analysis/backtest/presets", {
+      method: "POST",
+      body: JSON.stringify({ name, config: payload }),
+    });
+    await fetchCombos();
+    setStatus(`已儲存組合：${name}`, "good");
+  } catch (err) {
+    setStatus(`儲存組合失敗：${err.message}`, "warn");
+  }
+};
 
 const applyCombo = () => {
   const id = elements.comboSelect?.value;
   if (!id) return;
-  const combo = findCombo(id);
+  const combo = comboStore.list.find((c) => c.id === id);
   if (!combo) return;
-  applyBacktestConfig(combo.payload);
+  applyBacktestConfig(combo.config || combo.payload);
   setStatus(`已套用組合：${combo.name}`, "good");
 };
 
-const deleteCombo = () => {
-  const id = elements.comboSelect?.value;
-  if (!id) return;
-  comboStore.list = comboStore.list.filter((c) => c.id !== id);
-  localStorage.setItem(comboKey, JSON.stringify(comboStore.list));
-  renderComboList();
-  setStatus("組合已刪除", "warn");
+const deleteCombo = async () => {
+  try {
+    requireLogin();
+    const id = elements.comboSelect?.value;
+    if (!id) return;
+    await api(`/api/analysis/backtest/presets/${id}`, { method: "DELETE" });
+    await fetchCombos();
+    setStatus("組合已刪除", "warn");
+  } catch (err) {
+    setStatus(`刪除組合失敗：${err.message}`, "warn");
+  }
 };
 
 if (elements.backtestForm) {

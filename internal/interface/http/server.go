@@ -68,7 +68,33 @@ func (m memoryPresetStore) Load(ctx context.Context, userID string) ([]byte, err
 }
 
 func (m memoryPresetStore) NotFound(err error) bool {
-	return err != nil
+	return memory.IsPresetNotFound(err)
+}
+
+func (m memoryPresetStore) SaveNamed(ctx context.Context, userID, name string, config []byte) (string, error) {
+	return m.store.SaveNamed(ctx, userID, name, config)
+}
+
+func (m memoryPresetStore) List(ctx context.Context, userID string) ([]presetRecord, error) {
+	rows, err := m.store.ListPresets(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]presetRecord, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, presetRecord{
+			ID:        r.ID,
+			Name:      r.Name,
+			Config:    r.Config,
+			CreatedAt: r.CreatedAt,
+			UpdatedAt: r.UpdatedAt,
+		})
+	}
+	return out, nil
+}
+
+func (m memoryPresetStore) Delete(ctx context.Context, userID, id string) error {
+	return m.store.DeletePreset(ctx, userID, id)
 }
 func (m memoryRepoAdapter) UpsertTradingPair(ctx context.Context, pair, name string, market dataDomain.Market, industry string) (string, error) {
 	return m.store.UpsertTradingPair(pair, name, market, industry), nil
@@ -150,7 +176,18 @@ type backfillFailure struct {
 type backtestPresetStore interface {
 	Save(ctx context.Context, userID string, config []byte) error
 	Load(ctx context.Context, userID string) ([]byte, error)
+	SaveNamed(ctx context.Context, userID, name string, config []byte) (string, error)
+	List(ctx context.Context, userID string) ([]presetRecord, error)
+	Delete(ctx context.Context, userID, id string) error
 	NotFound(err error) bool
+}
+
+type presetRecord struct {
+	ID        string
+	Name      string
+	Config    []byte
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // --- Handlers ---
@@ -877,6 +914,91 @@ func (s *Server) handleGetBacktestPreset(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+func (s *Server) handleCreateBacktestPreset(w http.ResponseWriter, r *http.Request) {
+	userID := currentUserID(r)
+	if userID == "" || s.presetStore == nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "preset store not available")
+		return
+	}
+	var body struct {
+		Name   string         `json:"name"`
+		Config backtestConfig `json:"config"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+		return
+	}
+	raw, err := json.Marshal(body.Config)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "marshal preset failed")
+		return
+	}
+	id, err := s.presetStore.SaveNamed(r.Context(), userID, body.Name, raw)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "save preset failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"id":      id,
+	})
+}
+
+func (s *Server) handleListBacktestPresets(w http.ResponseWriter, r *http.Request) {
+	userID := currentUserID(r)
+	if userID == "" || s.presetStore == nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "preset store not available")
+		return
+	}
+	rows, err := s.presetStore.List(r.Context(), userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "load presets failed")
+		return
+	}
+	items := make([]map[string]interface{}, 0, len(rows))
+	for _, row := range rows {
+		var cfg backtestConfig
+		if err := json.Unmarshal(row.Config, &cfg); err != nil {
+			continue
+		}
+		items = append(items, map[string]interface{}{
+			"id":         row.ID,
+			"name":       row.Name,
+			"config":     cfg,
+			"created_at": row.CreatedAt,
+			"updated_at": row.UpdatedAt,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"items":   items,
+	})
+}
+
+func (s *Server) handleDeleteBacktestPreset(w http.ResponseWriter, r *http.Request) {
+	userID := currentUserID(r)
+	if userID == "" || s.presetStore == nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "preset store not available")
+		return
+	}
+	id := strings.TrimPrefix(r.URL.Path, "/api/analysis/backtest/presets/")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "preset id required")
+		return
+	}
+	if err := s.presetStore.Delete(r.Context(), userID, id); err != nil {
+		if s.presetStore.NotFound(err) {
+			writeError(w, http.StatusNotFound, errCodeNotFound, "preset not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "delete preset failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+	})
+}
+
 func (s *Server) handleStrongStocks(w http.ResponseWriter, r *http.Request) {
 	tradeDateStr := r.URL.Query().Get("trade_date")
 	if tradeDateStr == "" {
@@ -1275,6 +1397,27 @@ func (s *Server) wrapPost(next http.HandlerFunc) http.Handler {
 			return
 		}
 		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) wrapDelete(next http.HandlerFunc) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) wrapMethods(handlers map[string]http.HandlerFunc) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h, ok := handlers[r.Method]
+		if !ok {
+			writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
+			return
+		}
+		h.ServeHTTP(w, r)
 	})
 }
 

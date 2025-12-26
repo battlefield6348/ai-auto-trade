@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
@@ -25,8 +26,22 @@ type Store struct {
 	pairByCode      map[string]string                                        // pair+market -> id
 	dailyPrices     map[string]map[string]dataDomain.DailyPrice              // date -> stockID -> price
 	analysisResults map[string]map[string]analysisDomain.DailyAnalysisResult // date -> stockID -> result
-	backtestPreset  map[string][]byte
+	backtestPreset  map[string][]backtestPresetRecord
 	idSeq           int64
+}
+
+type backtestPresetRecord struct {
+	ID        string
+	Name      string
+	Config    []byte
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+var errPresetNotFound = fmt.Errorf("preset not found")
+
+func IsPresetNotFound(err error) bool {
+	return errors.Is(err, errPresetNotFound)
 }
 
 type tokenRecord struct {
@@ -63,7 +78,7 @@ func NewStore() *Store {
 		pairByCode:      make(map[string]string),
 		dailyPrices:     make(map[string]map[string]dataDomain.DailyPrice),
 		analysisResults: make(map[string]map[string]analysisDomain.DailyAnalysisResult),
-		backtestPreset:  make(map[string][]byte),
+		backtestPreset:  make(map[string][]backtestPresetRecord),
 	}
 }
 
@@ -198,20 +213,77 @@ func (OwnerChecker) IsOwner(ctx context.Context, userID, resourceID string) bool
 
 // BacktestPresetStore impl
 func (s *Store) Save(ctx context.Context, preset []byte, userID string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.backtestPreset[userID] = preset
-	return nil
+	_, err := s.SaveNamed(ctx, userID, "default", preset)
+	return err
 }
 
 func (s *Store) Load(ctx context.Context, userID string) ([]byte, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	p, ok := s.backtestPreset[userID]
-	if !ok {
-		return nil, fmt.Errorf("not found")
+	list, ok := s.backtestPreset[userID]
+	if !ok || len(list) == 0 {
+		return nil, errPresetNotFound
 	}
-	return p, nil
+	return list[0].Config, nil
+}
+
+func (s *Store) SaveNamed(ctx context.Context, userID, name string, preset []byte) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if name == "" {
+		name = "未命名組合"
+	}
+	now := time.Now()
+	list := s.backtestPreset[userID]
+	for i, rec := range list {
+		if rec.Name == name {
+			rec.Config = preset
+			rec.UpdatedAt = now
+			list[i] = rec
+			s.backtestPreset[userID] = list
+			return rec.ID, nil
+		}
+	}
+	rec := backtestPresetRecord{
+		ID:        s.nextID(),
+		Name:      name,
+		Config:    preset,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	list = append([]backtestPresetRecord{rec}, list...)
+	s.backtestPreset[userID] = list
+	return rec.ID, nil
+}
+
+func (s *Store) ListPresets(ctx context.Context, userID string) ([]backtestPresetRecord, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	list := append([]backtestPresetRecord(nil), s.backtestPreset[userID]...)
+	sort.Slice(list, func(i, j int) bool {
+		return list[i].UpdatedAt.After(list[j].UpdatedAt)
+	})
+	return list, nil
+}
+
+func (s *Store) DeletePreset(ctx context.Context, userID, id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	list := s.backtestPreset[userID]
+	newList := make([]backtestPresetRecord, 0, len(list))
+	found := false
+	for _, rec := range list {
+		if rec.ID == id {
+			found = true
+			continue
+		}
+		newList = append(newList, rec)
+	}
+	if !found {
+		return errPresetNotFound
+	}
+	s.backtestPreset[userID] = newList
+	return nil
 }
 
 // SessionStore impl

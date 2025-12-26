@@ -160,6 +160,11 @@ func (s *Server) registerRoutes() {
 	s.mux.Handle("/api/analysis/backtest", s.requireAuth(auth.PermAnalysisQuery, s.wrapPost(s.handleAnalysisBacktest)))
 	s.mux.Handle("/api/analysis/backtest/preset", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleGetBacktestPreset)))
 	s.mux.Handle("/api/analysis/backtest/preset/save", s.requireAuth(auth.PermAnalysisQuery, s.wrapPost(s.handleSaveBacktestPreset)))
+	s.mux.Handle("/api/analysis/backtest/presets", s.requireAuth(auth.PermAnalysisQuery, s.wrapMethods(map[string]http.HandlerFunc{
+		http.MethodGet:  s.handleListBacktestPresets,
+		http.MethodPost: s.handleCreateBacktestPreset,
+	})))
+	s.mux.Handle("/api/analysis/backtest/presets/", s.requireAuth(auth.PermAnalysisQuery, s.wrapDelete(s.handleDeleteBacktestPreset)))
 	s.mux.Handle("/api/analysis/summary", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleAnalysisSummary)))
 	s.mux.Handle("/api/screener/strong-stocks", s.requireAuth(auth.PermScreenerUse, s.wrapGet(s.handleStrongStocks)))
 	// 前端操作介面

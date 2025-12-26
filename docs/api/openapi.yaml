@@ -294,6 +294,77 @@ paths:
                 properties:
                   success:
                     type: boolean
+  /api/analysis/backtest/presets:
+    get:
+      tags: [Analysis]
+      summary: 取得使用者的回測條件組合列表
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 成功回傳列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BacktestPresetItem'
+    post:
+      tags: [Analysis]
+      summary: 新增或覆蓋一組回測條件組合（同名會覆蓋）
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "動能加權"
+                config:
+                  $ref: '#/components/schemas/BacktestRequest'
+      responses:
+        "200":
+          description: 建立或覆蓋成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  id:
+                    type: string
+  /api/analysis/backtest/presets/{id}:
+    delete:
+      tags: [Analysis]
+      summary: 刪除指定的回測條件組合
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 刪除成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
   /api/screener/strong-stocks:
     get:
       tags: [Screener]
@@ -711,6 +782,21 @@ components:
             d3: 0.012
             d5: -0.01
             d10: 0.035
+    BacktestPresetItem:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        config:
+          $ref: '#/components/schemas/BacktestRequest'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
     BacktestResponse:
       type: object
       properties:

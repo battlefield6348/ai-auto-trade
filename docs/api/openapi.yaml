@@ -13,6 +13,7 @@ tags:
   - name: Ingestion
   - name: Analysis
   - name: Screener
+  - name: Strategy
 paths:
   /ping:
     get:
@@ -422,6 +423,385 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/admin/strategies:
+    get:
+      tags: [Strategy]
+      summary: 策略列表
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            example: active
+        - in: query
+          name: env
+          schema:
+            type: string
+            example: test
+      responses:
+        "200":
+          description: 查詢成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  strategies:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Strategy'
+        "401":
+          description: 未登入或 token 失效
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags: [Strategy]
+      summary: 建立策略
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Strategy'
+      responses:
+        "200":
+          description: 建立成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  strategy:
+                    $ref: '#/components/schemas/Strategy'
+  /api/admin/strategies/backtest:
+    post:
+      tags: [Strategy]
+      summary: Inline 策略回測（不保存）
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StrategyBacktestRequest'
+      responses:
+        "200":
+          description: 回測結果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  result:
+                    $ref: '#/components/schemas/BacktestRecord'
+  /api/admin/strategies/{id}:
+    get:
+      tags: [Strategy]
+      summary: 取得單一策略
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 查詢成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  strategy:
+                    $ref: '#/components/schemas/Strategy'
+    put:
+      tags: [Strategy]
+      summary: 更新策略（自動升版）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Strategy'
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  strategy:
+                    $ref: '#/components/schemas/Strategy'
+  /api/admin/strategies/{id}/activate:
+    post:
+      tags: [Strategy]
+      summary: 啟用策略（env=test|prod）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                env:
+                  type: string
+                  example: test
+      responses:
+        "200":
+          description: 啟用成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleSuccess'
+  /api/admin/strategies/{id}/deactivate:
+    post:
+      tags: [Strategy]
+      summary: 停用策略
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 停用成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleSuccess'
+  /api/admin/strategies/{id}/backtest:
+    post:
+      tags: [Strategy]
+      summary: 以策略版本回測（會保存紀錄）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StrategyBacktestRequest'
+      responses:
+        "200":
+          description: 回測成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  result:
+                    $ref: '#/components/schemas/BacktestRecord'
+  /api/admin/strategies/{id}/backtests:
+    get:
+      tags: [Strategy]
+      summary: 查詢策略回測紀錄
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 查詢成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  backtests:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BacktestRecord'
+  /api/admin/strategies/{id}/run:
+    post:
+      tags: [Strategy]
+      summary: 立即執行策略（paper/real 共用邏輯）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: env
+          schema:
+            type: string
+            example: test
+      responses:
+        "200":
+          description: 執行結果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  trades:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TradeRecord'
+  /api/admin/strategies/{id}/reports:
+    get:
+      tags: [Strategy]
+      summary: 查詢策略報告
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 查詢成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  reports:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StrategyReport'
+    post:
+      tags: [Strategy]
+      summary: 建立策略報告
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StrategyReport'
+      responses:
+        "200":
+          description: 建立成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  report:
+                    $ref: '#/components/schemas/StrategyReport'
+  /api/admin/trades:
+    get:
+      tags: [Strategy]
+      summary: 交易紀錄查詢
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: strategy_id
+          schema:
+            type: string
+        - in: query
+          name: env
+          schema:
+            type: string
+            example: test
+        - in: query
+          name: start_date
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: end_date
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: 查詢成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  trades:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TradeRecord'
+  /api/admin/positions:
+    get:
+      tags: [Strategy]
+      summary: 查詢未平倉
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: env
+          schema:
+            type: string
+            example: test
+      responses:
+        "200":
+          description: 查詢成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  positions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Position'
 components:
   securitySchemes:
     bearerAuth:
@@ -470,6 +850,12 @@ components:
         message:
           type: string
           example: logged out
+    SimpleSuccess:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
     BackfillRequest:
       type: object
       properties:
@@ -901,6 +1287,235 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ScreenerItem'
+    Strategy:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        base_symbol:
+          type: string
+          example: BTCUSDT
+        timeframe:
+          type: string
+          example: 1d
+        env:
+          type: string
+          example: test
+        status:
+          type: string
+          example: draft
+        version:
+          type: integer
+          example: 1
+        buy_conditions:
+          $ref: '#/components/schemas/ConditionSet'
+        sell_conditions:
+          $ref: '#/components/schemas/ConditionSet'
+        risk_settings:
+          $ref: '#/components/schemas/RiskSettings'
+    ConditionSet:
+      type: object
+      properties:
+        logic:
+          type: string
+          example: AND
+        conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScreenerCondition'
+    RiskSettings:
+      type: object
+      properties:
+        order_size_mode:
+          type: string
+          example: fixed_usdt
+        order_size_value:
+          type: number
+          example: 1000
+        fees_pct:
+          type: number
+          example: 0.001
+        slippage_pct:
+          type: number
+          example: 0.001
+        stop_loss_pct:
+          type: number
+          nullable: true
+          example: 0.03
+        take_profit_pct:
+          type: number
+          nullable: true
+          example: 0.06
+        cool_down_days:
+          type: integer
+          example: 1
+        min_hold_days:
+          type: integer
+          example: 1
+        max_positions:
+          type: integer
+          example: 1
+        price_mode:
+          type: string
+          example: next_open
+    StrategyBacktestRequest:
+      type: object
+      properties:
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        initial_equity:
+          type: number
+          example: 10000
+        price_mode:
+          type: string
+          example: next_open
+        fees_pct:
+          type: number
+          example: 0.001
+        slippage_pct:
+          type: number
+          example: 0.001
+        stop_loss_pct:
+          type: number
+          nullable: true
+        take_profit_pct:
+          type: number
+          nullable: true
+        cool_down_days:
+          type: integer
+          nullable: true
+        min_hold_days:
+          type: integer
+          nullable: true
+        max_positions:
+          type: integer
+          nullable: true
+        strategy:
+          $ref: '#/components/schemas/Strategy'
+    BacktestRecord:
+      type: object
+      properties:
+        id:
+          type: string
+        params:
+          type: object
+        result:
+          type: object
+          properties:
+            trades:
+              type: array
+              items:
+                $ref: '#/components/schemas/TradeRecord'
+            equity_curve:
+              type: array
+              items:
+                type: object
+                properties:
+                  date:
+                    type: string
+                    format: date
+                  equity:
+                    type: number
+            stats:
+              type: object
+              properties:
+                total_return:
+                  type: number
+                max_drawdown:
+                  type: number
+                win_rate:
+                  type: number
+                trade_count:
+                  type: integer
+    TradeRecord:
+      type: object
+      properties:
+        strategy_id:
+          type: string
+        strategy_version:
+          type: integer
+        env:
+          type: string
+          example: test
+        side:
+          type: string
+          example: buy
+        entry_date:
+          type: string
+          format: date
+        entry_price:
+          type: number
+        exit_date:
+          type: string
+          format: date
+          nullable: true
+        exit_price:
+          type: number
+          nullable: true
+        pnl_usdt:
+          type: number
+          nullable: true
+        pnl_pct:
+          type: number
+          nullable: true
+        hold_days:
+          type: integer
+          nullable: true
+        reason:
+          type: string
+    Position:
+      type: object
+      properties:
+        strategy_id:
+          type: string
+        env:
+          type: string
+        entry_date:
+          type: string
+          format: date
+        entry_price:
+          type: number
+        size:
+          type: number
+        stop_loss:
+          type: number
+          nullable: true
+        take_profit:
+          type: number
+          nullable: true
+        status:
+          type: string
+          example: open
+    StrategyReport:
+      type: object
+      properties:
+        id:
+          type: string
+        strategy_id:
+          type: string
+        strategy_version:
+          type: integer
+        env:
+          type: string
+          example: test
+        period_start:
+          type: string
+          format: date
+        period_end:
+          type: string
+          format: date
+        summary:
+          type: object
+        trades_ref:
+          type: object
     ErrorResponse:
       type: object
       properties:

@@ -288,6 +288,29 @@ func (s *Service) RunOnce(ctx context.Context, id string, env tradingDomain.Envi
 	return trades, nil
 }
 
+// ListTrades 查詢交易紀錄。
+func (s *Service) ListTrades(ctx context.Context, filter tradingDomain.TradeFilter) ([]tradingDomain.TradeRecord, error) {
+	return s.repo.ListTrades(ctx, filter)
+}
+
+// ListPositions 查詢所有未平倉。
+func (s *Service) ListPositions(ctx context.Context) ([]tradingDomain.Position, error) {
+	return s.repo.ListOpenPositions(ctx)
+}
+
+// SaveReport 保存報告。
+func (s *Service) SaveReport(ctx context.Context, rep tradingDomain.Report) (string, error) {
+	if rep.CreatedAt.IsZero() {
+		rep.CreatedAt = s.now()
+	}
+	return s.repo.SaveReport(ctx, rep)
+}
+
+// ListReports 查詢報告。
+func (s *Service) ListReports(ctx context.Context, strategyID string) ([]tradingDomain.Report, error) {
+	return s.repo.ListReports(ctx, strategyID)
+}
+
 // loadData 抽取歷史分析與日 K 價格。
 func (s *Service) loadData(ctx context.Context, symbol string, start, end time.Time) ([]analysisDomain.DailyAnalysisResult, []dataDomain.DailyPrice, error) {
 	limit := 4000

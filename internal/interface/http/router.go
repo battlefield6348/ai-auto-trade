@@ -9,6 +9,7 @@ import (
 	"ai-auto-trade/internal/application/analysis"
 	"ai-auto-trade/internal/application/auth"
 	"ai-auto-trade/internal/application/mvp"
+	"ai-auto-trade/internal/application/trading"
 	authDomain "ai-auto-trade/internal/domain/auth"
 	"ai-auto-trade/internal/infra/memory"
 	authinfra "ai-auto-trade/internal/infrastructure/auth"
@@ -40,6 +41,7 @@ type Server struct {
 	autoInterval  time.Duration
 	backfillStart string
 	presetStore   backtestPresetStore
+	tradingSvc    *trading.Service
 }
 
 // NewServer 建立 API 伺服器，預設使用記憶體資料存儲；若 db 未來可用，再注入對應 repository。
@@ -51,17 +53,20 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 	var authRepo auth.UserRepository
 	var sessionStore authDomain.SessionStore
 	var presetStore backtestPresetStore
+	var tradingRepo trading.Repository
 	if db != nil {
 		dataRepo = postgres.NewRepo(db)
 		repo := postgres.NewAuthRepo(db)
 		authRepo = repo
 		sessionStore = repo
 		presetStore = pgPresetStore{repo: postgres.NewBacktestPresetStore(db)}
+		tradingRepo = postgres.NewTradingRepo(db)
 	} else {
 		dataRepo = memoryRepoAdapter{store: store}
 		authRepo = store
 		sessionStore = store
 		presetStore = memoryPresetStore{store: store}
+		tradingRepo = memory.NewTradingRepo()
 	}
 
 	ttl := cfg.Auth.TokenTTL
@@ -78,6 +83,7 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 	authz := auth.NewAuthorizer(authRepo, memory.OwnerChecker{})
 	queryUC := analysis.NewQueryUseCase(dataRepo)
 	screenerUC := mvp.NewStrongScreener(dataRepo)
+	tradingSvc := trading.NewService(tradingRepo, dataRepo)
 	var tgClient *notify.TelegramClient
 	if cfg.Notifier.Telegram.Enabled && cfg.Notifier.Telegram.Token != "" && cfg.Notifier.Telegram.ChatID != 0 {
 		tgClient = notify.NewTelegramClient(cfg.Notifier.Telegram.Token, cfg.Notifier.Telegram.ChatID)
@@ -103,6 +109,7 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 		autoInterval:  cfg.Ingestion.AutoInterval,
 		backfillStart: cfg.Ingestion.BackfillStartDate,
 		presetStore:   presetStore,
+		tradingSvc:    tradingSvc,
 	}
 	if db != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), seedTimeout)
@@ -167,6 +174,15 @@ func (s *Server) registerRoutes() {
 	s.mux.Handle("/api/analysis/backtest/presets/", s.requireAuth(auth.PermAnalysisQuery, s.wrapDelete(s.handleDeleteBacktestPreset)))
 	s.mux.Handle("/api/analysis/summary", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleAnalysisSummary)))
 	s.mux.Handle("/api/screener/strong-stocks", s.requireAuth(auth.PermScreenerUse, s.wrapGet(s.handleStrongStocks)))
+	// 策略與交易
+	s.mux.Handle("/api/admin/strategies", s.requireAuth(auth.PermStrategy, s.wrapMethods(map[string]http.HandlerFunc{
+		http.MethodGet:  s.handleListStrategies,
+		http.MethodPost: s.handleCreateStrategy,
+	})))
+	s.mux.Handle("/api/admin/strategies/backtest", s.requireAuth(auth.PermStrategy, s.wrapPost(s.handleInlineBacktest)))
+	s.mux.Handle("/api/admin/strategies/", s.requireAuth(auth.PermStrategy, http.HandlerFunc(s.handleStrategyRoute)))
+	s.mux.Handle("/api/admin/trades", s.requireAuth(auth.PermStrategy, s.wrapGet(s.handleListTrades)))
+	s.mux.Handle("/api/admin/positions", s.requireAuth(auth.PermStrategy, s.wrapGet(s.handleListPositions)))
 	// 前端操作介面
 	s.mux.Handle("/", http.FileServer(http.Dir("web")))
 }

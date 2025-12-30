@@ -17,8 +17,10 @@ import (
 	"ai-auto-trade/internal/application/analysis"
 	"ai-auto-trade/internal/application/auth"
 	"ai-auto-trade/internal/application/mvp"
+	"ai-auto-trade/internal/application/trading"
 	analysisDomain "ai-auto-trade/internal/domain/analysis"
 	dataDomain "ai-auto-trade/internal/domain/dataingestion"
+	tradingDomain "ai-auto-trade/internal/domain/trading"
 	"ai-auto-trade/internal/infra/memory"
 	"ai-auto-trade/internal/infrastructure/persistence/postgres"
 )
@@ -1124,6 +1126,379 @@ func (s *Server) handleStrongStocks(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// --- Strategies / Backtest / Trades ---
+
+func (s *Server) handleCreateStrategy(w http.ResponseWriter, r *http.Request) {
+	var body tradingDomain.Strategy
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+		return
+	}
+	userID := currentUserID(r)
+	body.CreatedBy = userID
+	body.UpdatedBy = userID
+	strat, err := s.tradingSvc.CreateStrategy(r.Context(), body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success":  true,
+		"strategy": strat,
+	})
+}
+
+func (s *Server) handleListStrategies(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	filter := trading.StrategyFilter{
+		Name: q.Get("name"),
+	}
+	if status := q.Get("status"); status != "" {
+		filter.Status = tradingDomain.Status(status)
+	}
+	if env := q.Get("env"); env != "" {
+		filter.Env = tradingDomain.Environment(env)
+	}
+	list, err := s.tradingSvc.ListStrategies(r.Context(), filter)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "list strategies failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success":    true,
+		"strategies": list,
+	})
+}
+
+func (s *Server) handleStrategyRoute(w http.ResponseWriter, r *http.Request) {
+	id, tail := parseStrategyPath(r.URL.Path)
+	if id == "" {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "strategy id required")
+		return
+	}
+	switch tail {
+	case "":
+		s.handleStrategyGetOrUpdate(w, r, id)
+	case "backtest":
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
+			return
+		}
+		s.handleStrategyBacktest(w, r, id)
+	case "backtests":
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
+			return
+		}
+		s.handleListStrategyBacktests(w, r, id)
+	case "run":
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
+			return
+		}
+		s.handleRunStrategy(w, r, id)
+	case "activate":
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
+			return
+		}
+		s.handleActivateStrategy(w, r, id)
+	case "deactivate":
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
+			return
+		}
+		s.handleDeactivateStrategy(w, r, id)
+	case "reports":
+		switch r.Method {
+		case http.MethodGet:
+			s.handleListReports(w, r, id)
+		case http.MethodPost:
+			s.handleCreateReport(w, r, id)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
+		}
+	default:
+		writeError(w, http.StatusNotFound, errCodeNotFound, "not found")
+	}
+}
+
+func (s *Server) handleStrategyGetOrUpdate(w http.ResponseWriter, r *http.Request, id string) {
+	switch r.Method {
+	case http.MethodGet:
+		strat, err := s.tradingSvc.GetStrategy(r.Context(), id)
+		if err != nil {
+			writeError(w, http.StatusNotFound, errCodeNotFound, "strategy not found")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"success":  true,
+			"strategy": strat,
+		})
+	case http.MethodPut:
+		var body tradingDomain.Strategy
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+			return
+		}
+		body.UpdatedBy = currentUserID(r)
+		strat, err := s.tradingSvc.UpdateStrategy(r.Context(), id, body)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, errCodeBadRequest, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"success":  true,
+			"strategy": strat,
+		})
+	default:
+		writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
+	}
+}
+
+type strategyBacktestRequest struct {
+	StartDate       string                  `json:"start_date"`
+	EndDate         string                  `json:"end_date"`
+	InitialEquity   float64                 `json:"initial_equity"`
+	FeesPct         *float64                `json:"fees_pct"`
+	SlippagePct     *float64                `json:"slippage_pct"`
+	PriceMode       string                  `json:"price_mode"`
+	StopLossPct     *float64                `json:"stop_loss_pct"`
+	TakeProfitPct   *float64                `json:"take_profit_pct"`
+	MaxDailyLossPct *float64                `json:"max_daily_loss_pct"`
+	CoolDownDays    *int                    `json:"cool_down_days"`
+	MinHoldDays     *int                    `json:"min_hold_days"`
+	MaxPositions    *int                    `json:"max_positions"`
+	Strategy        *tradingDomain.Strategy `json:"strategy,omitempty"`
+}
+
+func (s *Server) handleStrategyBacktest(w http.ResponseWriter, r *http.Request, strategyID string) {
+	var body strategyBacktestRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+		return
+	}
+	input, err := buildBacktestInput(body, strategyID, nil)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, err.Error())
+		return
+	}
+	input.Save = true
+	input.CreatedBy = currentUserID(r)
+	rec, err := s.tradingSvc.Backtest(r.Context(), input)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"result":  rec,
+	})
+}
+
+func (s *Server) handleInlineBacktest(w http.ResponseWriter, r *http.Request) {
+	var body strategyBacktestRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+		return
+	}
+	if body.Strategy == nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "strategy required")
+		return
+	}
+	input, err := buildBacktestInput(body, "", body.Strategy)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, err.Error())
+		return
+	}
+	input.Save = false
+	input.CreatedBy = currentUserID(r)
+	rec, err := s.tradingSvc.Backtest(r.Context(), input)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"result":  rec,
+	})
+}
+
+func (s *Server) handleListStrategyBacktests(w http.ResponseWriter, r *http.Request, strategyID string) {
+	list, err := s.tradingSvc.ListBacktests(r.Context(), strategyID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "list backtests failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success":   true,
+		"backtests": list,
+	})
+}
+
+func (s *Server) handleRunStrategy(w http.ResponseWriter, r *http.Request, strategyID string) {
+	env := tradingDomain.EnvTest
+	if e := r.URL.Query().Get("env"); e != "" {
+		env = tradingDomain.Environment(e)
+	}
+	trades, err := s.tradingSvc.RunOnce(r.Context(), strategyID, env, currentUserID(r))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"trades":  trades,
+	})
+}
+
+func (s *Server) handleActivateStrategy(w http.ResponseWriter, r *http.Request, strategyID string) {
+	var body struct {
+		Env string `json:"env"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	env := tradingDomain.Environment(body.Env)
+	if env == "" {
+		env = tradingDomain.EnvTest
+	}
+	if err := s.tradingSvc.SetStatus(r.Context(), strategyID, tradingDomain.StatusActive, env); err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"env":     env,
+		"status":  tradingDomain.StatusActive,
+	})
+}
+
+func (s *Server) handleDeactivateStrategy(w http.ResponseWriter, r *http.Request, strategyID string) {
+	if err := s.tradingSvc.SetStatus(r.Context(), strategyID, tradingDomain.StatusDraft, ""); err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"status":  tradingDomain.StatusDraft,
+	})
+}
+
+func (s *Server) handleListTrades(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	var startPtr, endPtr *time.Time
+	if v := q.Get("start_date"); v != "" {
+		t, err := time.Parse("2006-01-02", v)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid start_date")
+			return
+		}
+		startPtr = &t
+	}
+	if v := q.Get("end_date"); v != "" {
+		t, err := time.Parse("2006-01-02", v)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid end_date")
+			return
+		}
+		endPtr = &t
+	}
+	filter := tradingDomain.TradeFilter{
+		StrategyID: q.Get("strategy_id"),
+		Env:        tradingDomain.Environment(q.Get("env")),
+		StartDate:  startPtr,
+		EndDate:    endPtr,
+	}
+	trades, err := s.tradingSvc.ListTrades(r.Context(), filter)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "list trades failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"trades":  trades,
+	})
+}
+
+func (s *Server) handleListPositions(w http.ResponseWriter, r *http.Request) {
+	positions, err := s.tradingSvc.ListPositions(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "list positions failed")
+		return
+	}
+	envFilter := tradingDomain.Environment(r.URL.Query().Get("env"))
+	if envFilter != "" {
+		filtered := make([]tradingDomain.Position, 0, len(positions))
+		for _, p := range positions {
+			if p.Env == envFilter {
+				filtered = append(filtered, p)
+			}
+		}
+		positions = filtered
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success":   true,
+		"positions": positions,
+	})
+}
+
+type reportRequest struct {
+	Env         string      `json:"env"`
+	PeriodStart string      `json:"period_start"`
+	PeriodEnd   string      `json:"period_end"`
+	Summary     interface{} `json:"summary"`
+	TradesRef   interface{} `json:"trades_ref"`
+}
+
+func (s *Server) handleCreateReport(w http.ResponseWriter, r *http.Request, strategyID string) {
+	var body reportRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+		return
+	}
+	start, err := time.Parse("2006-01-02", body.PeriodStart)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid period_start")
+		return
+	}
+	end, err := time.Parse("2006-01-02", body.PeriodEnd)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid period_end")
+		return
+	}
+	rep := tradingDomain.Report{
+		StrategyID:  strategyID,
+		Env:         tradingDomain.Environment(body.Env),
+		PeriodStart: start,
+		PeriodEnd:   end,
+		Summary:     body.Summary,
+		TradesRef:   body.TradesRef,
+		CreatedBy:   currentUserID(r),
+		CreatedAt:   time.Now(),
+	}
+	id, err := s.tradingSvc.SaveReport(r.Context(), rep)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "save report failed")
+		return
+	}
+	rep.ID = id
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"report":  rep,
+	})
+}
+
+func (s *Server) handleListReports(w http.ResponseWriter, r *http.Request, strategyID string) {
+	reps, err := s.tradingSvc.ListReports(r.Context(), strategyID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "list reports failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"reports": reps,
+	})
+}
+
 // --- Notifier (Telegram) ---
 
 func (s *Server) startTelegramJob() {
@@ -1488,6 +1863,59 @@ func currentUserID(r *http.Request) string {
 		}
 	}
 	return ""
+}
+
+func parseStrategyPath(path string) (string, string) {
+	const prefix = "/api/admin/strategies/"
+	if !strings.HasPrefix(path, prefix) {
+		return "", ""
+	}
+	rest := strings.TrimPrefix(path, prefix)
+	rest = strings.Trim(rest, "/")
+	if rest == "" {
+		return "", ""
+	}
+	parts := strings.SplitN(rest, "/", 2)
+	if len(parts) == 1 {
+		return parts[0], ""
+	}
+	return parts[0], parts[1]
+}
+
+func buildBacktestInput(body strategyBacktestRequest, strategyID string, inline *tradingDomain.Strategy) (trading.BacktestInput, error) {
+	var input trading.BacktestInput
+	if body.StartDate == "" || body.EndDate == "" {
+		return input, fmt.Errorf("start_date and end_date required")
+	}
+	start, err := time.Parse("2006-01-02", body.StartDate)
+	if err != nil {
+		return input, fmt.Errorf("invalid start_date")
+	}
+	end, err := time.Parse("2006-01-02", body.EndDate)
+	if err != nil {
+		return input, fmt.Errorf("invalid end_date")
+	}
+	pm := tradingDomain.PriceMode(body.PriceMode)
+	if pm == "" {
+		pm = tradingDomain.PriceNextOpen
+	}
+	input = trading.BacktestInput{
+		StrategyID:      strategyID,
+		Inline:          inline,
+		StartDate:       start,
+		EndDate:         end,
+		InitialEquity:   body.InitialEquity,
+		FeesPct:         body.FeesPct,
+		SlippagePct:     body.SlippagePct,
+		PriceMode:       &pm,
+		StopLossPct:     body.StopLossPct,
+		TakeProfitPct:   body.TakeProfitPct,
+		MaxDailyLossPct: body.MaxDailyLossPct,
+		CoolDownDays:    body.CoolDownDays,
+		MinHoldDays:     body.MinHoldDays,
+		MaxPositions:    body.MaxPositions,
+	}
+	return input, nil
 }
 
 func parseIntDefault(s string, def int) int {

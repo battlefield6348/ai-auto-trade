@@ -30,6 +30,7 @@ const (
 	errCodeForbidden          = "AUTH_FORBIDDEN"
 	errCodeAnalysisNotReady   = "ANALYSIS_NOT_READY"
 	errCodeMethodNotAllowed   = "METHOD_NOT_ALLOWED"
+	errCodeNotFound           = "NOT_FOUND"
 	errCodeInternal           = "INTERNAL_ERROR"
 	refreshCookieName         = "refresh_token"
 )

@@ -895,13 +895,21 @@ const renderHighScoreList = (container, rows) => {
 const renderBacktestSummary = (res) => {
   if (!elements.backtestSummary) return;
   const returns = res.stats?.returns || {};
-  const chips = Object.entries(returns)
-    .map(([key, val]) => {
-      const avg = fmtPercent(val.avg_return);
-      const win = fmtPercent(val.win_rate);
-      return `<span class="meta-item">${key} 平均 ${avg} ｜ 勝率 ${win}</span>`;
-    })
-    .join("");
+  const statCards =
+    Object.entries(returns).length === 0
+      ? `<div class="meta-item">尚無統計</div>`
+      : Object.entries(returns)
+          .map(
+            ([key, val]) => `
+              <div class="stat-card">
+                <div class="stat-title">${key.toUpperCase()}</div>
+                <div class="stat-value">${fmtPercent(val.avg_return)}</div>
+                <div class="stat-sub">平均報酬</div>
+                <div class="stat-sub">勝率 ${fmtPercent(val.win_rate)}</div>
+              </div>
+            `
+          )
+          .join("");
   elements.backtestSummary.innerHTML = `
     <div class="result-header">
       <div>
@@ -910,7 +918,7 @@ const renderBacktestSummary = (res) => {
       </div>
       <span class="badge ${res.total_events ? "good" : "warn"}">命中 ${fmtInt(res.total_events)}</span>
     </div>
-    <div class="meta-row">${chips || '<div class="meta-item">尚無統計</div>'}</div>
+    <div class="stat-grid">${statCards}</div>
   `;
 };
 
@@ -1015,7 +1023,29 @@ const applyWeightedScoring = (res) => {
     return { ...row, total_score: total, components: comp };
   });
   const filtered = events.filter((ev) => ev.total_score >= thresholds.total_min);
-  return { ...res, events: filtered, total_events: filtered.length, params: { weights, thresholds } };
+  const stats = computeReturnStats(filtered);
+  return { ...res, events: filtered, total_events: filtered.length, params: { weights, thresholds }, stats };
+};
+
+const computeReturnStats = (events) => {
+  const horizons = ["d3", "d5", "d10"];
+  const stats = {};
+  horizons.forEach((h) => {
+    let sum = 0;
+    let count = 0;
+    let wins = 0;
+    events.forEach((ev) => {
+      const v = ev.forward_returns?.[h];
+      if (v === null || v === undefined) return;
+      sum += v;
+      count += 1;
+      if (v > 0) wins += 1;
+    });
+    const avg = count ? sum / count : 0;
+    const win = count ? wins / count : 0;
+    stats[h] = { avg_return: avg, win_rate: win };
+  });
+  return { returns: stats };
 };
 
 const buildBacktestPayload = () => {

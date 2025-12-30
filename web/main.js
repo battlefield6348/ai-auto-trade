@@ -8,6 +8,7 @@ const state = {
   lastScreener: null,
   lastBackfill: null,
   lastChart: null,
+  strategies: [],
   activity: [],
   updatedAt: null,
 };
@@ -44,6 +45,12 @@ const elements = {
   screenerHighlights: document.getElementById("screenerHighlights"),
   screenerTable: document.getElementById("screenerTable"),
   activityList: document.getElementById("activityList"),
+  strategyForm: document.getElementById("strategyForm"),
+  strategyStatus: document.getElementById("strategyStatus"),
+  strategyEnv: document.getElementById("strategyEnv"),
+  strategyName: document.getElementById("strategyName"),
+  strategyTable: document.getElementById("strategyTable"),
+  strategyMeta: document.getElementById("strategyMeta"),
 };
 
 const numberFormat = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 3 });
@@ -1259,6 +1266,7 @@ renderEmptyState(elements.queryTable, "尚未查詢");
 renderEmptyState(elements.screenerTable, "尚未查詢");
 renderEmptyState(elements.queryHighlights, "尚無亮點資料");
 renderEmptyState(elements.screenerHighlights, "尚無亮點資料");
+renderEmptyState(elements.strategyTable, "尚未載入策略");
 renderActivity();
 renderKpis();
 updateOverviewMode();
@@ -1270,6 +1278,7 @@ refreshAccessToken().then((ok) => {
     setMessage(elements.loginMessage, "已自動登入，Token 已更新", "good");
     logActivity("自動登入", "沿用前一次的登入狀態");
     fetchCombos();
+    loadStrategies().catch(() => {});
   } else {
     setStatus("未登入", "warn");
   }
@@ -1369,6 +1378,52 @@ async function savePreset() {
   }
 }
 
+const renderStrategyTable = (items = []) => {
+  if (!elements.strategyTable) return;
+  if (!items.length) {
+    renderEmptyState(elements.strategyTable, "尚未載入策略");
+    if (elements.strategyMeta) elements.strategyMeta.innerHTML = "";
+    return;
+  }
+  const rows = items.map((s) => ({
+    name: fmtText(s.name),
+    env: fmtText(s.env),
+    status: `<span class="badge">${fmtText(s.status)}</span>`,
+    version: fmtInt(s.version),
+    base_symbol: fmtText(s.base_symbol),
+    updated_at: s.updated_at ? timeFormat.format(new Date(s.updated_at)) : "—",
+  }));
+  const cols = [
+    { key: "name", label: "名稱" },
+    { key: "env", label: "環境" },
+    { key: "status", label: "狀態" },
+    { key: "version", label: "版次" },
+    { key: "base_symbol", label: "交易對" },
+    { key: "updated_at", label: "更新時間" },
+  ];
+  renderTable(elements.strategyTable, rows, cols);
+  if (elements.strategyMeta) {
+    elements.strategyMeta.innerHTML = `<div class="meta-item">共 ${fmtInt(items.length)} 筆策略</div>`;
+  }
+};
+
+const loadStrategies = async () => {
+  if (!elements.strategyForm) return;
+  const status = elements.strategyStatus?.value || "";
+  const env = elements.strategyEnv?.value || "";
+  const name = (elements.strategyName?.value || "").trim();
+  const qs = new URLSearchParams();
+  if (status) qs.append("status", status);
+  if (env) qs.append("env", env);
+  if (name) qs.append("name", name);
+  const res = await api(`/api/admin/strategies${qs.toString() ? `?${qs.toString()}` : ""}`);
+  state.strategies = res.strategies || [];
+  renderStrategyTable(state.strategies);
+  logActivity("查詢策略列表", `筆數 ${fmtInt(state.strategies.length)}`);
+  touchUpdatedAt();
+  setStatus("策略列表已更新", "good");
+};
+
 document.getElementById("loginForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   try {
@@ -1384,6 +1439,7 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
     toggleProtectedSections(true);
     logActivity("登入成功", `帳號 ${email}`);
     fetchCombos();
+    loadStrategies().catch(() => {});
   } catch (err) {
     setMessage(elements.loginMessage, `登入失敗：${err.message}`, "error");
     setStatus("未登入", "warn");
@@ -1587,6 +1643,18 @@ document.getElementById("screenerForm").addEventListener("submit", async (e) => 
     renderEmptyState(elements.screenerTable, err.message);
   }
 });
+
+if (elements.strategyForm) {
+  elements.strategyForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      requireLogin();
+      await loadStrategies();
+    } catch (err) {
+      setStatus(`載入策略失敗：${err.message}`, "warn");
+    }
+  });
+}
 
 document.getElementById("summaryBtn").addEventListener("click", async () => {
   try {

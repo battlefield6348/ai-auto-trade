@@ -225,6 +225,36 @@
       <div id="screenerTable" class="table"></div>
     </section>
 
+    <section class="panel span-2" id="strategyPanel">
+      <div class="panel-head">
+        <div>
+          <h2>策略列表（測試版）</h2>
+          <p>檢視後端已建立的策略，快速查看狀態與版本。</p>
+        </div>
+      </div>
+      <form id="strategyForm" class="form inline">
+        <label>狀態
+          <select id="strategyStatus">
+            <option value="">全部</option>
+            <option value="active">active</option>
+            <option value="draft">draft</option>
+            <option value="archived">archived</option>
+          </select>
+        </label>
+        <label>環境
+          <select id="strategyEnv">
+            <option value="">全部</option>
+            <option value="test">test</option>
+            <option value="prod">prod</option>
+          </select>
+        </label>
+        <label>名稱關鍵字 <input type="text" id="strategyName" placeholder="例如 momentum"></label>
+        <button type="submit" class="primary">載入策略</button>
+      </form>
+      <div id="strategyMeta" class="meta-row"></div>
+      <div id="strategyTable" class="table"></div>
+    </section>
+
     <section class="panel" id="activityPanel">
       <div class="panel-head">
         <div>

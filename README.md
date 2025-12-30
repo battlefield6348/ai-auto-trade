@@ -54,6 +54,15 @@
   ```
 - 走勢圖資料：可呼叫 `GET /api/analysis/history?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD` 取得區間內分析序列（供前端走勢圖使用）。
 - 加權條件回測：`POST /api/analysis/backtest`，輸入權重與門檻（score、日漲跌加分、量能加分、總分門檻，及回測天數），回傳命中日期與後續報酬，用於前端條件回測。
+- 策略/回測/交易（需 `strategy` 權限，建議先套用 `db/migrations/0004_trading_strategies.sql`）：  
+  - 建立策略：`POST /api/admin/strategies`（body: 名稱、買/賣條件、風控設定，可指定 env=test|prod）。  
+  - 查詢策略列表：`GET /api/admin/strategies?status=active&env=test`。  
+  - 單筆查詢/更新：`GET|PUT /api/admin/strategies/{id}`。  
+  - 啟用/停用：`POST /api/admin/strategies/{id}/activate`（body: env），`POST /api/admin/strategies/{id}/deactivate`。  
+  - 回測：`POST /api/admin/strategies/{id}/backtest`（保存結果），`POST /api/admin/strategies/backtest`（inline 策略，不保存），`GET /api/admin/strategies/{id}/backtests`。  
+  - 單次執行（paper/real 共用邏輯）：`POST /api/admin/strategies/{id}/run?env=test`。  
+  - 交易/持倉查詢：`GET /api/admin/trades?strategy_id=...&env=test&start_date=YYYY-MM-DD&end_date=YYYY-MM-DD`，`GET /api/admin/positions?env=test`。  
+  - 報告：`POST /api/admin/strategies/{id}/reports`（自訂 summary/trades_ref），`GET /api/admin/strategies/{id}/reports`。
 
 ## 操作手冊（前端 Web Console）
 

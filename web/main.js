@@ -1792,6 +1792,18 @@ if (elements.positionForm) {
   });
 }
 
+// 快捷導覽平滑滾動
+document.querySelectorAll(".quick-nav a").forEach((link) => {
+  link.addEventListener("click", (e) => {
+    const href = link.getAttribute("href");
+    if (href && href.startsWith("#")) {
+      e.preventDefault();
+      const target = document.querySelector(href);
+      if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  });
+});
+
 document.getElementById("summaryBtn").addEventListener("click", async () => {
   try {
     requireLogin();

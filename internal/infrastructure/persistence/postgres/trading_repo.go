@@ -418,7 +418,7 @@ INSERT INTO strategy_reports (strategy_id, strategy_version, env, period_start, 
 VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
 RETURNING id;
 `
-	var id string
+var id string
 	if err := r.db.QueryRowContext(ctx, q, rep.StrategyID, rep.StrategyVersion, string(rep.Env), rep.PeriodStart, rep.PeriodEnd, summary, trades, nullableUUID(rep.CreatedBy)).Scan(&id); err != nil {
 		return "", err
 	}

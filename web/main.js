@@ -1415,6 +1415,13 @@ const renderStrategyTable = (items = []) => {
     version: fmtInt(s.version),
     base_symbol: fmtText(s.base_symbol),
     updated_at: s.updated_at ? timeFormat.format(new Date(s.updated_at)) : "—",
+    actions: `
+      <div class="action-row">
+        <button class="ghost btn-sm" data-action="activate" data-env="test" data-id="${fmtText(s.id)}">啟用 test</button>
+        <button class="ghost btn-sm" data-action="activate" data-env="prod" data-id="${fmtText(s.id)}">啟用 prod</button>
+        <button class="ghost btn-sm" data-action="deactivate" data-id="${fmtText(s.id)}">停用</button>
+      </div>
+    `,
   }));
   const cols = [
     { key: "name", label: "名稱" },
@@ -1423,11 +1430,13 @@ const renderStrategyTable = (items = []) => {
     { key: "version", label: "版次" },
     { key: "base_symbol", label: "交易對" },
     { key: "updated_at", label: "更新時間" },
+    { key: "actions", label: "操作" },
   ];
   renderTable(elements.strategyTable, rows, cols);
   if (elements.strategyMeta) {
     elements.strategyMeta.innerHTML = `<div class="meta-item">共 ${fmtInt(items.length)} 筆策略</div>`;
   }
+  bindStrategyActions();
 };
 
 const loadStrategies = async () => {
@@ -1445,6 +1454,46 @@ const loadStrategies = async () => {
   logActivity("查詢策略列表", `筆數 ${fmtInt(state.strategies.length)}`);
   touchUpdatedAt();
   setStatus("策略列表已更新", "good");
+};
+
+const activateStrategy = async (id, env) => {
+  await api(`/api/admin/strategies/${id}/activate`, {
+    method: "POST",
+    body: JSON.stringify({ env }),
+  });
+  logActivity("啟用策略", `ID ${id} · env ${env || "test"}`);
+};
+
+const deactivateStrategy = async (id) => {
+  await api(`/api/admin/strategies/${id}/deactivate`, {
+    method: "POST",
+  });
+  logActivity("停用策略", `ID ${id}`);
+};
+
+const bindStrategyActions = () => {
+  if (!elements.strategyTable) return;
+  elements.strategyTable.querySelectorAll("[data-action]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      try {
+        requireLogin();
+        const id = btn.dataset.id;
+        const action = btn.dataset.action;
+        const env = btn.dataset.env || "test";
+        if (!id) return;
+        setStatus("處理中...", "warn");
+        if (action === "activate") {
+          await activateStrategy(id, env);
+        } else if (action === "deactivate") {
+          await deactivateStrategy(id);
+        }
+        await loadStrategies();
+        setStatus("操作完成", "good");
+      } catch (err) {
+        setStatus(`操作失敗：${err.message}`, "warn");
+      }
+    });
+  });
 };
 
 const renderTradeTable = (items = []) => {

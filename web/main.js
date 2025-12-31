@@ -58,6 +58,10 @@ const elements = {
   tradeEnd: document.getElementById("tradeEnd"),
   tradeTable: document.getElementById("tradeTable"),
   tradeMeta: document.getElementById("tradeMeta"),
+  positionForm: document.getElementById("positionForm"),
+  positionEnv: document.getElementById("positionEnv"),
+  positionTable: document.getElementById("positionTable"),
+  positionMeta: document.getElementById("positionMeta"),
 };
 
 const numberFormat = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 3 });
@@ -1275,6 +1279,7 @@ renderEmptyState(elements.queryHighlights, "尚無亮點資料");
 renderEmptyState(elements.screenerHighlights, "尚無亮點資料");
 renderEmptyState(elements.strategyTable, "尚未載入策略");
 renderEmptyState(elements.tradeTable, "尚未查詢");
+renderEmptyState(elements.positionTable, "尚未查詢");
 renderActivity();
 renderKpis();
 updateOverviewMode();
@@ -1288,6 +1293,7 @@ refreshAccessToken().then((ok) => {
     fetchCombos();
     loadStrategies().catch(() => {});
     loadTrades().catch(() => {});
+    loadPositions().catch(() => {});
   } else {
     setStatus("未登入", "warn");
   }
@@ -1468,6 +1474,49 @@ const renderTradeTable = (items = []) => {
   if (elements.tradeMeta) {
     elements.tradeMeta.innerHTML = `<div class="meta-item">共 ${fmtInt(items.length)} 筆交易</div>`;
   }
+};
+
+const renderPositionTable = (items = []) => {
+  if (!elements.positionTable) return;
+  if (!items.length) {
+    renderEmptyState(elements.positionTable, "尚未查詢");
+    if (elements.positionMeta) elements.positionMeta.innerHTML = "";
+    return;
+  }
+  const rows = items.map((p) => ({
+    strategy_id: fmtText(p.strategy_id),
+    env: fmtText(p.env),
+    entry_date: fmtText(p.entry_date),
+    entry_price: fmtPrice(p.entry_price),
+    size: fmtPrice(p.size),
+    stop_loss: p.stop_loss != null ? fmtPrice(p.stop_loss) : "—",
+    take_profit: p.take_profit != null ? fmtPrice(p.take_profit) : "—",
+    status: fmtText(p.status),
+  }));
+  const cols = [
+    { key: "strategy_id", label: "策略 ID", className: "mono" },
+    { key: "env", label: "環境" },
+    { key: "entry_date", label: "進場日" },
+    { key: "entry_price", label: "進場價", className: "mono" },
+    { key: "size", label: "部位金額", className: "mono" },
+    { key: "stop_loss", label: "停損", className: "mono" },
+    { key: "take_profit", label: "停利", className: "mono" },
+    { key: "status", label: "狀態" },
+  ];
+  renderTable(elements.positionTable, rows, cols);
+  if (elements.positionMeta) {
+    elements.positionMeta.innerHTML = `<div class="meta-item">共 ${fmtInt(items.length)} 筆持倉</div>`;
+  }
+};
+
+const loadPositions = async () => {
+  if (!elements.positionForm) return;
+  const env = elements.positionEnv?.value || "";
+  const qs = env ? `?env=${env}` : "";
+  const res = await api(`/api/admin/positions${qs}`);
+  renderPositionTable(res.positions || []);
+  logActivity("查詢持倉", `筆數 ${fmtInt((res.positions || []).length)}`);
+  setStatus("持倉列表已更新", "good");
 };
 
 const loadTrades = async () => {
@@ -1727,6 +1776,18 @@ if (elements.tradeForm) {
       await loadTrades();
     } catch (err) {
       setStatus(`查詢交易失敗：${err.message}`, "warn");
+    }
+  });
+}
+
+if (elements.positionForm) {
+  elements.positionForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      requireLogin();
+      await loadPositions();
+    } catch (err) {
+      setStatus(`查詢持倉失敗：${err.message}`, "warn");
     }
   });
 }

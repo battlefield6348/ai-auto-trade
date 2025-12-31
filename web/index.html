@@ -279,6 +279,27 @@
       <div id="tradeTable" class="table"></div>
     </section>
 
+    <section class="panel span-2" id="positionPanel">
+      <div class="panel-head">
+        <div>
+          <h2>持倉列表</h2>
+          <p>查看目前未平倉部位（紙本/正式）。</p>
+        </div>
+      </div>
+      <form id="positionForm" class="form inline">
+        <label>環境
+          <select id="positionEnv">
+            <option value="">全部</option>
+            <option value="test">test</option>
+            <option value="prod">prod</option>
+          </select>
+        </label>
+        <button type="submit" class="primary">查詢持倉</button>
+      </form>
+      <div id="positionMeta" class="meta-row"></div>
+      <div id="positionTable" class="table"></div>
+    </section>
+
     <section class="panel" id="activityPanel">
       <div class="panel-head">
         <div>

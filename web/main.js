@@ -1441,6 +1441,7 @@ const renderStrategyTable = (items = []) => {
 
 const loadStrategies = async () => {
   if (!elements.strategyForm) return;
+  renderEmptyState(elements.strategyTable, "載入策略中...");
   const status = elements.strategyStatus?.value || "";
   const env = elements.strategyEnv?.value || "";
   const name = (elements.strategyName?.value || "").trim();
@@ -1568,6 +1569,7 @@ const renderPositionTable = (items = []) => {
 
 const loadPositions = async () => {
   if (!elements.positionForm) return;
+  renderEmptyState(elements.positionTable, "載入持倉中...");
   const env = elements.positionEnv?.value || "";
   const qs = env ? `?env=${env}` : "";
   const res = await api(`/api/admin/positions${qs}`);
@@ -1605,6 +1607,7 @@ const renderReportTable = (items = []) => {
 
 const loadReports = async () => {
   if (!elements.reportForm) return;
+  renderEmptyState(elements.reportTable, "載入報告中...");
   const strategyId = (elements.reportStrategyId?.value || "").trim();
   if (!strategyId) {
     setStatus("請輸入策略 ID", "warn");
@@ -1618,6 +1621,7 @@ const loadReports = async () => {
 
 const loadTrades = async () => {
   if (!elements.tradeForm) return;
+  renderEmptyState(elements.tradeTable, "載入交易中...");
   const qs = new URLSearchParams();
   const strategyId = (elements.tradeStrategyId?.value || "").trim();
   const env = elements.tradeEnv?.value || "";

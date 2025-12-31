@@ -70,6 +70,7 @@
       <a href="#screenerPanel">強勢篩選</a>
       <a href="#strategyPanel">策略</a>
       <a href="#tradePanel">交易</a>
+      <a href="#reportPanel">報告</a>
       <a href="#positionPanel">持倉</a>
       <a href="#activityPanel">紀錄</a>
     </nav>
@@ -287,6 +288,21 @@
       </form>
       <div id="tradeMeta" class="meta-row"></div>
       <div id="tradeTable" class="table"></div>
+    </section>
+
+    <section class="panel span-2" id="reportPanel">
+      <div class="panel-head">
+        <div>
+          <h2>報告列表</h2>
+          <p>輸入策略 ID 取得已保存的回測/交易報告。</p>
+        </div>
+      </div>
+      <form id="reportForm" class="form inline">
+        <label>策略 ID <input type="text" id="reportStrategyId" required></label>
+        <button type="submit" class="primary">查詢報告</button>
+      </form>
+      <div id="reportMeta" class="meta-row"></div>
+      <div id="reportTable" class="table"></div>
     </section>
 
     <section class="panel span-2" id="positionPanel">

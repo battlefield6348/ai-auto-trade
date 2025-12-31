@@ -58,6 +58,10 @@ const elements = {
   tradeEnd: document.getElementById("tradeEnd"),
   tradeTable: document.getElementById("tradeTable"),
   tradeMeta: document.getElementById("tradeMeta"),
+  reportForm: document.getElementById("reportForm"),
+  reportStrategyId: document.getElementById("reportStrategyId"),
+  reportTable: document.getElementById("reportTable"),
+  reportMeta: document.getElementById("reportMeta"),
   positionForm: document.getElementById("positionForm"),
   positionEnv: document.getElementById("positionEnv"),
   positionTable: document.getElementById("positionTable"),
@@ -1279,6 +1283,7 @@ renderEmptyState(elements.queryHighlights, "尚無亮點資料");
 renderEmptyState(elements.screenerHighlights, "尚無亮點資料");
 renderEmptyState(elements.strategyTable, "尚未載入策略");
 renderEmptyState(elements.tradeTable, "尚未查詢");
+renderEmptyState(elements.reportTable, "尚未查詢");
 renderEmptyState(elements.positionTable, "尚未查詢");
 renderActivity();
 renderKpis();
@@ -1294,6 +1299,9 @@ refreshAccessToken().then((ok) => {
     loadStrategies().catch(() => {});
     loadTrades().catch(() => {});
     loadPositions().catch(() => {});
+    if (elements.reportStrategyId?.value) {
+      loadReports().catch(() => {});
+    }
   } else {
     setStatus("未登入", "warn");
   }
@@ -1517,6 +1525,46 @@ const loadPositions = async () => {
   renderPositionTable(res.positions || []);
   logActivity("查詢持倉", `筆數 ${fmtInt((res.positions || []).length)}`);
   setStatus("持倉列表已更新", "good");
+};
+
+const renderReportTable = (items = []) => {
+  if (!elements.reportTable) return;
+  if (!items.length) {
+    renderEmptyState(elements.reportTable, "尚未查詢");
+    if (elements.reportMeta) elements.reportMeta.innerHTML = "";
+    return;
+  }
+  const rows = items.map((r) => ({
+    id: fmtText(r.id),
+    env: fmtText(r.env),
+    period: `${fmtText(r.period_start)} ~ ${fmtText(r.period_end)}`,
+    summary: r.summary ? JSON.stringify(r.summary) : "—",
+    created_at: r.created_at ? timeFormat.format(new Date(r.created_at)) : "—",
+  }));
+  const cols = [
+    { key: "id", label: "報告 ID", className: "mono" },
+    { key: "env", label: "環境" },
+    { key: "period", label: "期間" },
+    { key: "summary", label: "摘要" },
+    { key: "created_at", label: "建立時間" },
+  ];
+  renderTable(elements.reportTable, rows, cols);
+  if (elements.reportMeta) {
+    elements.reportMeta.innerHTML = `<div class="meta-item">共 ${fmtInt(items.length)} 筆報告</div>`;
+  }
+};
+
+const loadReports = async () => {
+  if (!elements.reportForm) return;
+  const strategyId = (elements.reportStrategyId?.value || "").trim();
+  if (!strategyId) {
+    setStatus("請輸入策略 ID", "warn");
+    return;
+  }
+  const res = await api(`/api/admin/strategies/${strategyId}/reports`);
+  renderReportTable(res.reports || []);
+  logActivity("查詢報告", `策略 ${strategyId} · 筆數 ${fmtInt((res.reports || []).length)}`);
+  setStatus("報告列表已更新", "good");
 };
 
 const loadTrades = async () => {
@@ -1788,6 +1836,18 @@ if (elements.positionForm) {
       await loadPositions();
     } catch (err) {
       setStatus(`查詢持倉失敗：${err.message}`, "warn");
+    }
+  });
+}
+
+if (elements.reportForm) {
+  elements.reportForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      requireLogin();
+      await loadReports();
+    } catch (err) {
+      setStatus(`查詢報告失敗：${err.message}`, "warn");
     }
   });
 }

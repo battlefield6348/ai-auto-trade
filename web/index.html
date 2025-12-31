@@ -255,6 +255,30 @@
       <div id="strategyTable" class="table"></div>
     </section>
 
+    <section class="panel span-2" id="tradePanel">
+      <div class="panel-head">
+        <div>
+          <h2>交易紀錄</h2>
+          <p>查詢指定策略的紙本/正式交易紀錄。</p>
+        </div>
+      </div>
+      <form id="tradeForm" class="form inline">
+        <label>策略 ID <input type="text" id="tradeStrategyId" placeholder="可留空查全部"></label>
+        <label>環境
+          <select id="tradeEnv">
+            <option value="">全部</option>
+            <option value="test">test</option>
+            <option value="prod">prod</option>
+          </select>
+        </label>
+        <label>開始日 <input type="date" id="tradeStart"></label>
+        <label>結束日 <input type="date" id="tradeEnd"></label>
+        <button type="submit" class="primary">查詢交易</button>
+      </form>
+      <div id="tradeMeta" class="meta-row"></div>
+      <div id="tradeTable" class="table"></div>
+    </section>
+
     <section class="panel" id="activityPanel">
       <div class="panel-head">
         <div>

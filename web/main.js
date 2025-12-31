@@ -51,6 +51,13 @@ const elements = {
   strategyName: document.getElementById("strategyName"),
   strategyTable: document.getElementById("strategyTable"),
   strategyMeta: document.getElementById("strategyMeta"),
+  tradeForm: document.getElementById("tradeForm"),
+  tradeStrategyId: document.getElementById("tradeStrategyId"),
+  tradeEnv: document.getElementById("tradeEnv"),
+  tradeStart: document.getElementById("tradeStart"),
+  tradeEnd: document.getElementById("tradeEnd"),
+  tradeTable: document.getElementById("tradeTable"),
+  tradeMeta: document.getElementById("tradeMeta"),
 };
 
 const numberFormat = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 3 });
@@ -1267,6 +1274,7 @@ renderEmptyState(elements.screenerTable, "尚未查詢");
 renderEmptyState(elements.queryHighlights, "尚無亮點資料");
 renderEmptyState(elements.screenerHighlights, "尚無亮點資料");
 renderEmptyState(elements.strategyTable, "尚未載入策略");
+renderEmptyState(elements.tradeTable, "尚未查詢");
 renderActivity();
 renderKpis();
 updateOverviewMode();
@@ -1279,6 +1287,7 @@ refreshAccessToken().then((ok) => {
     logActivity("自動登入", "沿用前一次的登入狀態");
     fetchCombos();
     loadStrategies().catch(() => {});
+    loadTrades().catch(() => {});
   } else {
     setStatus("未登入", "warn");
   }
@@ -1422,6 +1431,60 @@ const loadStrategies = async () => {
   logActivity("查詢策略列表", `筆數 ${fmtInt(state.strategies.length)}`);
   touchUpdatedAt();
   setStatus("策略列表已更新", "good");
+};
+
+const renderTradeTable = (items = []) => {
+  if (!elements.tradeTable) return;
+  if (!items.length) {
+    renderEmptyState(elements.tradeTable, "尚未查詢");
+    if (elements.tradeMeta) elements.tradeMeta.innerHTML = "";
+    return;
+  }
+  const rows = items.map((t) => ({
+    strategy_id: fmtText(t.strategy_id),
+    env: fmtText(t.env),
+    side: fmtText(t.side),
+    entry_date: fmtText(t.entry_date),
+    entry_price: fmtPrice(t.entry_price),
+    exit_date: fmtText(t.exit_date),
+    exit_price: fmtPrice(t.exit_price),
+    pnl_usdt: fmtPrice(t.pnl_usdt),
+    pnl_pct: t.pnl_pct != null ? fmtPercent(t.pnl_pct) : "—",
+    reason: fmtText(t.reason),
+  }));
+  const cols = [
+    { key: "strategy_id", label: "策略 ID", className: "mono" },
+    { key: "env", label: "環境" },
+    { key: "side", label: "方向" },
+    { key: "entry_date", label: "進場日" },
+    { key: "entry_price", label: "進場價", className: "mono" },
+    { key: "exit_date", label: "出場日" },
+    { key: "exit_price", label: "出場價", className: "mono" },
+    { key: "pnl_usdt", label: "PNL (USDT)", className: "mono" },
+    { key: "pnl_pct", label: "PNL%", className: "mono" },
+    { key: "reason", label: "原因" },
+  ];
+  renderTable(elements.tradeTable, rows, cols);
+  if (elements.tradeMeta) {
+    elements.tradeMeta.innerHTML = `<div class="meta-item">共 ${fmtInt(items.length)} 筆交易</div>`;
+  }
+};
+
+const loadTrades = async () => {
+  if (!elements.tradeForm) return;
+  const qs = new URLSearchParams();
+  const strategyId = (elements.tradeStrategyId?.value || "").trim();
+  const env = elements.tradeEnv?.value || "";
+  const start = elements.tradeStart?.value || "";
+  const end = elements.tradeEnd?.value || "";
+  if (strategyId) qs.append("strategy_id", strategyId);
+  if (env) qs.append("env", env);
+  if (start) qs.append("start_date", start);
+  if (end) qs.append("end_date", end);
+  const res = await api(`/api/admin/trades${qs.toString() ? `?${qs.toString()}` : ""}`);
+  renderTradeTable(res.trades || []);
+  logActivity("查詢交易紀錄", `筆數 ${fmtInt((res.trades || []).length)}`);
+  setStatus("交易紀錄已更新", "good");
 };
 
 document.getElementById("loginForm").addEventListener("submit", async (e) => {
@@ -1652,6 +1715,18 @@ if (elements.strategyForm) {
       await loadStrategies();
     } catch (err) {
       setStatus(`載入策略失敗：${err.message}`, "warn");
+    }
+  });
+}
+
+if (elements.tradeForm) {
+  elements.tradeForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      requireLogin();
+      await loadTrades();
+    } catch (err) {
+      setStatus(`查詢交易失敗：${err.message}`, "warn");
     }
   });
 }

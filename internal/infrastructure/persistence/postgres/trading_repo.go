@@ -409,6 +409,48 @@ VALUES ($1,$2,$3,$4,$5,$6,$7);
 	return err
 }
 
+// ListLogs 查詢日誌。
+func (r *TradingRepo) ListLogs(ctx context.Context, filter tradingDomain.LogFilter) ([]tradingDomain.LogEntry, error) {
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	q := `
+SELECT id, strategy_id, strategy_version, env, date, phase, message, payload, created_at
+FROM strategy_logs
+WHERE strategy_id = $1
+`
+	args := []interface{}{filter.StrategyID}
+	if filter.Env != "" {
+		q += fmt.Sprintf(" AND env = $%d", len(args)+1)
+		args = append(args, string(filter.Env))
+	}
+	q += " ORDER BY created_at DESC"
+	q += fmt.Sprintf(" LIMIT %d", limit)
+
+	rows, err := r.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []tradingDomain.LogEntry
+	for rows.Next() {
+		var log tradingDomain.LogEntry
+		var env sql.NullString
+		var payloadRaw []byte
+		if err := rows.Scan(&log.ID, &log.StrategyID, &log.StrategyVersion, &env, &log.Date, &log.Phase, &log.Message, &payloadRaw, &log.CreatedAt); err != nil {
+			return nil, err
+		}
+		log.Env = tradingDomain.Environment(env.String)
+		if len(payloadRaw) > 0 {
+			_ = json.Unmarshal(payloadRaw, &log.Payload)
+		}
+		out = append(out, log)
+	}
+	return out, rows.Err()
+}
+
 // SaveReport 儲存報告。
 func (r *TradingRepo) SaveReport(ctx context.Context, rep tradingDomain.Report) (string, error) {
 	summary, _ := json.Marshal(rep.Summary)
@@ -418,7 +460,7 @@ INSERT INTO strategy_reports (strategy_id, strategy_version, env, period_start, 
 VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
 RETURNING id;
 `
-var id string
+	var id string
 	if err := r.db.QueryRowContext(ctx, q, rep.StrategyID, rep.StrategyVersion, string(rep.Env), rep.PeriodStart, rep.PeriodEnd, summary, trades, nullableUUID(rep.CreatedBy)).Scan(&id); err != nil {
 		return "", err
 	}

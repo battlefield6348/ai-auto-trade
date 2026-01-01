@@ -225,6 +225,13 @@ type LogEntry struct {
 	CreatedAt       time.Time   `json:"created_at"`
 }
 
+// LogFilter 用於查詢策略日誌。
+type LogFilter struct {
+	StrategyID string
+	Env        Environment
+	Limit      int
+}
+
 // Report 代表一次報告摘要。
 type Report struct {
 	ID              string      `json:"id"`

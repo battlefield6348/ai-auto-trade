@@ -221,6 +221,30 @@ func (r *TradingRepo) SaveLog(_ context.Context, log tradingDomain.LogEntry) err
 	return nil
 }
 
+func (r *TradingRepo) ListLogs(_ context.Context, filter tradingDomain.LogFilter) ([]tradingDomain.LogEntry, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	out := make([]tradingDomain.LogEntry, 0, len(r.logs))
+	for i := len(r.logs) - 1; i >= 0; i-- { // 逆序，最近的先
+		log := r.logs[i]
+		if filter.StrategyID != "" && log.StrategyID != filter.StrategyID {
+			continue
+		}
+		if filter.Env != "" && log.Env != filter.Env {
+			continue
+		}
+		out = append(out, log)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out, nil
+}
+
 func (r *TradingRepo) SaveReport(_ context.Context, rep tradingDomain.Report) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

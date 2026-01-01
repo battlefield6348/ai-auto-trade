@@ -33,6 +33,7 @@ type Repository interface {
 	ClosePosition(ctx context.Context, id string, exitDate time.Time, exitPrice float64) error
 
 	SaveLog(ctx context.Context, log tradingDomain.LogEntry) error
+	ListLogs(ctx context.Context, filter tradingDomain.LogFilter) ([]tradingDomain.LogEntry, error)
 
 	SaveReport(ctx context.Context, rep tradingDomain.Report) (string, error)
 	ListReports(ctx context.Context, strategyID string) ([]tradingDomain.Report, error)
@@ -309,6 +310,14 @@ func (s *Service) SaveReport(ctx context.Context, rep tradingDomain.Report) (str
 // ListReports 查詢報告。
 func (s *Service) ListReports(ctx context.Context, strategyID string) ([]tradingDomain.Report, error) {
 	return s.repo.ListReports(ctx, strategyID)
+}
+
+// ListLogs 查詢策略日誌。
+func (s *Service) ListLogs(ctx context.Context, filter tradingDomain.LogFilter) ([]tradingDomain.LogEntry, error) {
+	if filter.Limit <= 0 {
+		filter.Limit = 50
+	}
+	return s.repo.ListLogs(ctx, filter)
 }
 
 // loadData 抽取歷史分析與日 K 價格。

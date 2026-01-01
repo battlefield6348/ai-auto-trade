@@ -738,6 +738,41 @@ paths:
                     type: boolean
                   report:
                     $ref: '#/components/schemas/StrategyReport'
+  /api/admin/strategies/{id}/logs:
+    get:
+      tags: [Strategy]
+      summary: 查詢策略日誌
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: env
+          schema:
+            type: string
+            example: test
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            example: 50
+      responses:
+        "200":
+          description: 查詢成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  logs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LogEntry'
   /api/admin/trades:
     get:
       tags: [Strategy]
@@ -1516,6 +1551,31 @@ components:
           type: object
         trades_ref:
           type: object
+    LogEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        strategy_id:
+          type: string
+        strategy_version:
+          type: integer
+        env:
+          type: string
+          example: test
+        date:
+          type: string
+          format: date
+        phase:
+          type: string
+          example: signal
+        message:
+          type: string
+        payload:
+          type: object
+        created_at:
+          type: string
+          format: date-time
     ErrorResponse:
       type: object
       properties:

@@ -1218,6 +1218,12 @@ func (s *Server) handleStrategyRoute(w http.ResponseWriter, r *http.Request) {
 		default:
 			writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
 		}
+	case "logs":
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
+			return
+		}
+		s.handleListLogs(w, r, id)
 	default:
 		writeError(w, http.StatusNotFound, errCodeNotFound, "not found")
 	}
@@ -1496,6 +1502,24 @@ func (s *Server) handleListReports(w http.ResponseWriter, r *http.Request, strat
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success": true,
 		"reports": reps,
+	})
+}
+
+func (s *Server) handleListLogs(w http.ResponseWriter, r *http.Request, strategyID string) {
+	env := tradingDomain.Environment(r.URL.Query().Get("env"))
+	limit := parseIntDefault(r.URL.Query().Get("limit"), 50)
+	logs, err := s.tradingSvc.ListLogs(r.Context(), tradingDomain.LogFilter{
+		StrategyID: strategyID,
+		Env:        env,
+		Limit:      limit,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "list logs failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"logs":    logs,
 	})
 }
 

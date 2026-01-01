@@ -1607,12 +1607,13 @@ const renderReportTable = (items = []) => {
 
 const loadReports = async () => {
   if (!elements.reportForm) return;
-  renderEmptyState(elements.reportTable, "載入報告中...");
   const strategyId = (elements.reportStrategyId?.value || "").trim();
   if (!strategyId) {
     setStatus("請輸入策略 ID", "warn");
+    renderEmptyState(elements.reportTable, "尚未查詢");
     return;
   }
+  renderEmptyState(elements.reportTable, "載入報告中...");
   const res = await api(`/api/admin/strategies/${strategyId}/reports`);
   renderReportTable(res.reports || []);
   logActivity("查詢報告", `策略 ${strategyId} · 筆數 ${fmtInt((res.reports || []).length)}`);

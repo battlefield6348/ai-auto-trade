@@ -1,5 +1,6 @@
 const state = {
   token: "",
+  currentSection: "overview",
   health: null,
   lastIngestion: null,
   lastAnalysis: null,
@@ -67,6 +68,9 @@ const elements = {
   positionTable: document.getElementById("positionTable"),
   positionMeta: document.getElementById("positionMeta"),
 };
+
+const sections = Array.from(document.querySelectorAll("[data-section]"));
+const navLinks = Array.from(document.querySelectorAll("[data-section-target]"));
 
 const numberFormat = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 3 });
 const intFormat = new Intl.NumberFormat("zh-TW");
@@ -213,6 +217,17 @@ const toggleProtectedSections = (isAuth) => {
   const appShell = document.getElementById("appShell");
   if (loginPage) loginPage.classList.toggle("hidden", isAuth);
   if (appShell) appShell.classList.toggle("hidden", !isAuth);
+};
+
+const showSection = (section) => {
+  state.currentSection = section;
+  sections.forEach((el) => {
+    const target = el.dataset.section;
+    el.classList.toggle("section-hidden", target !== section);
+  });
+  navLinks.forEach((link) => {
+    link.classList.toggle("active", link.dataset.sectionTarget === section);
+  });
 };
 
 const updateOverviewMode = () => {
@@ -1290,11 +1305,13 @@ renderKpis();
 updateOverviewMode();
 renderBacktestConditions();
 refreshConditionOptions();
+showSection("overview");
 toggleProtectedSections(false);
 refreshAccessToken().then((ok) => {
   if (ok) {
     setMessage(elements.loginMessage, "已自動登入，Token 已更新", "good");
     logActivity("自動登入", "沿用前一次的登入狀態");
+    showSection("overview");
     fetchCombos();
     loadStrategies().catch(() => {});
     loadTrades().catch(() => {});
@@ -1651,9 +1668,12 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
     setStatus(`已登入：${email}`, "good");
     setMessage(elements.loginMessage, "登入成功", "good");
     toggleProtectedSections(true);
+    showSection("overview");
     logActivity("登入成功", `帳號 ${email}`);
     fetchCombos();
     loadStrategies().catch(() => {});
+    loadTrades().catch(() => {});
+    loadPositions().catch(() => {});
   } catch (err) {
     setMessage(elements.loginMessage, `登入失敗：${err.message}`, "error");
     setStatus("未登入", "warn");
@@ -1906,15 +1926,13 @@ if (elements.reportForm) {
   });
 }
 
-// 快捷導覽平滑滾動
-document.querySelectorAll(".quick-nav a").forEach((link) => {
+// 左側導航切換
+navLinks.forEach((link) => {
   link.addEventListener("click", (e) => {
-    const href = link.getAttribute("href");
-    if (href && href.startsWith("#")) {
-      e.preventDefault();
-      const target = document.querySelector(href);
-      if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+    e.preventDefault();
+    const target = link.dataset.sectionTarget;
+    if (!target) return;
+    showSection(target);
   });
 });
 

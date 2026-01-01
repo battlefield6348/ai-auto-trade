@@ -119,33 +119,58 @@ p {
   backdrop-filter: blur(10px);
 }
 
-.quick-nav {
-  display: flex;
-  gap: 10px;
-  padding: 10px 20px 0;
-  flex-wrap: wrap;
+.app-body {
+  display: grid;
+  grid-template-columns: 230px 1fr;
+  align-items: start;
+}
+
+.sidebar {
   position: sticky;
   top: 72px;
-  z-index: 15;
+  align-self: start;
+  padding: 16px 14px;
   background: rgba(10, 14, 26, 0.92);
-  backdrop-filter: blur(8px);
+  border-right: 1px solid var(--border);
+  min-height: calc(100vh - 72px);
 }
 
-.quick-nav a {
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
+.nav-head {
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.nav-list {
+  display: grid;
+  gap: 8px;
+}
+
+.nav-link {
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
   color: var(--ink);
+  border: 1px solid var(--border);
   font-weight: 600;
   font-size: 13px;
-  border: 1px solid var(--border);
-  text-decoration: none;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
 }
 
-.quick-nav a:hover {
+.nav-link:hover {
   background: rgba(111, 200, 255, 0.12);
   border-color: var(--accent);
+}
+
+.nav-link.active {
+  background: linear-gradient(135deg, #7f6bff, #50e3c2);
+  color: #0b1021;
+  border-color: transparent;
 }
 
 .brand {
@@ -1009,6 +1034,10 @@ select {
 .activity-time {
   font-size: 12px;
   color: var(--muted);
+}
+
+.section-hidden {
+  display: none !important;
 }
 
 .empty-state {

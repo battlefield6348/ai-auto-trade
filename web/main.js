@@ -83,6 +83,13 @@ const elements = {
   createRiskJSON: document.getElementById("createRiskJSON"),
   createStrategyMessage: document.getElementById("createStrategyMessage"),
   loadStrategyTemplate: document.getElementById("loadStrategyTemplate"),
+  applyStrategyFields: document.getElementById("applyStrategyFields"),
+  strategyBuyScore: document.getElementById("strategyBuyScore"),
+  strategySellScore: document.getElementById("strategySellScore"),
+  strategyOrderSize: document.getElementById("strategyOrderSize"),
+  strategyStopLoss: document.getElementById("strategyStopLoss"),
+  strategyTakeProfit: document.getElementById("strategyTakeProfit"),
+  strategyPriceMode: document.getElementById("strategyPriceMode"),
 };
 
 const sections = Array.from(document.querySelectorAll("[data-section]"));
@@ -2119,6 +2126,42 @@ if (elements.createStrategyForm) {
 }
 if (elements.loadStrategyTemplate) {
   elements.loadStrategyTemplate.addEventListener("click", loadStrategyTemplate);
+}
+
+if (elements.applyStrategyFields) {
+  elements.applyStrategyFields.addEventListener("click", () => {
+    const buyScore = Number(elements.strategyBuyScore?.value || 0);
+    const sellScore = Number(elements.strategySellScore?.value || 0);
+    const orderSize = Number(elements.strategyOrderSize?.value || 0);
+    const stopLoss = elements.strategyStopLoss?.value ? Number(elements.strategyStopLoss.value) / 100 : null;
+    const takeProfit = elements.strategyTakeProfit?.value ? Number(elements.strategyTakeProfit.value) / 100 : null;
+    const priceMode = elements.strategyPriceMode?.value || "next_open";
+
+    const buy = {
+      logic: "AND",
+      conditions: [{ type: "numeric", numeric: { field: "score", op: "gte", value: buyScore } }],
+    };
+    const sell = {
+      logic: "AND",
+      conditions: [{ type: "numeric", numeric: { field: "score", op: "lte", value: sellScore } }],
+    };
+    const risk = {
+      order_size_mode: "fixed_usdt",
+      order_size_value: orderSize,
+      fees_pct: 0.001,
+      slippage_pct: 0.001,
+      stop_loss_pct: stopLoss,
+      take_profit_pct: takeProfit,
+      cool_down_days: 1,
+      min_hold_days: 1,
+      max_positions: 1,
+      price_mode: priceMode,
+    };
+    if (elements.createBuyJSON) elements.createBuyJSON.value = JSON.stringify(buy, null, 2);
+    if (elements.createSellJSON) elements.createSellJSON.value = JSON.stringify(sell, null, 2);
+    if (elements.createRiskJSON) elements.createRiskJSON.value = JSON.stringify(risk, null, 2);
+    setMessage(elements.createStrategyMessage, "已套用欄位到 JSON，請確認後送出", "good");
+  });
 }
 
 if (elements.createStrategyForm && elements.loadStrategyTemplate) {

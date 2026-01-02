@@ -283,6 +283,18 @@
               <option value="both">both</option>
             </select>
           </label>
+          <label>買入 Score ≥ <input type="number" id="strategyBuyScore" value="60" step="1"></label>
+          <label>賣出 Score ≤ <input type="number" id="strategySellScore" value="40" step="1"></label>
+          <label>下單金額 (USDT) <input type="number" id="strategyOrderSize" value="1000" step="10"></label>
+          <label>停損 (%) <input type="number" id="strategyStopLoss" value="3" step="0.1"></label>
+          <label>停利 (%) <input type="number" id="strategyTakeProfit" value="6" step="0.1"></label>
+          <label>成交價模式
+            <select id="strategyPriceMode">
+              <option value="next_open">次日開盤</option>
+              <option value="next_close">次日收盤</option>
+              <option value="current_close">當日收盤</option>
+            </select>
+          </label>
         </div>
         <label>買入條件 JSON（ConditionSet）
           <textarea id="createBuyJSON" rows="4" spellcheck="false"></textarea>
@@ -295,6 +307,7 @@
         </label>
         <div class="actions">
           <button type="button" class="ghost btn-sm" id="loadStrategyTemplate">載入範例</button>
+          <button type="button" class="ghost btn-sm" id="applyStrategyFields">欄位套用至 JSON</button>
           <button type="submit" class="primary">建立策略</button>
         </div>
         <div id="createStrategyMessage" class="message"></div>

@@ -14,6 +14,8 @@ const state = {
   strategyBacktestsAll: [],
   strategyBacktestPage: { page: 1, size: 10 },
   lastStrategyBacktest: null,
+  reports: [],
+  selectedReport: null,
   activity: [],
   updatedAt: null,
 };
@@ -67,6 +69,7 @@ const elements = {
   reportStrategyId: document.getElementById("reportStrategyId"),
   reportTable: document.getElementById("reportTable"),
   reportMeta: document.getElementById("reportMeta"),
+  reportDetail: document.getElementById("reportDetail"),
   positionForm: document.getElementById("positionForm"),
   positionEnv: document.getElementById("positionEnv"),
   positionTable: document.getElementById("positionTable"),
@@ -2720,9 +2723,11 @@ const loadPositions = async () => {
 
 const renderReportTable = (items = []) => {
   if (!elements.reportTable) return;
+  state.reports = items || [];
   if (!items.length) {
     renderEmptyState(elements.reportTable, "尚未查詢");
     if (elements.reportMeta) elements.reportMeta.innerHTML = "";
+    renderReportDetail(null);
     return;
   }
   const rows = items.map((r) => ({
@@ -2731,6 +2736,7 @@ const renderReportTable = (items = []) => {
     period: `${fmtText(r.period_start)} ~ ${fmtText(r.period_end)}`,
     summary: r.summary ? JSON.stringify(r.summary) : "—",
     created_at: r.created_at ? timeFormat.format(new Date(r.created_at)) : "—",
+    raw: r,
   }));
   const cols = [
     { key: "id", label: "報告 ID", className: "mono" },
@@ -2738,11 +2744,23 @@ const renderReportTable = (items = []) => {
     { key: "period", label: "期間" },
     { key: "summary", label: "摘要" },
     { key: "created_at", label: "建立時間" },
+    {
+      key: "actions",
+      label: "操作",
+      format: (_, row) => `<button class="ghost btn-sm" data-report-id="${row.id}">查看</button>`,
+    },
   ];
   renderTable(elements.reportTable, rows, cols);
   if (elements.reportMeta) {
     elements.reportMeta.innerHTML = `<div class="meta-item">共 ${fmtInt(items.length)} 筆報告</div>`;
   }
+  elements.reportTable.querySelectorAll("[data-report-id]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.reportId;
+      const report = state.reports.find((r) => r.id === id);
+      renderReportDetail(report);
+    });
+  });
 };
 
 const loadReports = async () => {
@@ -2751,6 +2769,7 @@ const loadReports = async () => {
   if (!strategyId) {
     setStatus("請輸入策略 ID", "warn");
     renderEmptyState(elements.reportTable, "尚未查詢");
+    renderReportDetail(null);
     return;
   }
   renderEmptyState(elements.reportTable, "載入報告中...");
@@ -2758,6 +2777,34 @@ const loadReports = async () => {
   renderReportTable(res.reports || []);
   logActivity("查詢報告", `策略 ${strategyId} · 筆數 ${fmtInt((res.reports || []).length)}`);
   setStatus("報告列表已更新", "good");
+};
+
+const renderReportDetail = (report) => {
+  state.selectedReport = report;
+  if (!elements.reportDetail) return;
+  if (!report) {
+    renderEmptyState(elements.reportDetail, "請於上方列表點擊「查看」檢視報告內容");
+    return;
+  }
+  const summaryPretty = report.summary ? JSON.stringify(report.summary, null, 2) : "—";
+  const tradesCount = Array.isArray(report.trades_ref) ? report.trades_ref.length : 0;
+  const tradesSample =
+    tradesCount && report.trades_ref && report.trades_ref.slice
+      ? JSON.stringify(report.trades_ref.slice(0, 3), null, 2)
+      : "—";
+  elements.reportDetail.innerHTML = `
+    <div class="meta-row">
+      <div class="meta-item">報告 ID：${fmtText(report.id)}</div>
+      <div class="meta-item">環境：${fmtText(report.env)}</div>
+      <div class="meta-item">區間：${fmtText(report.period_start)} ~ ${fmtText(report.period_end)}</div>
+      <div class="meta-item">筆數：${fmtInt(tradesCount)}</div>
+      <div class="meta-item">建立時間：${
+        report.created_at ? timeFormat.format(new Date(report.created_at)) : "—"
+      }</div>
+    </div>
+    <div class="code-block"><pre>${summaryPretty}</pre></div>
+    <div class="code-block"><pre>交易樣本（前三筆）\n${tradesSample}</pre></div>
+  `;
 };
 
 const renderLogTable = (items = []) => {

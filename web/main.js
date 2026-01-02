@@ -1505,13 +1505,45 @@ const loadStrategies = async () => {
   setStatus("策略列表已更新", "good");
 };
 
+const conditionTypeOptions = [
+  { value: "numeric", label: "數值" },
+  { value: "tags", label: "標籤" },
+  { value: "category", label: "分類" },
+  { value: "symbols", label: "代碼" },
+];
+
+const numericFieldOptions = [
+  { value: "score", label: "score" },
+  { value: "return5", label: "return5" },
+  { value: "return20", label: "return20" },
+  { value: "return60", label: "return60" },
+  { value: "volume_multiple", label: "volume_multiple" },
+  { value: "deviation20", label: "deviation20" },
+  { value: "range_pos20", label: "range_pos20" },
+  { value: "amplitude", label: "amplitude" },
+  { value: "avg_amplitude20", label: "avg_amplitude20" },
+  { value: "ma5", label: "ma5" },
+  { value: "ma10", label: "ma10" },
+  { value: "ma20", label: "ma20" },
+  { value: "ma60", label: "ma60" },
+  { value: "close", label: "close" },
+];
+
 const conditionOps = [
   { value: "gte", label: "≥" },
   { value: "lte", label: "≤" },
   { value: "gt", label: ">" },
   { value: "lt", label: "<" },
   { value: "eq", label: "=" },
+  { value: "between", label: "區間" },
 ];
+
+const categoryFieldOptions = [
+  { value: "market", label: "市場 (TWSE/TPEx)" },
+  { value: "industry", label: "產業" },
+];
+
+const tagOptions = ["短期強勢", "量能放大", "接近前高", "接近前低", "高波動", "低波動"];
 
 function toPercent(raw, label, allowEmpty = true, defaultValue = null) {
   if (raw === "" || raw === null || raw === undefined) {
@@ -1524,32 +1556,196 @@ function toPercent(raw, label, allowEmpty = true, defaultValue = null) {
   return { ok: true, value: num / 100 };
 }
 
+function createOptions(select, options, selected) {
+  select.innerHTML = "";
+  options.forEach((opt) => {
+    const option = document.createElement("option");
+    option.value = opt.value;
+    option.textContent = opt.label;
+    select.appendChild(option);
+  });
+  if (selected) {
+    select.value = selected;
+  }
+}
+
+function parseList(text) {
+  return (text || "")
+    .split(/[,，\n]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 function addConditionRow(container, defaults = {}) {
   if (!container) return;
   const row = document.createElement("div");
-  row.className = "condition-row inline";
-  row.innerHTML = `
-    <label>欄位 <input type="text" data-field placeholder="score" value="${defaults.field || ""}"></label>
-    <label>運算子 <select data-op></select></label>
-    <label>數值 <input type="number" step="0.01" data-value value="${defaults.value ?? ""}"></label>
-    <button type="button" class="ghost btn-sm" data-remove>移除</button>
-  `;
-  const opSelect = row.querySelector("[data-op]");
-  conditionOps.forEach((op) => {
-    const opt = document.createElement("option");
-    opt.value = op.value;
-    opt.textContent = op.label;
-    opSelect.appendChild(opt);
-  });
-  opSelect.value = defaults.op || "gte";
+  row.className = "condition-card";
+  const head = document.createElement("div");
+  head.className = "condition-card-head";
+  const typeSelect = document.createElement("select");
+  typeSelect.dataset.type = "true";
+  createOptions(typeSelect, conditionTypeOptions, defaults.type || "numeric");
+  const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
+  removeBtn.className = "ghost btn-sm";
+  removeBtn.textContent = "移除";
+  head.appendChild(typeSelect);
+  head.appendChild(removeBtn);
 
-  row.querySelectorAll("input, select").forEach((el) => {
-    el.addEventListener("input", updateStrategyPreview);
+  const body = document.createElement("div");
+  body.className = "condition-body";
+  body.dataset.conditionBody = "true";
+  row.appendChild(head);
+  row.appendChild(body);
+
+  const renderBody = (type, dft = {}) => {
+    body.innerHTML = "";
+    if (type === "numeric") {
+      const fieldLabel = document.createElement("label");
+      fieldLabel.textContent = "欄位";
+      const fieldSelect = document.createElement("select");
+      fieldSelect.dataset.field = "true";
+      createOptions(fieldSelect, numericFieldOptions, dft.field || "score");
+      fieldLabel.appendChild(fieldSelect);
+
+      const opLabel = document.createElement("label");
+      opLabel.textContent = "運算子";
+      const opSelect = document.createElement("select");
+      opSelect.dataset.op = "true";
+      createOptions(opSelect, conditionOps, dft.op || "gte");
+      opLabel.appendChild(opSelect);
+
+      const valueLabel = document.createElement("label");
+      valueLabel.textContent = "數值";
+      const valueInput = document.createElement("input");
+      valueInput.type = "number";
+      valueInput.step = "0.01";
+      valueInput.dataset.value = "true";
+      valueInput.value = dft.value ?? "";
+      valueLabel.appendChild(valueInput);
+
+      const rangeWrapper = document.createElement("div");
+      rangeWrapper.className = "inline";
+      const minLabel = document.createElement("label");
+      minLabel.textContent = "最小值";
+      const minInput = document.createElement("input");
+      minInput.type = "number";
+      minInput.step = "0.01";
+      minInput.dataset.min = "true";
+      minInput.value = dft.min ?? "";
+      minLabel.appendChild(minInput);
+      const maxLabel = document.createElement("label");
+      maxLabel.textContent = "最大值";
+      const maxInput = document.createElement("input");
+      maxInput.type = "number";
+      maxInput.step = "0.01";
+      maxInput.dataset.max = "true";
+      maxInput.value = dft.max ?? "";
+      maxLabel.appendChild(maxInput);
+      rangeWrapper.appendChild(minLabel);
+      rangeWrapper.appendChild(maxLabel);
+
+      body.appendChild(fieldLabel);
+      body.appendChild(opLabel);
+      body.appendChild(valueLabel);
+      body.appendChild(rangeWrapper);
+
+      const toggleRange = () => {
+        const isBetween = opSelect.value === "between";
+        valueLabel.style.display = isBetween ? "none" : "block";
+        rangeWrapper.style.display = isBetween ? "flex" : "none";
+      };
+      toggleRange();
+      opSelect.addEventListener("change", toggleRange);
+    } else if (type === "category") {
+      const fieldLabel = document.createElement("label");
+      fieldLabel.textContent = "欄位";
+      const fieldSelect = document.createElement("select");
+      fieldSelect.dataset.categoryField = "true";
+      createOptions(fieldSelect, categoryFieldOptions, dft.field || "market");
+      fieldLabel.appendChild(fieldSelect);
+
+      const valuesLabel = document.createElement("label");
+      valuesLabel.textContent = "值（以逗號分隔）";
+      const valuesInput = document.createElement("input");
+      valuesInput.type = "text";
+      valuesInput.placeholder = "TWSE,TPEx 或產業名稱";
+      valuesInput.dataset.categoryValues = "true";
+      valuesInput.value = dft.values?.join(",") || "";
+      valuesLabel.appendChild(valuesInput);
+
+      body.appendChild(fieldLabel);
+      body.appendChild(valuesLabel);
+    } else if (type === "tags") {
+      const includeAnyLabel = document.createElement("label");
+      includeAnyLabel.textContent = "包含任一標籤（逗號分隔）";
+      const includeAnyInput = document.createElement("input");
+      includeAnyInput.type = "text";
+      includeAnyInput.placeholder = tagOptions.join("，");
+      includeAnyInput.dataset.includeAny = "true";
+      includeAnyInput.value = (dft.includeAny || []).join(",");
+      includeAnyLabel.appendChild(includeAnyInput);
+
+      const includeAllLabel = document.createElement("label");
+      includeAllLabel.textContent = "需同時包含（逗號分隔，可留空）";
+      const includeAllInput = document.createElement("input");
+      includeAllInput.type = "text";
+      includeAllInput.placeholder = "短期強勢,量能放大";
+      includeAllInput.dataset.includeAll = "true";
+      includeAllInput.value = (dft.includeAll || []).join(",");
+      includeAllLabel.appendChild(includeAllInput);
+
+      const excludeLabel = document.createElement("label");
+      excludeLabel.textContent = "需排除（逗號分隔，可留空）";
+      const excludeInput = document.createElement("input");
+      excludeInput.type = "text";
+      excludeInput.placeholder = "高波動";
+      excludeInput.dataset.excludeAny = "true";
+      excludeInput.value = (dft.excludeAny || []).join(",");
+      excludeLabel.appendChild(excludeInput);
+
+      body.appendChild(includeAnyLabel);
+      body.appendChild(includeAllLabel);
+      body.appendChild(excludeLabel);
+    } else if (type === "symbols") {
+      const includeLabel = document.createElement("label");
+      includeLabel.textContent = "限定代碼（逗號分隔）";
+      const includeInput = document.createElement("input");
+      includeInput.type = "text";
+      includeInput.placeholder = "2330, 2317";
+      includeInput.dataset.includeSymbols = "true";
+      includeInput.value = (dft.include || []).join(",");
+      includeLabel.appendChild(includeInput);
+
+      const excludeLabel = document.createElement("label");
+      excludeLabel.textContent = "排除代碼（逗號分隔，可留空）";
+      const excludeInput = document.createElement("input");
+      excludeInput.type = "text";
+      excludeInput.placeholder = "0050";
+      excludeInput.dataset.excludeSymbols = "true";
+      excludeInput.value = (dft.exclude || []).join(",");
+      excludeLabel.appendChild(excludeInput);
+
+      body.appendChild(includeLabel);
+      body.appendChild(excludeLabel);
+    }
+
+    body.querySelectorAll("input, select").forEach((el) => {
+      el.addEventListener("input", updateStrategyPreview);
+    });
+  };
+
+  renderBody(typeSelect.value, defaults);
+
+  typeSelect.addEventListener("change", () => {
+    renderBody(typeSelect.value, {});
+    updateStrategyPreview();
   });
-  row.querySelector("[data-remove]").addEventListener("click", () => {
+  removeBtn.addEventListener("click", () => {
     row.remove();
     updateStrategyPreview();
   });
+
   container.appendChild(row);
 }
 
@@ -1566,25 +1762,54 @@ function collectConditions(container, logicValue, strict = true) {
     return { ok: false, error: "邏輯需為 AND 或 OR" };
   }
   const conditions = [];
-  let error = null;
-  container.querySelectorAll(".condition-row").forEach((row) => {
-    const field = (row.querySelector("[data-field]")?.value || "").trim();
-    const op = row.querySelector("[data-op]")?.value || "";
-    const rawValue = row.querySelector("[data-value]")?.value;
-    const value = rawValue === "" ? NaN : Number(rawValue);
-    if (!field && !error) error = "條件欄位不可空白";
-    if (!op && !error) error = "請選擇運算子";
-    if (Number.isNaN(value) && !error) error = "條件數值需為數字";
-    if (!error) {
-      conditions.push({ type: "numeric", numeric: { field, op, value } });
-    }
-  });
-  if (conditions.length === 0) {
+  const rows = Array.from(container.querySelectorAll(".condition-card"));
+  if (rows.length === 0) {
     return { ok: false, error: "請至少新增一條條件" };
   }
-  if (error) {
-    return { ok: false, error };
+
+  for (const row of rows) {
+    const type = row.querySelector("select[data-type]")?.value || "numeric";
+    if (type === "numeric") {
+      const field = (row.querySelector("[data-field]")?.value || "").trim();
+      const op = row.querySelector("[data-op]")?.value || "";
+      if (!field) return { ok: false, error: "數值條件欄位不可空白" };
+      if (!op) return { ok: false, error: "請選擇運算子" };
+      if (op === "between") {
+        const min = Number(row.querySelector("[data-min]")?.value ?? NaN);
+        const max = Number(row.querySelector("[data-max]")?.value ?? NaN);
+        if (Number.isNaN(min) || Number.isNaN(max)) return { ok: false, error: "區間條件需填寫最小值與最大值" };
+        if (strict && min > max) return { ok: false, error: "區間最小值需小於等於最大值" };
+        conditions.push({ type, numeric: { field, op, min, max } });
+      } else {
+        const value = Number(row.querySelector("[data-value]")?.value ?? NaN);
+        if (Number.isNaN(value)) return { ok: false, error: "條件數值需為數字" };
+        conditions.push({ type, numeric: { field, op, value } });
+      }
+    } else if (type === "category") {
+      const field = row.querySelector("[data-category-field]")?.value || "";
+      const values = parseList(row.querySelector("[data-category-values]")?.value || "");
+      if (strict && values.length === 0) return { ok: false, error: "分類條件至少填一個值" };
+      conditions.push({ type, category: { field, values } });
+    } else if (type === "tags") {
+      const includeAny = parseList(row.querySelector("[data-include-any]")?.value || "");
+      const includeAll = parseList(row.querySelector("[data-include-all]")?.value || "");
+      const excludeAny = parseList(row.querySelector("[data-exclude-any]")?.value || "");
+      if (strict && includeAny.length === 0 && includeAll.length === 0 && excludeAny.length === 0) {
+        return { ok: false, error: "標籤條件至少填一個包含或排除" };
+      }
+      conditions.push({ type, tags: { includeAny, includeAll, excludeAny } });
+    } else if (type === "symbols") {
+      const include = parseList(row.querySelector("[data-include-symbols]")?.value || "");
+      const exclude = parseList(row.querySelector("[data-exclude-symbols]")?.value || "");
+      if (strict && include.length === 0 && exclude.length === 0) {
+        return { ok: false, error: "代碼條件請至少輸入一個代碼" };
+      }
+      conditions.push({ type, symbols: { include, exclude } });
+    } else {
+      return { ok: false, error: `不支援的條件類型：${type}` };
+    }
   }
+
   return { ok: true, value: { logic, conditions } };
 }
 

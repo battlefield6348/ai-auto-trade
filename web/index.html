@@ -269,6 +269,36 @@
       </form>
       <div id="strategyMeta" class="meta-row"></div>
       <div id="strategyTable" class="table"></div>
+
+      <div class="subsection-title">建立策略（JSON）</div>
+      <form id="createStrategyForm" class="form">
+        <div class="field-grid">
+          <label>名稱 <input type="text" id="createStrategyName" placeholder="例如：突破策略" required></label>
+          <label>交易對 <input type="text" id="createStrategySymbol" value="BTCUSDT"></label>
+          <label>週期 <input type="text" id="createStrategyTimeframe" value="1d"></label>
+          <label>環境
+            <select id="createStrategyEnv">
+              <option value="test">test</option>
+              <option value="prod">prod</option>
+              <option value="both">both</option>
+            </select>
+          </label>
+        </div>
+        <label>買入條件 JSON（ConditionSet）
+          <textarea id="createBuyJSON" rows="4" spellcheck="false"></textarea>
+        </label>
+        <label>賣出條件 JSON（ConditionSet）
+          <textarea id="createSellJSON" rows="4" spellcheck="false"></textarea>
+        </label>
+        <label>風控設定 JSON（RiskSettings）
+          <textarea id="createRiskJSON" rows="3" spellcheck="false"></textarea>
+        </label>
+        <div class="actions">
+          <button type="button" class="ghost btn-sm" id="loadStrategyTemplate">載入範例</button>
+          <button type="submit" class="primary">建立策略</button>
+        </div>
+        <div id="createStrategyMessage" class="message"></div>
+      </form>
     </section>
 
     <section class="panel span-2" id="tradePanel" data-section="trade">

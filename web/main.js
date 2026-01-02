@@ -73,6 +73,16 @@ const elements = {
   logLimit: document.getElementById("logLimit"),
   logTable: document.getElementById("logTable"),
   logMeta: document.getElementById("logMeta"),
+  createStrategyForm: document.getElementById("createStrategyForm"),
+  createStrategyName: document.getElementById("createStrategyName"),
+  createStrategySymbol: document.getElementById("createStrategySymbol"),
+  createStrategyTimeframe: document.getElementById("createStrategyTimeframe"),
+  createStrategyEnv: document.getElementById("createStrategyEnv"),
+  createBuyJSON: document.getElementById("createBuyJSON"),
+  createSellJSON: document.getElementById("createSellJSON"),
+  createRiskJSON: document.getElementById("createRiskJSON"),
+  createStrategyMessage: document.getElementById("createStrategyMessage"),
+  loadStrategyTemplate: document.getElementById("loadStrategyTemplate"),
 };
 
 const sections = Array.from(document.querySelectorAll("[data-section]"));
@@ -1481,6 +1491,69 @@ const loadStrategies = async () => {
   setStatus("策略列表已更新", "good");
 };
 
+const loadStrategyTemplate = () => {
+  const buy = {
+    logic: "AND",
+    conditions: [
+      { type: "numeric", numeric: { field: "score", op: "gte", value: 60 } },
+    ],
+  };
+  const sell = {
+    logic: "AND",
+    conditions: [
+      { type: "numeric", numeric: { field: "score", op: "lte", value: 40 } },
+    ],
+  };
+  const risk = {
+    order_size_mode: "fixed_usdt",
+    order_size_value: 1000,
+    fees_pct: 0.001,
+    slippage_pct: 0.001,
+    cool_down_days: 1,
+    min_hold_days: 1,
+    max_positions: 1,
+    price_mode: "next_open",
+  };
+  if (elements.createBuyJSON) elements.createBuyJSON.value = JSON.stringify(buy, null, 2);
+  if (elements.createSellJSON) elements.createSellJSON.value = JSON.stringify(sell, null, 2);
+  if (elements.createRiskJSON) elements.createRiskJSON.value = JSON.stringify(risk, null, 2);
+};
+
+const createStrategy = async () => {
+  const name = (elements.createStrategyName?.value || "").trim();
+  const base_symbol = (elements.createStrategySymbol?.value || "BTCUSDT").trim();
+  const timeframe = (elements.createStrategyTimeframe?.value || "1d").trim();
+  const env = elements.createStrategyEnv?.value || "both";
+  if (!name) {
+    setMessage(elements.createStrategyMessage, "請填寫策略名稱", "error");
+    return;
+  }
+  try {
+    requireLogin();
+    const buy = JSON.parse(elements.createBuyJSON?.value || "{}");
+    const sell = JSON.parse(elements.createSellJSON?.value || "{}");
+    const risk = JSON.parse(elements.createRiskJSON?.value || "{}");
+    const payload = {
+      name,
+      base_symbol,
+      timeframe,
+      env,
+      buy_conditions: buy,
+      sell_conditions: sell,
+      risk_settings: risk,
+    };
+    await api("/api/admin/strategies", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    setMessage(elements.createStrategyMessage, "策略建立成功", "good");
+    logActivity("建立策略", `名稱 ${name} · env ${env}`);
+    await loadStrategies();
+  } catch (err) {
+    setMessage(elements.createStrategyMessage, `建立失敗：${err.message}`, "error");
+  }
+};
+
 const activateStrategy = async (id, env) => {
   await api(`/api/admin/strategies/${id}/activate`, {
     method: "POST",
@@ -2017,6 +2090,16 @@ document.getElementById("summaryBtn").addEventListener("click", async () => {
     elements.summaryView.innerHTML = `<div class="empty-state">${err.message}</div>`;
   }
 });
+
+if (elements.createStrategyForm) {
+  elements.createStrategyForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    await createStrategy();
+  });
+}
+if (elements.loadStrategyTemplate) {
+  elements.loadStrategyTemplate.addEventListener("click", loadStrategyTemplate);
+}
 
 window.addEventListener("resize", () => {
   if (state.lastChart && state.lastChart.items && state.lastChart.items.length) {

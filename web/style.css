@@ -386,6 +386,17 @@ input:focus {
   box-shadow: 0 0 0 3px rgba(107, 229, 242, 0.25);
 }
 
+textarea {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border-strong);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 14px;
+  color: var(--ink);
+  min-height: 120px;
+  font-family: "SFMono-Regular", "Menlo", "Monaco", "Courier New", monospace;
+}
+
 button {
   padding: 10px 18px;
   border-radius: 999px;
@@ -444,6 +455,12 @@ button.ghost {
   flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-start;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
 }
 
 .stat-grid {

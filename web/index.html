@@ -388,7 +388,19 @@
       <div id="strategyBacktestSummary" class="result-panel"></div>
       <div id="strategyBacktestTrades" class="table"></div>
       <div class="subsection-title">歷史回測紀錄</div>
+      <form id="strategyBacktestFilterForm" class="form inline">
+        <label>開始日 <input type="date" id="strategyBtHistStart"></label>
+        <label>結束日 <input type="date" id="strategyBtHistEnd"></label>
+        <label>版次 <input type="number" id="strategyBtHistVersion" min="1" placeholder="可留空"></label>
+        <label>每頁筆數 <input type="number" id="strategyBtHistPageSize" value="10" min="1" max="200"></label>
+        <button type="submit" class="ghost btn-sm">套用篩選</button>
+      </form>
       <div id="strategyBacktestHistory" class="table"></div>
+      <div class="pagination">
+        <button type="button" class="ghost btn-sm" id="strategyBtHistPrev">上一頁</button>
+        <span id="strategyBtHistPageInfo"></span>
+        <button type="button" class="ghost btn-sm" id="strategyBtHistNext">下一頁</button>
+      </div>
       <div class="subsection-title">淨值曲線（回測）</div>
       <div class="chart-wrap">
         <div id="strategyEquityChart" class="chart-canvas small"></div>

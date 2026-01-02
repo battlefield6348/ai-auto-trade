@@ -11,6 +11,8 @@ const state = {
   lastChart: null,
   strategies: [],
   strategyBacktests: [],
+  strategyBacktestsAll: [],
+  strategyBacktestPage: { page: 1, size: 10 },
   lastStrategyBacktest: null,
   activity: [],
   updatedAt: null,
@@ -95,6 +97,14 @@ const elements = {
   strategyBacktestSummary: document.getElementById("strategyBacktestSummary"),
   strategyBacktestTrades: document.getElementById("strategyBacktestTrades"),
   strategyBacktestHistory: document.getElementById("strategyBacktestHistory"),
+  strategyBtHistStart: document.getElementById("strategyBtHistStart"),
+  strategyBtHistEnd: document.getElementById("strategyBtHistEnd"),
+  strategyBtHistVersion: document.getElementById("strategyBtHistVersion"),
+  strategyBtHistPageSize: document.getElementById("strategyBtHistPageSize"),
+  strategyBtHistPrev: document.getElementById("strategyBtHistPrev"),
+  strategyBtHistNext: document.getElementById("strategyBtHistNext"),
+  strategyBtHistPageInfo: document.getElementById("strategyBtHistPageInfo"),
+  strategyBacktestFilterForm: document.getElementById("strategyBacktestFilterForm"),
   strategyEquityChart: document.getElementById("strategyEquityChart"),
   createStrategyForm: document.getElementById("createStrategyForm"),
   createStrategyName: document.getElementById("createStrategyName"),
@@ -1726,6 +1736,7 @@ const renderStrategyBacktestSummary = (rec) => {
     renderEmptyState(elements.strategyBacktestSummary, "尚未執行回測");
     renderStrategyBacktestTrades([]);
     renderEquityChart([]);
+    renderStrategyBacktestHistory([]);
     return;
   }
   const params = rec.params || {};
@@ -1785,6 +1796,7 @@ const runStrategyBacktest = async () => {
     setMessage(elements.strategyBacktestMessage, "回測完成並已保存", "good");
     renderStrategyBacktestSummary(record);
     state.lastStrategyBacktest = record;
+    state.strategyBacktestPage.page = 1;
     await loadStrategyBacktests(record.strategy_id);
     logActivity("策略回測", `策略 ${res.strategyID} · ${res.payload.start_date}~${res.payload.end_date}`);
   } catch (err) {
@@ -1808,46 +1820,97 @@ const applyBacktestParams = (params = {}) => {
   if (elements.strategyBtMaxPos && params.max_positions != null) elements.strategyBtMaxPos.value = params.max_positions;
 };
 
-const renderStrategyBacktestHistory = (list = []) => {
+const getHistoryFilter = () => {
+  const start = elements.strategyBtHistStart?.value;
+  const end = elements.strategyBtHistEnd?.value;
+  const version = elements.strategyBtHistVersion?.value;
+  const pageSize = Number(elements.strategyBtHistPageSize?.value || 10);
+  return {
+    start: start ? new Date(start) : null,
+    end: end ? new Date(end) : null,
+    version: version ? Number(version) : null,
+    pageSize: !Number.isNaN(pageSize) && pageSize > 0 ? pageSize : 10,
+  };
+};
+
+const applyHistoryFilters = () => {
+  const { start, end, version, pageSize } = getHistoryFilter();
+  state.strategyBacktestPage.size = pageSize;
+  let list = state.strategyBacktestsAll || [];
+  if (version) {
+    list = list.filter((r) => r.strategy_version === version);
+  }
+  if (start || end) {
+    list = list.filter((r) => {
+      const sd = r.params?.start_date ? new Date(r.params.start_date) : null;
+      const ed = r.params?.end_date ? new Date(r.params.end_date) : null;
+      if (start && sd && sd < start) return false;
+      if (end && ed && ed > end) return false;
+      return true;
+    });
+  }
   state.strategyBacktests = list;
+};
+
+const renderStrategyBacktestHistory = () => {
   if (!elements.strategyBacktestHistory) return;
-  if (!list.length) {
+  if (!state.strategyBacktestsAll.length) {
     renderEmptyState(elements.strategyBacktestHistory, "尚無歷史回測紀錄");
+    if (elements.strategyBtHistPageInfo) elements.strategyBtHistPageInfo.textContent = "";
     return;
   }
-  const rows = list.map((r, idx) => {
-    const params = r.params || {};
-    const stats = r.result?.stats || {};
-    return {
-      idx,
-      created_at: r.created_at ? timeFormat.format(new Date(r.created_at)) : "—",
-      period: `${fmtDate(params.start_date)} ~ ${fmtDate(params.end_date)}`,
-      version: r.strategy_version || "-",
-      total_return: stats.total_return,
-      max_dd: stats.max_drawdown,
-      win_rate: stats.win_rate,
-      trades: stats.trade_count,
-    };
-  });
-  const cols = [
-    { key: "created_at", label: "建立時間" },
-    { key: "period", label: "區間" },
-    { key: "version", label: "版次" },
-    { key: "total_return", label: "總報酬", format: fmtPercent, delta: true },
-    { key: "max_dd", label: "最大回撤", format: fmtPercent, delta: true },
-    { key: "win_rate", label: "勝率", format: fmtPercent },
-    { key: "trades", label: "筆數", format: fmtInt },
-    {
-      key: "actions",
-      label: "操作",
-      format: (_, row) =>
-        `<button class="ghost btn-sm" data-action="preview" data-idx="${row.idx}">查看</button>
-         <button class="ghost btn-sm" data-action="apply" data-idx="${row.idx}">套用參數</button>`,
-    },
-  ];
-  const tableHTML = renderTableHTML(rows, cols);
-  elements.strategyBacktestHistory.innerHTML = tableHTML;
-  bindBacktestHistoryActions();
+  applyHistoryFilters();
+  const { page, size } = state.strategyBacktestPage;
+  const total = state.strategyBacktests.length;
+  const totalPages = Math.max(1, Math.ceil(total / size));
+  const currentPage = Math.min(page, totalPages);
+  state.strategyBacktestPage.page = currentPage;
+  const startIdx = (currentPage - 1) * size;
+  const pageRows = state.strategyBacktests.slice(startIdx, startIdx + size);
+
+  if (!pageRows.length) {
+    renderEmptyState(elements.strategyBacktestHistory, "範圍內無回測紀錄");
+  } else {
+    const rows = pageRows.map((r, idx) => {
+      const params = r.params || {};
+      const stats = r.result?.stats || {};
+      return {
+        idx: startIdx + idx,
+        created_at: r.created_at ? timeFormat.format(new Date(r.created_at)) : "—",
+        period: `${fmtDate(params.start_date)} ~ ${fmtDate(params.end_date)}`,
+        version: r.strategy_version || "-",
+        total_return: stats.total_return,
+        max_dd: stats.max_drawdown,
+        win_rate: stats.win_rate,
+        trades: stats.trade_count,
+      };
+    });
+    const cols = [
+      { key: "created_at", label: "建立時間" },
+      { key: "period", label: "區間" },
+      { key: "version", label: "版次" },
+      { key: "total_return", label: "總報酬", format: fmtPercent, delta: true },
+      { key: "max_dd", label: "最大回撤", format: fmtPercent, delta: true },
+      { key: "win_rate", label: "勝率", format: fmtPercent },
+      { key: "trades", label: "筆數", format: fmtInt },
+      {
+        key: "actions",
+        label: "操作",
+        format: (_, row) =>
+          `<button class="ghost btn-sm" data-action="preview" data-idx="${row.idx}">查看</button>
+           <button class="ghost btn-sm" data-action="apply" data-idx="${row.idx}">套用參數</button>`,
+      },
+    ];
+    const tableHTML = renderTableHTML(rows, cols);
+    elements.strategyBacktestHistory.innerHTML = tableHTML;
+    bindBacktestHistoryActions();
+  }
+
+  if (elements.strategyBtHistPageInfo) {
+    elements.strategyBtHistPageInfo.textContent = `第 ${currentPage} / ${totalPages} 頁（共 ${fmtInt(
+      total
+    )} 筆）`;
+  }
 };
 
 const renderTableHTML = (rows, cols) => {
@@ -1874,7 +1937,7 @@ const bindBacktestHistoryActions = () => {
   elements.strategyBacktestHistory.querySelectorAll("[data-action]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       const idx = Number(btn.dataset.idx || -1);
-      const record = state.strategyBacktests[idx];
+      const record = state.strategyBacktestsAll[idx];
       if (!record) return;
       const action = btn.dataset.action;
       if (action === "preview") {
@@ -1894,7 +1957,9 @@ const loadStrategyBacktests = async (strategyID) => {
   try {
     renderEmptyState(elements.strategyBacktestHistory, "載入回測紀錄中...");
     const res = await api(`/api/admin/strategies/${strategyID}/backtests`);
-    renderStrategyBacktestHistory(res.backtests || []);
+    state.strategyBacktestsAll = res.backtests || [];
+    state.strategyBacktestPage.page = 1;
+    renderStrategyBacktestHistory();
   } catch (err) {
     renderEmptyState(elements.strategyBacktestHistory, `載入失敗：${err.message}`);
   }
@@ -2938,7 +3003,36 @@ if (elements.strategyBacktestSelect) {
     if (id) {
       await loadStrategyBacktests(id);
     } else {
-      renderStrategyBacktestHistory([]);
+      state.strategyBacktestsAll = [];
+      renderStrategyBacktestHistory();
+    }
+  });
+}
+
+if (elements.strategyBacktestFilterForm) {
+  elements.strategyBacktestFilterForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    state.strategyBacktestPage.page = 1;
+    renderStrategyBacktestHistory();
+  });
+}
+
+if (elements.strategyBtHistPrev) {
+  elements.strategyBtHistPrev.addEventListener("click", () => {
+    if (state.strategyBacktestPage.page > 1) {
+      state.strategyBacktestPage.page -= 1;
+      renderStrategyBacktestHistory();
+    }
+  });
+}
+
+if (elements.strategyBtHistNext) {
+  elements.strategyBtHistNext.addEventListener("click", () => {
+    const total = state.strategyBacktests ? state.strategyBacktests.length : 0;
+    const totalPages = Math.max(1, Math.ceil(total / state.strategyBacktestPage.size));
+    if (state.strategyBacktestPage.page < totalPages) {
+      state.strategyBacktestPage.page += 1;
+      renderStrategyBacktestHistory();
     }
   });
 }

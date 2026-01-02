@@ -1575,14 +1575,14 @@ const fmtDate = (v) => {
   return d.toISOString().slice(0, 10);
 };
 
-const setStrategyBacktestDefaults = () => {
+function setStrategyBacktestDefaults() {
   const today = new Date();
   const start = new Date();
   start.setDate(today.getDate() - 180);
   if (elements.strategyBtStart) elements.strategyBtStart.value = start.toISOString().slice(0, 10);
   if (elements.strategyBtEnd) elements.strategyBtEnd.value = today.toISOString().slice(0, 10);
   if (elements.strategyBtPriceMode) elements.strategyBtPriceMode.value = "next_open";
-};
+}
 
 const collectStrategyBacktestPayload = () => {
   const strategyID = (elements.strategyBacktestSelect?.value || elements.strategyBacktestId?.value || "").trim();
@@ -2943,7 +2943,7 @@ const renderComboList = () => {
   elements.comboSelect.innerHTML = options;
 };
 
-const fetchCombos = async () => {
+async function fetchCombos() {
   if (!state.token) return;
   try {
     const res = await api("/api/analysis/backtest/presets");
@@ -2954,7 +2954,7 @@ const fetchCombos = async () => {
   } catch (err) {
     console.warn("fetch combos failed", err);
   }
-};
+}
 
 const saveCombo = async () => {
   try {

@@ -89,6 +89,9 @@ func (s *Service) CreateStrategy(ctx context.Context, input tradingDomain.Strate
 	if err := input.Validate(); err != nil {
 		return input, err
 	}
+	if err := validateStrategyContent(input); err != nil {
+		return input, err
+	}
 	id, err := s.repo.CreateStrategy(ctx, input)
 	if err != nil {
 		return input, err
@@ -125,6 +128,9 @@ func (s *Service) UpdateStrategy(ctx context.Context, id string, input tradingDo
 	current.UpdatedAt = s.now()
 
 	if err := current.Validate(); err != nil {
+		return current, err
+	}
+	if err := validateStrategyContent(current); err != nil {
 		return current, err
 	}
 	if err := s.repo.UpdateStrategy(ctx, current); err != nil {
@@ -658,4 +664,68 @@ func applyRiskDefaults(r tradingDomain.RiskSettings) tradingDomain.RiskSettings 
 func ToJSON(v interface{}) []byte {
 	b, _ := json.Marshal(v)
 	return b
+}
+
+func validateStrategyContent(s tradingDomain.Strategy) error {
+	if len(s.Buy.Conditions) == 0 {
+		return fmt.Errorf("buy_conditions 至少需一個條件")
+	}
+	if len(s.Sell.Conditions) == 0 {
+		return fmt.Errorf("sell_conditions 至少需一個條件")
+	}
+	if err := validateConditionSet(s.Buy); err != nil {
+		return fmt.Errorf("buy_conditions 無效: %w", err)
+	}
+	if err := validateConditionSet(s.Sell); err != nil {
+		return fmt.Errorf("sell_conditions 無效: %w", err)
+	}
+	if s.Risk.OrderSizeValue <= 0 {
+		return fmt.Errorf("risk_settings.order_size_value 必須 > 0")
+	}
+	switch s.Risk.OrderSizeMode {
+	case tradingDomain.OrderFixedUSDT, tradingDomain.OrderPercentEquity:
+	default:
+		return fmt.Errorf("risk_settings.order_size_mode 無效")
+	}
+	switch s.Risk.PriceMode {
+	case tradingDomain.PriceCurrentClose, tradingDomain.PriceNextOpen, tradingDomain.PriceNextClose:
+	default:
+		return fmt.Errorf("risk_settings.price_mode 無效")
+	}
+	return nil
+}
+
+func validateConditionSet(set tradingDomain.ConditionSet) error {
+	if set.Logic != analysis.LogicAND && set.Logic != analysis.LogicOR {
+		return fmt.Errorf("logic 必須為 AND 或 OR")
+	}
+	if len(set.Conditions) == 0 {
+		return fmt.Errorf("conditions 不可為空")
+	}
+	for i, c := range set.Conditions {
+		switch c.Type {
+		case analysis.ConditionNumeric:
+			if c.Numeric == nil {
+				return fmt.Errorf("conditions[%d] numeric 條件缺少內容", i)
+			}
+			if c.Numeric.Field == "" || c.Numeric.Op == "" {
+				return fmt.Errorf("conditions[%d] numeric 條件缺少欄位或運算子", i)
+			}
+		case analysis.ConditionCategory:
+			if c.Category == nil || c.Category.Field == "" || len(c.Category.Values) == 0 {
+				return fmt.Errorf("conditions[%d] category 條件缺少欄位或值", i)
+			}
+		case analysis.ConditionTags:
+			if c.Tags == nil {
+				return fmt.Errorf("conditions[%d] tags 條件缺少內容", i)
+			}
+		case analysis.ConditionSymbols:
+			if c.Symbols == nil || (len(c.Symbols.Include) == 0 && len(c.Symbols.Exclude) == 0) {
+				return fmt.Errorf("conditions[%d] symbols 條件缺少代碼", i)
+			}
+		default:
+			return fmt.Errorf("conditions[%d] 類型不支援: %s", i, c.Type)
+		}
+	}
+	return nil
 }

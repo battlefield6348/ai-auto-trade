@@ -3351,6 +3351,14 @@ function updateOptionalFields() {
   refreshConditionOptions();
 }
 
+let autoBacktestTimer = null;
+function scheduleAutoBacktest() {
+  clearTimeout(autoBacktestTimer);
+  autoBacktestTimer = setTimeout(() => {
+    runBacktest({ auto: true });
+  }, 600);
+}
+
 const backtestInputs = [
   "btStart",
   "btEnd",
@@ -3376,14 +3384,6 @@ backtestInputs.forEach((id) => {
 if (elements.btSelectedConditions) {
   elements.btSelectedConditions.addEventListener("input", scheduleAutoBacktest);
 }
-
-let autoBacktestTimer = null;
-const scheduleAutoBacktest = () => {
-  clearTimeout(autoBacktestTimer);
-  autoBacktestTimer = setTimeout(() => {
-    runBacktest({ auto: true });
-  }, 600);
-};
 
 async function runBacktest({ auto = false } = {}) {
   try {

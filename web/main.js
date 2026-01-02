@@ -10,6 +10,8 @@ const state = {
   lastBackfill: null,
   lastChart: null,
   strategies: [],
+  strategyBacktests: [],
+  lastStrategyBacktest: null,
   activity: [],
   updatedAt: null,
 };
@@ -92,6 +94,8 @@ const elements = {
   strategyBacktestMessage: document.getElementById("strategyBacktestMessage"),
   strategyBacktestSummary: document.getElementById("strategyBacktestSummary"),
   strategyBacktestTrades: document.getElementById("strategyBacktestTrades"),
+  strategyBacktestHistory: document.getElementById("strategyBacktestHistory"),
+  strategyEquityChart: document.getElementById("strategyEquityChart"),
   createStrategyForm: document.getElementById("createStrategyForm"),
   createStrategyName: document.getElementById("createStrategyName"),
   createStrategySymbol: document.getElementById("createStrategySymbol"),
@@ -1542,6 +1546,12 @@ const syncStrategyOptions = () => {
   }
 };
 
+const syncBacktestSelectedStrategy = () => {
+  if (elements.strategyBacktestSelect && elements.strategyBacktestSelect.value) {
+    elements.strategyBacktestId.value = elements.strategyBacktestSelect.value;
+  }
+};
+
 const fmtDate = (v) => {
   if (!v) return "—";
   const d = new Date(v);
@@ -1555,6 +1565,7 @@ const setStrategyBacktestDefaults = () => {
   start.setDate(today.getDate() - 180);
   if (elements.strategyBtStart) elements.strategyBtStart.value = start.toISOString().slice(0, 10);
   if (elements.strategyBtEnd) elements.strategyBtEnd.value = today.toISOString().slice(0, 10);
+  if (elements.strategyBtPriceMode) elements.strategyBtPriceMode.value = "next_open";
 };
 
 const collectStrategyBacktestPayload = () => {
@@ -1638,10 +1649,83 @@ const renderStrategyBacktestTrades = (trades = []) => {
   renderTable(elements.strategyBacktestTrades, rows, cols);
 };
 
+const renderEquityChart = (equity = [], trades = []) => {
+  if (!elements.strategyEquityChart) return;
+  if (!equity.length) {
+    renderEmptyState(elements.strategyEquityChart, "尚無淨值資料");
+    return;
+  }
+  const width = elements.strategyEquityChart.clientWidth || 640;
+  const height = elements.strategyEquityChart.clientHeight || 240;
+  const padding = { top: 16, right: 16, bottom: 28, left: 48 };
+  const plotWidth = Math.max(width - padding.left - padding.right, 1);
+  const plotHeight = Math.max(height - padding.top - padding.bottom, 1);
+  const values = equity.map((p) => p.equity);
+  const minV = Math.min(...values);
+  const maxV = Math.max(...values);
+  const range = maxV - minV || 1;
+  const step = equity.length > 1 ? plotWidth / (equity.length - 1) : plotWidth;
+  const points = equity.map((p, idx) => {
+    const x = padding.left + (equity.length > 1 ? idx * step : plotWidth / 2);
+    const y = padding.top + (1 - (p.equity - minV) / range) * plotHeight;
+    return { x, y, date: p.date, equity: p.equity };
+  });
+  const linePath = points.map((pt, idx) => `${idx === 0 ? "M" : "L"}${pt.x},${pt.y}`).join(" ");
+  const areaPath = `${linePath} L ${padding.left + plotWidth},${padding.top + plotHeight} L ${
+    padding.left
+  },${padding.top + plotHeight} Z`;
+
+  const gridLines = [];
+  const axisLabels = [];
+  const tickCount = 4;
+  for (let i = 0; i <= tickCount; i++) {
+    const y = padding.top + (plotHeight / tickCount) * i;
+    const val = maxV - (range / tickCount) * i;
+    gridLines.push(`<line x1="${padding.left}" y1="${y}" x2="${padding.left + plotWidth}" y2="${y}" />`);
+    axisLabels.push(`<text x="${padding.left - 6}" y="${y + 4}" text-anchor="end">${fmtPrice(val)}</text>`);
+  }
+  const xLabels = [];
+  const labelIndexes = [0, Math.floor((equity.length - 1) / 2), equity.length - 1].filter(
+    (v, i, arr) => arr.indexOf(v) === i
+  );
+  labelIndexes.forEach((idx) => {
+    const pt = points[idx];
+    if (!pt) return;
+    xLabels.push(
+      `<text x="${pt.x}" y="${padding.top + plotHeight + 18}" text-anchor="middle">${fmtDate(pt.date)}</text>`
+    );
+  });
+
+  const markerDates = new Set();
+  trades.forEach((t) => {
+    if (t.entry_date) markerDates.add(fmtDate(t.entry_date));
+    if (t.exit_date) markerDates.add(fmtDate(t.exit_date));
+  });
+  const markers = points
+    .filter((pt) => markerDates.has(fmtDate(pt.date)))
+    .map(
+      (pt) =>
+        `<circle cx="${pt.x}" cy="${pt.y}" r="4" fill="var(--accent)" stroke="#fff" stroke-width="1.2" />`
+    )
+    .join("");
+
+  elements.strategyEquityChart.innerHTML = `
+    <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-label="回測淨值曲線">
+      <g class="chart-grid">${gridLines.join("")}</g>
+      <g class="chart-axis">${axisLabels.join("")}${xLabels.join("")}</g>
+      <path class="chart-area" d="${areaPath}"></path>
+      <path class="chart-line" d="${linePath}"></path>
+      ${markers}
+    </svg>
+  `;
+};
+
 const renderStrategyBacktestSummary = (rec) => {
   if (!elements.strategyBacktestSummary) return;
   if (!rec) {
     renderEmptyState(elements.strategyBacktestSummary, "尚未執行回測");
+    renderStrategyBacktestTrades([]);
+    renderEquityChart([]);
     return;
   }
   const params = rec.params || {};
@@ -1681,6 +1765,7 @@ const renderStrategyBacktestSummary = (rec) => {
     </div>
   `;
   renderStrategyBacktestTrades(result.trades || []);
+  renderEquityChart(result.equity_curve || [], result.trades || []);
 };
 
 const runStrategyBacktest = async () => {
@@ -1699,10 +1784,119 @@ const runStrategyBacktest = async () => {
     const record = data.result;
     setMessage(elements.strategyBacktestMessage, "回測完成並已保存", "good");
     renderStrategyBacktestSummary(record);
+    state.lastStrategyBacktest = record;
+    await loadStrategyBacktests(record.strategy_id);
     logActivity("策略回測", `策略 ${res.strategyID} · ${res.payload.start_date}~${res.payload.end_date}`);
   } catch (err) {
     setMessage(elements.strategyBacktestMessage, `回測失敗：${err.message}`, "error");
     renderStrategyBacktestSummary(null);
+  }
+};
+
+const applyBacktestParams = (params = {}) => {
+  if (elements.strategyBtStart && params.start_date) elements.strategyBtStart.value = fmtDate(params.start_date);
+  if (elements.strategyBtEnd && params.end_date) elements.strategyBtEnd.value = fmtDate(params.end_date);
+  if (elements.strategyBtEquity && params.initial_equity != null) elements.strategyBtEquity.value = params.initial_equity;
+  if (elements.strategyBtPriceMode && params.price_mode) elements.strategyBtPriceMode.value = params.price_mode;
+  if (elements.strategyBtFees && params.fees_pct != null) elements.strategyBtFees.value = (params.fees_pct * 100).toFixed(2);
+  if (elements.strategyBtSlippage && params.slippage_pct != null) elements.strategyBtSlippage.value = (params.slippage_pct * 100).toFixed(2);
+  if (elements.strategyBtStop && params.stop_loss_pct != null) elements.strategyBtStop.value = (params.stop_loss_pct * 100).toFixed(2);
+  if (elements.strategyBtTake && params.take_profit_pct != null) elements.strategyBtTake.value = (params.take_profit_pct * 100).toFixed(2);
+  if (elements.strategyBtDailyLoss && params.max_daily_loss_pct != null) elements.strategyBtDailyLoss.value = (params.max_daily_loss_pct * 100).toFixed(2);
+  if (elements.strategyBtCoolDown && params.cool_down_days != null) elements.strategyBtCoolDown.value = params.cool_down_days;
+  if (elements.strategyBtMinHold && params.min_hold_days != null) elements.strategyBtMinHold.value = params.min_hold_days;
+  if (elements.strategyBtMaxPos && params.max_positions != null) elements.strategyBtMaxPos.value = params.max_positions;
+};
+
+const renderStrategyBacktestHistory = (list = []) => {
+  state.strategyBacktests = list;
+  if (!elements.strategyBacktestHistory) return;
+  if (!list.length) {
+    renderEmptyState(elements.strategyBacktestHistory, "尚無歷史回測紀錄");
+    return;
+  }
+  const rows = list.map((r, idx) => {
+    const params = r.params || {};
+    const stats = r.result?.stats || {};
+    return {
+      idx,
+      created_at: r.created_at ? timeFormat.format(new Date(r.created_at)) : "—",
+      period: `${fmtDate(params.start_date)} ~ ${fmtDate(params.end_date)}`,
+      version: r.strategy_version || "-",
+      total_return: stats.total_return,
+      max_dd: stats.max_drawdown,
+      win_rate: stats.win_rate,
+      trades: stats.trade_count,
+    };
+  });
+  const cols = [
+    { key: "created_at", label: "建立時間" },
+    { key: "period", label: "區間" },
+    { key: "version", label: "版次" },
+    { key: "total_return", label: "總報酬", format: fmtPercent, delta: true },
+    { key: "max_dd", label: "最大回撤", format: fmtPercent, delta: true },
+    { key: "win_rate", label: "勝率", format: fmtPercent },
+    { key: "trades", label: "筆數", format: fmtInt },
+    {
+      key: "actions",
+      label: "操作",
+      format: (_, row) =>
+        `<button class="ghost btn-sm" data-action="preview" data-idx="${row.idx}">查看</button>
+         <button class="ghost btn-sm" data-action="apply" data-idx="${row.idx}">套用參數</button>`,
+    },
+  ];
+  const tableHTML = renderTableHTML(rows, cols);
+  elements.strategyBacktestHistory.innerHTML = tableHTML;
+  bindBacktestHistoryActions();
+};
+
+const renderTableHTML = (rows, cols) => {
+  if (!rows.length) return `<div class="empty-state">尚無資料</div>`;
+  const thead = cols.map((c) => `<th>${c.label}</th>`).join("");
+  const tbody = rows
+    .map((row) => {
+      const tds = cols
+        .map((c) => {
+          const val = row[c.key];
+          let content = c.format ? c.format(val, row) : fmtText(val);
+          if (c.delta) content = `<span class="delta ${deltaClass(val)}">${content}</span>`;
+          return `<td>${content}</td>`;
+        })
+        .join("");
+      return `<tr>${tds}</tr>`;
+    })
+    .join("");
+  return `<table><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>`;
+};
+
+const bindBacktestHistoryActions = () => {
+  if (!elements.strategyBacktestHistory) return;
+  elements.strategyBacktestHistory.querySelectorAll("[data-action]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      const idx = Number(btn.dataset.idx || -1);
+      const record = state.strategyBacktests[idx];
+      if (!record) return;
+      const action = btn.dataset.action;
+      if (action === "preview") {
+        renderStrategyBacktestSummary(record);
+        state.lastStrategyBacktest = record;
+      }
+      if (action === "apply") {
+        applyBacktestParams(record.params || {});
+        setMessage(elements.strategyBacktestMessage, "已套用回測參數至表單", "info");
+      }
+    });
+  });
+};
+
+const loadStrategyBacktests = async (strategyID) => {
+  if (!elements.strategyBacktestHistory || !strategyID) return;
+  try {
+    renderEmptyState(elements.strategyBacktestHistory, "載入回測紀錄中...");
+    const res = await api(`/api/admin/strategies/${strategyID}/backtests`);
+    renderStrategyBacktestHistory(res.backtests || []);
+  } catch (err) {
+    renderEmptyState(elements.strategyBacktestHistory, `載入失敗：${err.message}`);
   }
 };
 
@@ -2733,6 +2927,18 @@ if (elements.strategyBacktestReload) {
       setMessage(elements.strategyBacktestMessage, "策略列表已更新", "good");
     } catch (err) {
       setMessage(elements.strategyBacktestMessage, `載入策略失敗：${err.message}`, "error");
+    }
+  });
+}
+
+if (elements.strategyBacktestSelect) {
+  elements.strategyBacktestSelect.addEventListener("change", async (e) => {
+    const id = e.target.value;
+    if (elements.strategyBacktestId) elements.strategyBacktestId.value = id;
+    if (id) {
+      await loadStrategyBacktests(id);
+    } else {
+      renderStrategyBacktestHistory([]);
     }
   });
 }

@@ -105,6 +105,8 @@ const elements = {
   strategyBtHistNext: document.getElementById("strategyBtHistNext"),
   strategyBtHistPageInfo: document.getElementById("strategyBtHistPageInfo"),
   strategyBacktestFilterForm: document.getElementById("strategyBacktestFilterForm"),
+  exportBtTrades: document.getElementById("exportBtTrades"),
+  exportBtEquity: document.getElementById("exportBtEquity"),
   strategyEquityChart: document.getElementById("strategyEquityChart"),
   createStrategyForm: document.getElementById("createStrategyForm"),
   createStrategyName: document.getElementById("createStrategyName"),
@@ -1636,6 +1638,7 @@ const collectStrategyBacktestPayload = () => {
 
 const renderStrategyBacktestTrades = (trades = []) => {
   if (!elements.strategyBacktestTrades) return;
+  state.lastStrategyTrades = trades;
   const rows = trades.map((t) => ({
     entry: fmtDate(t.entry_date),
     exit: fmtDate(t.exit_date),
@@ -1661,6 +1664,7 @@ const renderStrategyBacktestTrades = (trades = []) => {
 
 const renderEquityChart = (equity = [], trades = []) => {
   if (!elements.strategyEquityChart) return;
+  state.lastStrategyEquity = equity;
   if (!equity.length) {
     renderEmptyState(elements.strategyEquityChart, "尚無淨值資料");
     return;
@@ -1777,6 +1781,7 @@ const renderStrategyBacktestSummary = (rec) => {
   `;
   renderStrategyBacktestTrades(result.trades || []);
   renderEquityChart(result.equity_curve || [], result.trades || []);
+  state.lastStrategyBacktest = rec;
 };
 
 const runStrategyBacktest = async () => {
@@ -1963,6 +1968,83 @@ const loadStrategyBacktests = async (strategyID) => {
   } catch (err) {
     renderEmptyState(elements.strategyBacktestHistory, `載入失敗：${err.message}`);
   }
+};
+
+const toCsv = (rows, columns) => {
+  const headers = columns.map((c) => c.label);
+  const lines = [headers.join(",")];
+  rows.forEach((row) => {
+    const cells = columns.map((c) => {
+      const val = row[c.key];
+      if (val === null || val === undefined) return "";
+      if (typeof val === "string" && (val.includes(",") || val.includes("\"") || val.includes("\n"))) {
+        return `"${val.replace(/"/g, '""')}"`;
+      }
+      return val;
+    });
+    lines.push(cells.join(","));
+  });
+  return lines.join("\n");
+};
+
+const downloadCsv = (filename, content) => {
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+const exportBacktestTrades = () => {
+  const trades = state.lastStrategyTrades || [];
+  if (!trades.length) {
+    setMessage(elements.strategyBacktestMessage, "無交易資料可匯出", "warn");
+    return;
+  }
+  const rows = trades.map((t) => ({
+    entry_date: fmtDate(t.entry_date),
+    exit_date: fmtDate(t.exit_date),
+    entry_price: t.entry_price,
+    exit_price: t.exit_price,
+    pnl_usdt: t.pnl_usdt,
+    pnl_pct: t.pnl_pct,
+    hold_days: t.hold_days,
+    reason: t.reason,
+  }));
+  const cols = [
+    { key: "entry_date", label: "entry_date" },
+    { key: "exit_date", label: "exit_date" },
+    { key: "entry_price", label: "entry_price" },
+    { key: "exit_price", label: "exit_price" },
+    { key: "pnl_usdt", label: "pnl_usdt" },
+    { key: "pnl_pct", label: "pnl_pct" },
+    { key: "hold_days", label: "hold_days" },
+    { key: "reason", label: "reason" },
+  ];
+  const csv = toCsv(rows, cols);
+  downloadCsv("strategy_trades.csv", csv);
+  setMessage(elements.strategyBacktestMessage, "已匯出交易 CSV", "good");
+};
+
+const exportBacktestEquity = () => {
+  const equity = state.lastStrategyEquity || [];
+  if (!equity.length) {
+    setMessage(elements.strategyBacktestMessage, "無淨值資料可匯出", "warn");
+    return;
+  }
+  const rows = equity.map((p) => ({
+    date: fmtDate(p.date),
+    equity: p.equity,
+  }));
+  const cols = [
+    { key: "date", label: "date" },
+    { key: "equity", label: "equity" },
+  ];
+  const csv = toCsv(rows, cols);
+  downloadCsv("strategy_equity.csv", csv);
+  setMessage(elements.strategyBacktestMessage, "已匯出淨值 CSV", "good");
 };
 
 
@@ -3035,6 +3117,13 @@ if (elements.strategyBtHistNext) {
       renderStrategyBacktestHistory();
     }
   });
+}
+
+if (elements.exportBtTrades) {
+  elements.exportBtTrades.addEventListener("click", exportBacktestTrades);
+}
+if (elements.exportBtEquity) {
+  elements.exportBtEquity.addEventListener("click", exportBacktestEquity);
 }
 
 if (elements.addBuyCondition) {

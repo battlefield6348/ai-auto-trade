@@ -1076,7 +1076,6 @@ const numInput = (id, fallback = 0) => {
 };
 
 const readWeightConfig = () => ({
-  score: numInput("btScoreWeight", 1),
   change_weight: backtestSelections.conditions.includes("change") ? numInput("btChangeWeight", 1) : 0,
   volume_weight: backtestSelections.conditions.includes("volume") ? numInput("btVolWeight", 1) : 0,
   return_weight: backtestSelections.conditions.includes("return") ? numInput("btReturnWeight", 1) : 0,
@@ -1104,9 +1103,6 @@ const applyWeightedScoring = (res) => {
   const events = (res.events || []).map((row) => {
     let total = 0;
     const comp = { ...(row.components || {}) };
-    const baseScore = (row.score || 0) * (weights.score || 0);
-    comp.base = baseScore;
-    total += baseScore;
     if (flags.change && row.change_percent >= thresholds.change_min) {
       const v = weights.change_weight || 0;
       comp.change = v;
@@ -1418,7 +1414,6 @@ const applyBacktestPreset = (preset) => {
   const c = preset;
   document.getElementById("btStart").value = c.start_date || document.getElementById("btStart").value;
   document.getElementById("btEnd").value = c.end_date || document.getElementById("btEnd").value;
-  document.getElementById("btScoreWeight").value = c.weights?.score ?? 1;
   document.getElementById("btTotalMin").value = c.thresholds?.total_min ?? 60;
   if (c.thresholds) {
     document.getElementById("btChangeMin").value = (c.thresholds.change_min || 0) * 100;
@@ -3372,7 +3367,6 @@ function applyBacktestConfig(cfg) {
   document.getElementById("btStart").value = cfg.start_date || document.getElementById("btStart").value;
   document.getElementById("btEnd").value = cfg.end_date || document.getElementById("btEnd").value;
   if (cfg.weights) {
-    document.getElementById("btScoreWeight").value = cfg.weights.score ?? 1;
     document.getElementById("btChangeWeight").value = cfg.weights.change_weight ?? 1;
     document.getElementById("btVolWeight").value = cfg.weights.volume_weight ?? 1;
     document.getElementById("btReturnWeight").value = cfg.weights.return_weight ?? 1;

@@ -14,6 +14,7 @@ const state = {
   strategyBacktestsAll: [],
   strategyBacktestPage: { page: 1, size: 10 },
   lastStrategyBacktest: null,
+  lastRunTrades: [],
   reports: [],
   selectedReport: null,
   activity: [],
@@ -58,6 +59,7 @@ const elements = {
   strategyName: document.getElementById("strategyName"),
   strategyTable: document.getElementById("strategyTable"),
   strategyMeta: document.getElementById("strategyMeta"),
+  strategyRunResult: document.getElementById("strategyRunResult"),
   tradeForm: document.getElementById("tradeForm"),
   tradeStrategyId: document.getElementById("tradeStrategyId"),
   tradeEnv: document.getElementById("tradeEnv"),
@@ -1497,6 +1499,7 @@ const renderStrategyTable = (items = []) => {
   if (!items.length) {
     renderEmptyState(elements.strategyTable, "尚未載入策略");
     if (elements.strategyMeta) elements.strategyMeta.innerHTML = "";
+    renderRunTrades([]);
     return;
   }
   const rows = items.map((s) => ({
@@ -1531,6 +1534,39 @@ const renderStrategyTable = (items = []) => {
   }
   bindStrategyActions();
   syncStrategyOptions();
+};
+
+const renderRunTrades = (trades = [], env = "") => {
+  if (!elements.strategyRunResult) return;
+  if (!trades.length) {
+    renderEmptyState(elements.strategyRunResult, "尚未試跑");
+    return;
+  }
+  const rows = trades.map((t) => ({
+    entry_date: fmtDate(t.entry_date),
+    exit_date: fmtDate(t.exit_date),
+    entry_price: t.entry_price,
+    exit_price: t.exit_price,
+    pnl_usdt: t.pnl_usdt,
+    pnl_pct: t.pnl_pct,
+    reason: t.reason,
+  }));
+  const cols = [
+    { key: "entry_date", label: "進場日" },
+    { key: "exit_date", label: "出場日" },
+    { key: "entry_price", label: "進場價", format: fmtPrice },
+    { key: "exit_price", label: "出場價", format: fmtPrice },
+    { key: "pnl_usdt", label: "PNL (USDT)", format: fmtNumber, delta: true },
+    { key: "pnl_pct", label: "PNL%", format: fmtPercent, delta: true },
+    { key: "reason", label: "原因" },
+  ];
+  const envLabel = env ? `（${env}）` : "";
+  elements.strategyRunResult.innerHTML = `<div class="meta-row"><div class="meta-item">試跑筆數：${fmtInt(
+    trades.length
+  )}${envLabel}</div></div>`;
+  const tableDiv = document.createElement("div");
+  renderTable(tableDiv, rows, cols);
+  elements.strategyRunResult.appendChild(tableDiv);
 };
 
 const loadStrategies = async () => {
@@ -2623,6 +2659,8 @@ const runStrategyOnce = async (id, env) => {
   const trades = res.trades || [];
   logActivity("策略試跑", `ID ${id} · env ${env} · 筆數 ${fmtInt(trades.length)}`);
   setStatus(`試跑完成：產生 ${fmtInt(trades.length)} 筆交易`, trades.length ? "good" : "warn");
+   state.lastRunTrades = trades;
+   renderRunTrades(trades, env);
   return trades;
 };
 

@@ -1401,6 +1401,9 @@ const btStart = document.getElementById("btStart");
 const btEnd = document.getElementById("btEnd");
 if (btStart) btStart.value = startOfYear;
 if (btEnd) btEnd.value = today;
+// 將回測日期預設同步走勢區間
+if (elements.chartStart && btStart) btStart.value = elements.chartStart.value;
+if (elements.chartEnd && btEnd) btEnd.value = elements.chartEnd.value;
 setStrategyBacktestDefaults();
 updateOptionalFields();
 loadPreset();
@@ -2956,6 +2959,10 @@ if (elements.chartForm) {
       state.lastChart = res;
       renderHistoryChart(res, state.lastBacktest?.events || []);
       logActivity("載入走勢圖", `區間 ${start_date} ~ ${end_date} · 筆數 ${fmtInt(res.total_count)}`);
+      // 同步回測日期並重新計算
+      if (document.getElementById("btStart")) document.getElementById("btStart").value = start_date;
+      if (document.getElementById("btEnd")) document.getElementById("btEnd").value = end_date;
+      scheduleAutoBacktest();
     } catch (err) {
       renderChartPlaceholder(err.message);
     }
@@ -3392,8 +3399,8 @@ async function runBacktest({ auto = false } = {}) {
     if (auto) return;
     throw err;
   }
-  const start_date = document.getElementById("btStart")?.value;
-  const end_date = document.getElementById("btEnd")?.value;
+  const start_date = document.getElementById("btStart")?.value || elements.chartStart?.value;
+  const end_date = document.getElementById("btEnd")?.value || elements.chartEnd?.value;
   if (!start_date || !end_date) {
     if (!auto) renderChartPlaceholder("請設定回測日期區間");
     return;

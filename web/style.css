@@ -849,6 +849,19 @@ select {
   overflow: hidden;
 }
 
+.chart-layout {
+  display: grid;
+  grid-template-columns: minmax(420px, 1.1fr) minmax(360px, 0.9fr);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .chart-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 .chart-canvas {
   width: 100%;
   height: 100%;

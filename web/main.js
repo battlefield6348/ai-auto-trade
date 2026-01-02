@@ -107,6 +107,7 @@ const elements = {
   strategyBacktestFilterForm: document.getElementById("strategyBacktestFilterForm"),
   exportBtTrades: document.getElementById("exportBtTrades"),
   exportBtEquity: document.getElementById("exportBtEquity"),
+  strategyBtGoReports: document.getElementById("strategyBtGoReports"),
   strategyEquityChart: document.getElementById("strategyEquityChart"),
   createStrategyForm: document.getElementById("createStrategyForm"),
   createStrategyName: document.getElementById("createStrategyName"),
@@ -3208,6 +3209,28 @@ if (elements.exportBtTrades) {
 }
 if (elements.exportBtEquity) {
   elements.exportBtEquity.addEventListener("click", exportBacktestEquity);
+}
+if (elements.strategyBtGoReports) {
+  elements.strategyBtGoReports.addEventListener("click", async () => {
+    try {
+      requireLogin();
+      const strategyId =
+        state.lastStrategyBacktest?.strategy_id ||
+        elements.strategyBacktestSelect?.value ||
+        elements.strategyBacktestId?.value ||
+        "";
+      if (!strategyId) {
+        setMessage(elements.strategyBacktestMessage, "請先選擇策略或執行回測", "warn");
+        return;
+      }
+      if (elements.reportStrategyId) elements.reportStrategyId.value = strategyId;
+      showSection("report");
+      await loadReports();
+      setStatus(`已切換至報告，策略 ${strategyId}`, "good");
+    } catch (err) {
+      setMessage(elements.strategyBacktestMessage, `切換報告失敗：${err.message}`, "error");
+    }
+  });
 }
 
 if (elements.addBuyCondition) {

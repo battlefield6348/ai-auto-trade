@@ -1902,8 +1902,12 @@ const renderStrategyBacktestHistory = () => {
         key: "actions",
         label: "操作",
         format: (_, row) =>
-          `<button class="ghost btn-sm" data-action="preview" data-idx="${row.idx}">查看</button>
-           <button class="ghost btn-sm" data-action="apply" data-idx="${row.idx}">套用參數</button>`,
+          `<div class="btn-group">
+            <button class="ghost btn-sm" data-action="preview" data-idx="${row.idx}">查看</button>
+            <button class="ghost btn-sm" data-action="apply" data-idx="${row.idx}">套用參數</button>
+            <button class="ghost btn-sm" data-action="export_trades" data-idx="${row.idx}">匯出交易</button>
+            <button class="ghost btn-sm" data-action="export_equity" data-idx="${row.idx}">匯出淨值</button>
+          </div>`,
       },
     ];
     const tableHTML = renderTableHTML(rows, cols);
@@ -1952,6 +1956,52 @@ const bindBacktestHistoryActions = () => {
       if (action === "apply") {
         applyBacktestParams(record.params || {});
         setMessage(elements.strategyBacktestMessage, "已套用回測參數至表單", "info");
+      }
+      if (action === "export_trades") {
+        if (!record.result?.trades || !record.result.trades.length) {
+          setMessage(elements.strategyBacktestMessage, "該筆回測無交易資料可匯出", "warn");
+          return;
+        }
+        const rows = record.result.trades.map((t) => ({
+          entry_date: fmtDate(t.entry_date),
+          exit_date: fmtDate(t.exit_date),
+          entry_price: t.entry_price,
+          exit_price: t.exit_price,
+          pnl_usdt: t.pnl_usdt,
+          pnl_pct: t.pnl_pct,
+          hold_days: t.hold_days,
+          reason: t.reason,
+        }));
+        const cols = [
+          { key: "entry_date", label: "entry_date" },
+          { key: "exit_date", label: "exit_date" },
+          { key: "entry_price", label: "entry_price" },
+          { key: "exit_price", label: "exit_price" },
+          { key: "pnl_usdt", label: "pnl_usdt" },
+          { key: "pnl_pct", label: "pnl_pct" },
+          { key: "hold_days", label: "hold_days" },
+          { key: "reason", label: "reason" },
+        ];
+        const csv = toCsv(rows, cols);
+        downloadCsv(`strategy_${record.strategy_id || "unknown"}_trades.csv`, csv);
+        setMessage(elements.strategyBacktestMessage, "已匯出該筆交易 CSV", "good");
+      }
+      if (action === "export_equity") {
+        if (!record.result?.equity_curve || !record.result.equity_curve.length) {
+          setMessage(elements.strategyBacktestMessage, "該筆回測無淨值資料可匯出", "warn");
+          return;
+        }
+        const rows = record.result.equity_curve.map((p) => ({
+          date: fmtDate(p.date),
+          equity: p.equity,
+        }));
+        const cols = [
+          { key: "date", label: "date" },
+          { key: "equity", label: "equity" },
+        ];
+        const csv = toCsv(rows, cols);
+        downloadCsv(`strategy_${record.strategy_id || "unknown"}_equity.csv`, csv);
+        setMessage(elements.strategyBacktestMessage, "已匯出該筆淨值 CSV", "good");
       }
     });
   });

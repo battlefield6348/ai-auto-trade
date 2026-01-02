@@ -1077,13 +1077,9 @@ const numInput = (id, fallback = 0) => {
 
 const readWeightConfig = () => ({
   score: numInput("btScoreWeight", 1),
-  change_bonus: backtestSelections.conditions.includes("change") ? numInput("btChangeBonus", 0) : 0,
   change_weight: backtestSelections.conditions.includes("change") ? numInput("btChangeWeight", 1) : 0,
-  volume_bonus: backtestSelections.conditions.includes("volume") ? numInput("btVolBonus", 0) : 0,
   volume_weight: backtestSelections.conditions.includes("volume") ? numInput("btVolWeight", 1) : 0,
-  return_bonus: backtestSelections.conditions.includes("return") ? numInput("btReturnBonus", 0) : 0,
   return_weight: backtestSelections.conditions.includes("return") ? numInput("btReturnWeight", 1) : 0,
-  ma_bonus: backtestSelections.conditions.includes("ma") ? numInput("btMaBonus", 0) : 0,
   ma_weight: backtestSelections.conditions.includes("ma") ? numInput("btMaWeight", 1) : 0,
 });
 
@@ -1112,22 +1108,22 @@ const applyWeightedScoring = (res) => {
     comp.base = baseScore;
     total += baseScore;
     if (flags.change && row.change_percent >= thresholds.change_min) {
-      const v = weights.change_bonus * (weights.change_weight || 1);
+      const v = weights.change_weight || 0;
       comp.change = v;
       total += v;
     }
     if (flags.volume && row.volume_ratio >= thresholds.volume_ratio_min) {
-      const v = weights.volume_bonus * (weights.volume_weight || 1);
+      const v = weights.volume_weight || 0;
       comp.volume = v;
       total += v;
     }
     if (flags.return && (row.return_5d || 0) >= thresholds.return5_min) {
-      const v = weights.return_bonus * (weights.return_weight || 1);
+      const v = weights.return_weight || 0;
       comp.return = v;
       total += v;
     }
     if (flags.ma && (row.ma_gap || 0) >= thresholds.ma_gap_min) {
-      const v = weights.ma_bonus * (weights.ma_weight || 1);
+      const v = weights.ma_weight || 0;
       comp.ma = v;
       total += v;
     }
@@ -1198,10 +1194,6 @@ const renderBacktestConditions = () => {
               <button type="button" class="condition-remove" data-remove="change">移除</button>
             </div>
             <div class="optional-fields">
-              <label>日漲跌加分 <input type="number" step="1" id="btChangeBonus" value="${current(
-                "btChangeBonus",
-                10
-              )}"></label>
               <label>漲幅門檻(%) <input type="number" step="0.1" id="btChangeMin" value="${current(
                 "btChangeMin",
                 0.5
@@ -1222,10 +1214,6 @@ const renderBacktestConditions = () => {
               <button type="button" class="condition-remove" data-remove="volume">移除</button>
             </div>
             <div class="optional-fields">
-              <label>量能加分 <input type="number" step="1" id="btVolBonus" value="${current(
-                "btVolBonus",
-                10
-              )}"></label>
               <label>量能門檻(倍率) <input type="number" step="0.1" id="btVolMin" value="${current(
                 "btVolMin",
                 1.2
@@ -1246,10 +1234,6 @@ const renderBacktestConditions = () => {
               <button type="button" class="condition-remove" data-remove="return">移除</button>
             </div>
             <div class="optional-fields">
-              <label>報酬加分 <input type="number" step="1" id="btReturnBonus" value="${current(
-                "btReturnBonus",
-                8
-              )}"></label>
               <label>報酬門檻(%) <input type="number" step="0.1" id="btReturnMin" value="${current(
                 "btReturnMin",
                 1.0
@@ -1270,10 +1254,6 @@ const renderBacktestConditions = () => {
               <button type="button" class="condition-remove" data-remove="ma">移除</button>
             </div>
             <div class="optional-fields">
-              <label>均線加分 <input type="number" step="1" id="btMaBonus" value="${current(
-                "btMaBonus",
-                5
-              )}"></label>
               <label>乖離門檻(%) <input type="number" step="0.1" id="btMaGap" value="${current(
                 "btMaGap",
                 1.0
@@ -1447,10 +1427,6 @@ const applyBacktestPreset = (preset) => {
     document.getElementById("btMaGap").value = (c.thresholds.ma_gap_min || 0) * 100;
   }
   if (c.weights) {
-    document.getElementById("btChangeBonus").value = c.weights.change_bonus || 0;
-    document.getElementById("btVolBonus").value = c.weights.volume_bonus || 0;
-    document.getElementById("btReturnBonus").value = c.weights.return_bonus || 0;
-    document.getElementById("btMaBonus").value = c.weights.ma_bonus || 0;
     document.getElementById("btChangeWeight").value = c.weights.change_weight || 1;
     document.getElementById("btVolWeight").value = c.weights.volume_weight || 1;
     document.getElementById("btReturnWeight").value = c.weights.return_weight || 1;
@@ -3397,10 +3373,6 @@ function applyBacktestConfig(cfg) {
   document.getElementById("btEnd").value = cfg.end_date || document.getElementById("btEnd").value;
   if (cfg.weights) {
     document.getElementById("btScoreWeight").value = cfg.weights.score ?? 1;
-    document.getElementById("btChangeBonus").value = cfg.weights.change_bonus ?? 0;
-    document.getElementById("btVolBonus").value = cfg.weights.volume_bonus ?? 0;
-    document.getElementById("btReturnBonus").value = cfg.weights.return_bonus ?? 0;
-    document.getElementById("btMaBonus").value = cfg.weights.ma_bonus ?? 0;
     document.getElementById("btChangeWeight").value = cfg.weights.change_weight ?? 1;
     document.getElementById("btVolWeight").value = cfg.weights.volume_weight ?? 1;
     document.getElementById("btReturnWeight").value = cfg.weights.return_weight ?? 1;

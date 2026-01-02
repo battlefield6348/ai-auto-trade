@@ -1508,6 +1508,8 @@ const renderStrategyTable = (items = []) => {
     updated_at: s.updated_at ? timeFormat.format(new Date(s.updated_at)) : "—",
     actions: `
       <div class="action-row">
+        <button class="ghost btn-sm" data-action="run" data-env="test" data-id="${fmtText(s.id)}">試跑 test</button>
+        <button class="ghost btn-sm" data-action="run" data-env="prod" data-id="${fmtText(s.id)}">試跑 prod</button>
         <button class="ghost btn-sm" data-action="activate" data-env="test" data-id="${fmtText(s.id)}">啟用 test</button>
         <button class="ghost btn-sm" data-action="activate" data-env="prod" data-id="${fmtText(s.id)}">啟用 prod</button>
         <button class="ghost btn-sm" data-action="deactivate" data-id="${fmtText(s.id)}">停用</button>
@@ -2615,6 +2617,15 @@ const deactivateStrategy = async (id) => {
   logActivity("停用策略", `ID ${id}`);
 };
 
+const runStrategyOnce = async (id, env) => {
+  const qs = env ? `?env=${env}` : "";
+  const res = await api(`/api/admin/strategies/${id}/run${qs}`, { method: "POST" });
+  const trades = res.trades || [];
+  logActivity("策略試跑", `ID ${id} · env ${env} · 筆數 ${fmtInt(trades.length)}`);
+  setStatus(`試跑完成：產生 ${fmtInt(trades.length)} 筆交易`, trades.length ? "good" : "warn");
+  return trades;
+};
+
 const bindStrategyActions = () => {
   if (!elements.strategyTable) return;
   elements.strategyTable.querySelectorAll("[data-action]").forEach((btn) => {
@@ -2630,6 +2641,8 @@ const bindStrategyActions = () => {
           await activateStrategy(id, env);
         } else if (action === "deactivate") {
           await deactivateStrategy(id);
+        } else if (action === "run") {
+          await runStrategyOnce(id, env);
         }
         await loadStrategies();
         setStatus("操作完成", "good");

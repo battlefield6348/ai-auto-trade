@@ -1907,6 +1907,7 @@ const renderStrategyBacktestHistory = () => {
             <button class="ghost btn-sm" data-action="apply" data-idx="${row.idx}">套用參數</button>
             <button class="ghost btn-sm" data-action="export_trades" data-idx="${row.idx}">匯出交易</button>
             <button class="ghost btn-sm" data-action="export_equity" data-idx="${row.idx}">匯出淨值</button>
+            <button class="ghost btn-sm" data-action="report" data-idx="${row.idx}">產生報告</button>
           </div>`,
       },
     ];
@@ -2002,6 +2003,39 @@ const bindBacktestHistoryActions = () => {
         const csv = toCsv(rows, cols);
         downloadCsv(`strategy_${record.strategy_id || "unknown"}_equity.csv`, csv);
         setMessage(elements.strategyBacktestMessage, "已匯出該筆淨值 CSV", "good");
+      }
+      if (action === "report") {
+        const params = record.params || {};
+        if (!params.start_date || !params.end_date) {
+          setMessage(elements.strategyBacktestMessage, "缺少期間，無法產生報告", "warn");
+          return;
+        }
+        const stats = record.result?.stats || {};
+        const env = params.strategy?.env || "test";
+        const payload = {
+          env,
+          period_start: fmtDate(params.start_date),
+          period_end: fmtDate(params.end_date),
+          summary: {
+            total_return: stats.total_return,
+            max_drawdown: stats.max_drawdown,
+            win_rate: stats.win_rate,
+            trade_count: stats.trade_count,
+            profit_factor: stats.profit_factor,
+          },
+          trades_ref: record.result?.trades || [],
+        };
+        requireLogin();
+        api(`/api/admin/strategies/${record.strategy_id}/reports`, {
+          method: "POST",
+          body: JSON.stringify(payload),
+        })
+          .then(() => {
+            setMessage(elements.strategyBacktestMessage, "已產生報告", "good");
+          })
+          .catch((err) => {
+            setMessage(elements.strategyBacktestMessage, `產生報告失敗：${err.message}`, "error");
+          });
       }
     });
   });

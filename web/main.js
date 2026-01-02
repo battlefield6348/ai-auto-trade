@@ -654,9 +654,24 @@ const renderHistoryChart = (res, backtestEvents = [], options = {}) => {
   const selectionBox = canvas.querySelector("[data-role='selection']");
 
   if (backtestEvents && backtestEvents.length) {
-    const eventDates = new Set(backtestEvents.map((e) => e.trade_date));
+    const eventDates = new Set(
+      backtestEvents
+        .map((e) => {
+          if (!e.trade_date) return null;
+          const d = new Date(e.trade_date);
+          return Number.isNaN(d.getTime()) ? String(e.trade_date).slice(0, 10) : d.toISOString().slice(0, 10);
+        })
+        .filter(Boolean)
+    );
     const markers = points
-      .filter((pt) => eventDates.has(pt.row.trade_date))
+      .filter((pt) => {
+        const dateStr = pt.row.trade_date
+          ? String(pt.row.trade_date).slice(0, 10)
+          : pt.row.date
+          ? String(pt.row.date).slice(0, 10)
+          : "";
+        return eventDates.has(dateStr);
+      })
       .map(
         (pt) =>
           `<circle cx="${pt.x}" cy="${pt.y}" r="4.5" fill="var(--accent)" stroke="#fff" stroke-width="1.5" />`

@@ -1430,7 +1430,7 @@ const applyBacktestPreset = (preset) => {
   const c = preset;
   document.getElementById("btStart").value = c.start_date || document.getElementById("btStart").value;
   document.getElementById("btEnd").value = c.end_date || document.getElementById("btEnd").value;
-  document.getElementById("btTotalMin").value = c.thresholds?.total_min ?? 60;
+  document.getElementById("btTotalMin").value = c.thresholds?.total_min ?? 1;
   if (c.thresholds) {
     document.getElementById("btChangeMin").value = (c.thresholds.change_min || 0) * 100;
     document.getElementById("btVolMin").value = c.thresholds.volume_ratio_min || 0;
@@ -3439,7 +3439,7 @@ function applyBacktestConfig(cfg) {
     document.getElementById("btMaWeight").value = cfg.weights.ma_weight ?? 1;
   }
   if (cfg.thresholds) {
-    document.getElementById("btTotalMin").value = cfg.thresholds.total_min ?? 60;
+    document.getElementById("btTotalMin").value = cfg.thresholds.total_min ?? 1;
     document.getElementById("btChangeMin").value = (cfg.thresholds.change_min || 0) * 100;
     document.getElementById("btVolMin").value = cfg.thresholds.volume_ratio_min || 0;
     document.getElementById("btReturnMin").value = (cfg.thresholds.return5_min || 0) * 100;

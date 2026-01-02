@@ -469,67 +469,143 @@
 
 ### 8.1 策略表：`strategies`
 
-用途：儲存使用者定義的策略設定。
+用途：儲存使用者定義的策略（條件 + 風控 + 元資料）。
 
 主要欄位：
 
-- id：主鍵
-- user_id：外鍵（策略擁有者）
+- id：主鍵（UUID）
 - name：策略名稱
 - description：策略描述
-- strategy_type：策略類型（如單股策略、選股策略、產業策略）
-- condition_definition：策略條件（JSON，可包含跨日邏輯）
-- action_definition：策略動作（JSON，例如通知、匯出）
-- schedule_definition：執行排程設定（JSON）
-- is_active：是否啟用
-- last_executed_at：最近執行時間
-- last_triggered_at：最近觸發時間（有命中時）
+- base_symbol：交易對（預設 `BTCUSDT`）
+- timeframe：週期（預設 `1d`）
+- env：`test` / `prod` / `both`
+- status：`draft` / `active` / `archived`
+- version：版次（預設 1，更新時遞增）
+- buy_conditions：JSONB（ConditionSet）
+- sell_conditions：JSONB（ConditionSet）
+- risk_settings：JSONB（風控設定：order_size_mode/value、fees_pct、slippage_pct、stop_loss_pct、take_profit_pct、cool_down_days、min_hold_days、max_positions、price_mode 等）
+- created_by / updated_by：使用者 UUID
+- created_at / updated_at：時間戳
 
-索引：
+索引與約束：
 
-- `user_id`
-- `is_active`
+- `env`、`status` 檢查約束
+- Unique index：`base_symbol, timeframe, env` 在 `status='active'` 僅允許一筆
 
 ---
 
-### 8.2 策略執行紀錄表：`strategy_runs`
+### 8.2 回測紀錄表：`strategy_backtests`
 
-用途：紀錄每次策略執行的狀態。
+用途：保存策略回測結果與參數。
 
 主要欄位：
 
-- id：主鍵
+- id：主鍵（UUID）
+- strategy_id：外鍵（strategies.id）
+- strategy_version：回測時使用的策略版次
+- start_date / end_date：回測區間
+- params：JSONB（initial_equity、fees_pct、slippage_pct、price_mode、risk 等）
+- stats：JSONB（total_return、win_rate、max_drawdown、trade_count 等）
+- equity_curve：JSONB（日期／淨值序列）
+- trades：JSONB（回測交易明細）
+- created_by：使用者 UUID
+- created_at：時間戳
+
+索引：
+
+- `strategy_id`
+
+---
+
+### 8.3 交易紀錄表：`strategy_trades`
+
+用途：保存策略的紙本/正式交易紀錄（含試跑）。
+
+主要欄位：
+
+- id：主鍵（UUID）
+- strategy_id：外鍵（strategies.id）
+- strategy_version：版次
+- env：`test` / `prod`
+- side：`buy` / `sell`
+- entry_date / exit_date：進出場日期
+- entry_price / exit_price：價格
+- pnl_usdt / pnl_pct：損益
+- hold_days：持有天數
+- reason：出場原因（賣出條件/停損/停利等）
+- params_snapshot：JSONB（當時的風控/設定快照）
+- created_at：時間戳
+
+索引：
+
+- `strategy_id`
+- `env`
+
+---
+
+### 8.4 持倉表：`strategy_positions`
+
+用途：保存當前未平倉部位。
+
+主要欄位：
+
+- id：主鍵（UUID）
 - strategy_id：外鍵
-- run_date：執行對應的交易日（或邏輯日期）
-- started_at / finished_at
-- status：成功／部分成功／失敗
-- total_candidates：總評估標的數
-- hit_count：命中標的數
-- error_summary：錯誤摘要（可空）
+- env：`test` / `prod`
+- entry_date / entry_price：進場資訊
+- size：部位金額或張數（依風控模式）
+- stop_loss / take_profit：價格（可空）
+- status：`open` / `closed`
+- updated_at：時間戳
 
-索引：
+索引與約束：
 
-- `strategy_id, run_date`
-- `status, started_at`
+- Unique index：`strategy_id, env` where status='open'
 
 ---
 
-### 8.3 策略觸發結果表：`strategy_hits`
+### 8.5 策略日誌表：`strategy_logs`
 
-用途：儲存某次策略執行下命中的標的列表。
+用途：保存策略執行/信號日誌。
 
 主要欄位：
 
-- id：主鍵
-- strategy_run_id：外鍵
-- stock_id：外鍵（若策略命中的是股票）
-- trade_date：相關交易日
-- hit_detail：命中原因／指標快照（JSON，可包含當日關鍵指標）
+- id：主鍵（UUID）
+- strategy_id：外鍵
+- strategy_version：版次
+- env：`test` / `prod`
+- date：日期
+- phase：signal / eval / order 等階段
+- message：訊息
+- payload：JSONB（詳細內容）
+- created_at：時間戳
 
 索引：
 
-- `strategy_run_id`
-- `stock_id, trade_date`
+- `strategy_id`
+- `date`
+
+---
+
+### 8.6 策略報告表：`strategy_reports`
+
+用途：保存回測/紙本/正式的報告摘要。
+
+主要欄位：
+
+- id：主鍵（UUID）
+- strategy_id：外鍵
+- strategy_version：版次
+- env：`test` / `prod`
+- period_start / period_end：報告區間
+- summary：JSONB（報酬、DD、勝率、筆數等摘要）
+- trades_ref：JSONB（交易明細或引用）
+- created_by：使用者 UUID
+- created_at：時間戳
+
+索引：
+
+- `strategy_id`
 
 ---
 

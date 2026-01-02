@@ -67,6 +67,12 @@ const elements = {
   positionEnv: document.getElementById("positionEnv"),
   positionTable: document.getElementById("positionTable"),
   positionMeta: document.getElementById("positionMeta"),
+  logForm: document.getElementById("logForm"),
+  logStrategyId: document.getElementById("logStrategyId"),
+  logEnv: document.getElementById("logEnv"),
+  logLimit: document.getElementById("logLimit"),
+  logTable: document.getElementById("logTable"),
+  logMeta: document.getElementById("logMeta"),
 };
 
 const sections = Array.from(document.querySelectorAll("[data-section]"));
@@ -1300,6 +1306,7 @@ renderEmptyState(elements.strategyTable, "尚未載入策略");
 renderEmptyState(elements.tradeTable, "尚未查詢");
 renderEmptyState(elements.reportTable, "尚未查詢");
 renderEmptyState(elements.positionTable, "尚未查詢");
+renderEmptyState(elements.logTable, "尚未查詢");
 renderActivity();
 renderKpis();
 updateOverviewMode();
@@ -1637,6 +1644,55 @@ const loadReports = async () => {
   setStatus("報告列表已更新", "good");
 };
 
+const renderLogTable = (items = []) => {
+  if (!elements.logTable) return;
+  if (!items.length) {
+    renderEmptyState(elements.logTable, "尚未查詢");
+    if (elements.logMeta) elements.logMeta.innerHTML = "";
+    return;
+  }
+  const rows = items.map((l) => ({
+    date: fmtText(l.date),
+    env: fmtText(l.env),
+    phase: fmtText(l.phase),
+    message: fmtText(l.message),
+    payload: l.payload ? JSON.stringify(l.payload) : "—",
+    created_at: l.created_at ? timeFormat.format(new Date(l.created_at)) : "—",
+  }));
+  const cols = [
+    { key: "date", label: "日期" },
+    { key: "env", label: "環境" },
+    { key: "phase", label: "階段" },
+    { key: "message", label: "訊息" },
+    { key: "payload", label: "內容" },
+    { key: "created_at", label: "建立時間" },
+  ];
+  renderTable(elements.logTable, rows, cols);
+  if (elements.logMeta) {
+    elements.logMeta.innerHTML = `<div class="meta-item">共 ${fmtInt(items.length)} 筆日誌</div>`;
+  }
+};
+
+const loadLogs = async () => {
+  if (!elements.logForm) return;
+  const strategyId = (elements.logStrategyId?.value || "").trim();
+  if (!strategyId) {
+    setStatus("請輸入策略 ID", "warn");
+    renderEmptyState(elements.logTable, "尚未查詢");
+    return;
+  }
+  renderEmptyState(elements.logTable, "載入日誌中...");
+  const env = elements.logEnv?.value || "";
+  const limit = elements.logLimit?.value || 50;
+  const qs = new URLSearchParams();
+  if (env) qs.append("env", env);
+  if (limit) qs.append("limit", limit);
+  const res = await api(`/api/admin/strategies/${strategyId}/logs${qs.toString() ? `?${qs.toString()}` : ""}`);
+  renderLogTable(res.logs || []);
+  logActivity("查詢策略日誌", `策略 ${strategyId} · 筆數 ${fmtInt((res.logs || []).length)}`);
+  setStatus("日誌已更新", "good");
+};
+
 const loadTrades = async () => {
   if (!elements.tradeForm) return;
   renderEmptyState(elements.tradeTable, "載入交易中...");
@@ -1922,6 +1978,18 @@ if (elements.reportForm) {
       await loadReports();
     } catch (err) {
       setStatus(`查詢報告失敗：${err.message}`, "warn");
+    }
+  });
+}
+
+if (elements.logForm) {
+  elements.logForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      requireLogin();
+      await loadLogs();
+    } catch (err) {
+      setStatus(`查詢日誌失敗：${err.message}`, "warn");
     }
   });
 }

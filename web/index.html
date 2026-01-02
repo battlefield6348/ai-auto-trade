@@ -75,6 +75,7 @@
           <button class="nav-link" data-section-target="trade">交易</button>
           <button class="nav-link" data-section-target="report">報告</button>
           <button class="nav-link" data-section-target="position">持倉</button>
+          <button class="nav-link" data-section-target="logs">日誌</button>
           <button class="nav-link" data-section-target="activity">操作紀錄</button>
         </nav>
       </aside>
@@ -328,6 +329,29 @@
       </form>
       <div id="positionMeta" class="meta-row"></div>
       <div id="positionTable" class="table"></div>
+    </section>
+
+    <section class="panel span-2" id="logPanel" data-section="logs">
+      <div class="panel-head">
+        <div>
+          <h2>策略日誌</h2>
+          <p>查看策略執行訊息，可依環境與筆數過濾。</p>
+        </div>
+      </div>
+      <form id="logForm" class="form inline">
+        <label>策略 ID <input type="text" id="logStrategyId" required></label>
+        <label>環境
+          <select id="logEnv">
+            <option value="">全部</option>
+            <option value="test">test</option>
+            <option value="prod">prod</option>
+          </select>
+        </label>
+        <label>筆數 <input type="number" id="logLimit" value="50" min="1" max="200"></label>
+        <button type="submit" class="primary">查詢日誌</button>
+      </form>
+      <div id="logMeta" class="meta-row"></div>
+      <div id="logTable" class="table"></div>
     </section>
 
     <section class="panel" id="activityPanel" data-section="activity">

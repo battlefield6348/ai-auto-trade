@@ -73,6 +73,25 @@ const elements = {
   logLimit: document.getElementById("logLimit"),
   logTable: document.getElementById("logTable"),
   logMeta: document.getElementById("logMeta"),
+  strategyBacktestForm: document.getElementById("strategyBacktestForm"),
+  strategyBacktestSelect: document.getElementById("strategyBacktestSelect"),
+  strategyBacktestId: document.getElementById("strategyBacktestId"),
+  strategyBtStart: document.getElementById("strategyBtStart"),
+  strategyBtEnd: document.getElementById("strategyBtEnd"),
+  strategyBtEquity: document.getElementById("strategyBtEquity"),
+  strategyBtPriceMode: document.getElementById("strategyBtPriceMode"),
+  strategyBtFees: document.getElementById("strategyBtFees"),
+  strategyBtSlippage: document.getElementById("strategyBtSlippage"),
+  strategyBtStop: document.getElementById("strategyBtStop"),
+  strategyBtTake: document.getElementById("strategyBtTake"),
+  strategyBtDailyLoss: document.getElementById("strategyBtDailyLoss"),
+  strategyBtCoolDown: document.getElementById("strategyBtCoolDown"),
+  strategyBtMinHold: document.getElementById("strategyBtMinHold"),
+  strategyBtMaxPos: document.getElementById("strategyBtMaxPos"),
+  strategyBacktestReload: document.getElementById("strategyBacktestReload"),
+  strategyBacktestMessage: document.getElementById("strategyBacktestMessage"),
+  strategyBacktestSummary: document.getElementById("strategyBacktestSummary"),
+  strategyBacktestTrades: document.getElementById("strategyBacktestTrades"),
   createStrategyForm: document.getElementById("createStrategyForm"),
   createStrategyName: document.getElementById("createStrategyName"),
   createStrategySymbol: document.getElementById("createStrategySymbol"),
@@ -258,6 +277,9 @@ const showSection = (section) => {
   navLinks.forEach((link) => {
     link.classList.toggle("active", link.dataset.sectionTarget === section);
   });
+  if (section === "strategy" && state.strategies.length === 0 && elements.strategyForm) {
+    loadStrategies().catch((err) => setStatus(`載入策略失敗：${err.message}`, "warn"));
+  }
 };
 
 const updateOverviewMode = () => {
@@ -1361,24 +1383,25 @@ const startOfYear = new Date(Date.UTC(new Date().getUTCFullYear(), 0, 1)).toISOS
   const el = document.getElementById(id);
   if (el) el.value = today;
 });
-  if (elements.chartStart) elements.chartStart.value = startOfYear;
-  const btStart = document.getElementById("btStart");
-  const btEnd = document.getElementById("btEnd");
-  if (btStart) btStart.value = startOfYear;
-  if (btEnd) btEnd.value = today;
-  updateOptionalFields();
-  loadPreset();
-  elements.btConditionSelect?.addEventListener("change", (e) => {
-    const val = e.target.value;
-    if (val && !backtestSelections.conditions.includes(val)) {
-      backtestSelections.conditions.push(val);
-      e.target.value = "";
-      updateOptionalFields();
-      renderBacktestConditions();
-    }
-  });
-  document.getElementById("savePresetBtn")?.addEventListener("click", savePreset);
-  document.getElementById("loadPresetBtn")?.addEventListener("click", loadPreset);
+if (elements.chartStart) elements.chartStart.value = startOfYear;
+const btStart = document.getElementById("btStart");
+const btEnd = document.getElementById("btEnd");
+if (btStart) btStart.value = startOfYear;
+if (btEnd) btEnd.value = today;
+setStrategyBacktestDefaults();
+updateOptionalFields();
+loadPreset();
+elements.btConditionSelect?.addEventListener("change", (e) => {
+  const val = e.target.value;
+  if (val && !backtestSelections.conditions.includes(val)) {
+    backtestSelections.conditions.push(val);
+    e.target.value = "";
+    updateOptionalFields();
+    renderBacktestConditions();
+  }
+});
+document.getElementById("savePresetBtn")?.addEventListener("click", savePreset);
+document.getElementById("loadPresetBtn")?.addEventListener("click", loadPreset);
 
 Array.from(document.querySelectorAll(".chip[data-email]")).forEach((chip) => {
   chip.addEventListener("click", () => {
@@ -1485,6 +1508,7 @@ const renderStrategyTable = (items = []) => {
     elements.strategyMeta.innerHTML = `<div class="meta-item">共 ${fmtInt(items.length)} 筆策略</div>`;
   }
   bindStrategyActions();
+  syncStrategyOptions();
 };
 
 const loadStrategies = async () => {
@@ -1504,6 +1528,184 @@ const loadStrategies = async () => {
   touchUpdatedAt();
   setStatus("策略列表已更新", "good");
 };
+
+const syncStrategyOptions = () => {
+  if (!elements.strategyBacktestSelect) return;
+  const current = elements.strategyBacktestSelect.value;
+  const options = state.strategies.map(
+    (s) =>
+      `<option value="${s.id}">${fmtText(s.name || s.id)}（v${s.version || "-"}｜${s.env || "-"}）</option>`
+  );
+  elements.strategyBacktestSelect.innerHTML = `<option value="">選擇策略…</option>${options.join("")}`;
+  if (current) {
+    elements.strategyBacktestSelect.value = current;
+  }
+};
+
+const fmtDate = (v) => {
+  if (!v) return "—";
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return fmtText(v);
+  return d.toISOString().slice(0, 10);
+};
+
+const setStrategyBacktestDefaults = () => {
+  const today = new Date();
+  const start = new Date();
+  start.setDate(today.getDate() - 180);
+  if (elements.strategyBtStart) elements.strategyBtStart.value = start.toISOString().slice(0, 10);
+  if (elements.strategyBtEnd) elements.strategyBtEnd.value = today.toISOString().slice(0, 10);
+};
+
+const collectStrategyBacktestPayload = () => {
+  const strategyID = (elements.strategyBacktestSelect?.value || elements.strategyBacktestId?.value || "").trim();
+  if (!strategyID) {
+    return { ok: false, error: "請選擇或輸入策略 ID" };
+  }
+  const start = elements.strategyBtStart?.value;
+  const end = elements.strategyBtEnd?.value;
+  if (!start || !end) return { ok: false, error: "請填寫回測起訖日" };
+  if (new Date(end) < new Date(start)) return { ok: false, error: "結束日需晚於起始日" };
+  const initialEquity = Number(elements.strategyBtEquity?.value || 0);
+  if (!initialEquity || Number.isNaN(initialEquity) || initialEquity <= 0) {
+    return { ok: false, error: "初始資金需為正數" };
+  }
+
+  const fees = toPercent(elements.strategyBtFees?.value, "手續費", true, 0);
+  if (!fees.ok) return { ok: false, error: fees.error };
+  const slippage = toPercent(elements.strategyBtSlippage?.value, "滑價", true, 0);
+  if (!slippage.ok) return { ok: false, error: slippage.error };
+  const stop = toPercent(elements.strategyBtStop?.value, "停損", true, null);
+  if (!stop.ok) return { ok: false, error: stop.error };
+  const take = toPercent(elements.strategyBtTake?.value, "停利", true, null);
+  if (!take.ok) return { ok: false, error: take.error };
+  const dailyLoss = toPercent(elements.strategyBtDailyLoss?.value, "單日最大虧損", true, null);
+  if (!dailyLoss.ok) return { ok: false, error: dailyLoss.error };
+
+  const coolDown = elements.strategyBtCoolDown?.value ? Number(elements.strategyBtCoolDown.value) : null;
+  const minHold = elements.strategyBtMinHold?.value ? Number(elements.strategyBtMinHold.value) : null;
+  const maxPos = elements.strategyBtMaxPos?.value ? Number(elements.strategyBtMaxPos.value) : null;
+  if (coolDown !== null && (Number.isNaN(coolDown) || coolDown < 0)) {
+    return { ok: false, error: "冷卻天數需為 0 或正整數" };
+  }
+  if (minHold !== null && (Number.isNaN(minHold) || minHold < 0)) {
+    return { ok: false, error: "最少持有天數需為 0 或正整數" };
+  }
+  if (maxPos !== null && (Number.isNaN(maxPos) || maxPos < 1)) {
+    return { ok: false, error: "最多持倉需為大於 0 的整數" };
+  }
+
+  const payload = {
+    start_date: start,
+    end_date: end,
+    initial_equity: initialEquity,
+    price_mode: elements.strategyBtPriceMode?.value || "next_open",
+    fees_pct: fees.value,
+    slippage_pct: slippage.value,
+    stop_loss_pct: stop.value,
+    take_profit_pct: take.value,
+    max_daily_loss_pct: dailyLoss.value,
+    cool_down_days: coolDown,
+    min_hold_days: minHold,
+    max_positions: maxPos,
+  };
+
+  return { ok: true, strategyID, payload };
+};
+
+const renderStrategyBacktestTrades = (trades = []) => {
+  if (!elements.strategyBacktestTrades) return;
+  const rows = trades.map((t) => ({
+    entry: fmtDate(t.entry_date),
+    exit: fmtDate(t.exit_date),
+    entry_price: t.entry_price,
+    exit_price: t.exit_price,
+    pnl: t.pnl_usdt,
+    pnl_pct: t.pnl_pct,
+    hold: t.hold_days,
+    reason: t.reason,
+  }));
+  const cols = [
+    { key: "entry", label: "買入日" },
+    { key: "exit", label: "賣出日" },
+    { key: "entry_price", label: "買入價", format: fmtPrice },
+    { key: "exit_price", label: "賣出價", format: fmtPrice },
+    { key: "pnl", label: "PNL (USDT)", format: fmtNumber, delta: true },
+    { key: "pnl_pct", label: "PNL%", format: fmtPercent, delta: true },
+    { key: "hold", label: "持有天數", format: fmtInt },
+    { key: "reason", label: "原因", format: fmtText },
+  ];
+  renderTable(elements.strategyBacktestTrades, rows, cols);
+};
+
+const renderStrategyBacktestSummary = (rec) => {
+  if (!elements.strategyBacktestSummary) return;
+  if (!rec) {
+    renderEmptyState(elements.strategyBacktestSummary, "尚未執行回測");
+    return;
+  }
+  const params = rec.params || {};
+  const result = rec.result || {};
+  const stats = result.stats || {};
+  const metaItems = [
+    `策略：${fmtText(rec.strategy_id)}（v${rec.strategy_version || "-"})`,
+    `區間：${fmtDate(params.start_date)} ~ ${fmtDate(params.end_date)}`,
+    `成交價模式：${fmtText(params.price_mode)}`,
+    `手續費：${fmtPercent(params.fees_pct)}`,
+    `滑價：${fmtPercent(params.slippage_pct)}`,
+  ];
+  elements.strategyBacktestSummary.innerHTML = `
+    <div class="meta-row">${metaItems.map((m) => `<div class="meta-item">${m}</div>`).join("")}</div>
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-title">總報酬</div><div class="kpi-value">${fmtPercent(
+        stats.total_return
+      )}</div></div>
+      <div class="kpi-card"><div class="kpi-title">最大回撤</div><div class="kpi-value warn">${fmtPercent(
+        stats.max_drawdown
+      )}</div></div>
+      <div class="kpi-card"><div class="kpi-title">勝率</div><div class="kpi-value">${fmtPercent(
+        stats.win_rate
+      )}</div></div>
+      <div class="kpi-card"><div class="kpi-title">筆數</div><div class="kpi-value">${fmtInt(
+        stats.trade_count
+      )}</div></div>
+      <div class="kpi-card"><div class="kpi-title">平均獲利</div><div class="kpi-value">${fmtPercent(
+        stats.avg_gain
+      )}</div></div>
+      <div class="kpi-card"><div class="kpi-title">平均虧損</div><div class="kpi-value warn">${fmtPercent(
+        stats.avg_loss ? -Math.abs(stats.avg_loss) : stats.avg_loss
+      )}</div></div>
+      <div class="kpi-card"><div class="kpi-title">盈虧比</div><div class="kpi-value">${fmtNumber(
+        stats.profit_factor
+      )}</div></div>
+    </div>
+  `;
+  renderStrategyBacktestTrades(result.trades || []);
+};
+
+const runStrategyBacktest = async () => {
+  const res = collectStrategyBacktestPayload();
+  if (!res.ok) {
+    setMessage(elements.strategyBacktestMessage, res.error, "error");
+    return;
+  }
+  try {
+    requireLogin();
+    setMessage(elements.strategyBacktestMessage, "回測執行中...", "info");
+    const data = await api(`/api/admin/strategies/${res.strategyID}/backtest`, {
+      method: "POST",
+      body: JSON.stringify(res.payload),
+    });
+    const record = data.result;
+    setMessage(elements.strategyBacktestMessage, "回測完成並已保存", "good");
+    renderStrategyBacktestSummary(record);
+    logActivity("策略回測", `策略 ${res.strategyID} · ${res.payload.start_date}~${res.payload.end_date}`);
+  } catch (err) {
+    setMessage(elements.strategyBacktestMessage, `回測失敗：${err.message}`, "error");
+    renderStrategyBacktestSummary(null);
+  }
+};
+
 
 const conditionTypeOptions = [
   { value: "numeric", label: "數值" },
@@ -2514,6 +2716,25 @@ if (elements.createStrategyForm) {
 }
 if (elements.loadStrategyTemplate) {
   elements.loadStrategyTemplate.addEventListener("click", loadStrategyTemplate);
+}
+
+if (elements.strategyBacktestForm) {
+  elements.strategyBacktestForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    await runStrategyBacktest();
+  });
+}
+
+if (elements.strategyBacktestReload) {
+  elements.strategyBacktestReload.addEventListener("click", async () => {
+    try {
+      requireLogin();
+      await loadStrategies();
+      setMessage(elements.strategyBacktestMessage, "策略列表已更新", "good");
+    } catch (err) {
+      setMessage(elements.strategyBacktestMessage, `載入策略失敗：${err.message}`, "error");
+    }
+  });
 }
 
 if (elements.addBuyCondition) {

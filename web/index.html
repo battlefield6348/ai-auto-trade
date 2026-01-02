@@ -345,6 +345,50 @@
       </form>
     </section>
 
+    <section class="panel span-2" id="strategyBacktestPanel" data-section="strategy">
+      <div class="panel-head">
+        <div>
+          <h2>策略回測（區間買賣）</h2>
+          <p>選擇策略與日期區間，使用策略條件在歷史資料中反覆買入/賣出並產出統計。</p>
+        </div>
+      </div>
+      <form id="strategyBacktestForm" class="form inline">
+        <div class="field-grid">
+          <label>選擇策略
+            <select id="strategyBacktestSelect">
+              <option value="">請先載入策略列表</option>
+            </select>
+          </label>
+          <label>或輸入策略 ID <input type="text" id="strategyBacktestId" placeholder="直接貼策略 ID"></label>
+          <label>起始日 <input type="date" id="strategyBtStart" required></label>
+          <label>結束日 <input type="date" id="strategyBtEnd" required></label>
+          <label>初始資金 (USDT) <input type="number" id="strategyBtEquity" value="10000" step="100"></label>
+          <label>成交價模式
+            <select id="strategyBtPriceMode">
+              <option value="next_open">次日開盤</option>
+              <option value="next_close">次日收盤</option>
+              <option value="current_close">當日收盤</option>
+            </select>
+          </label>
+          <label>手續費 (%) <input type="number" id="strategyBtFees" value="0.1" step="0.01"></label>
+          <label>滑價 (%) <input type="number" id="strategyBtSlippage" value="0.1" step="0.01"></label>
+          <label>停損 (%) <input type="number" id="strategyBtStop" placeholder="可留空" step="0.1"></label>
+          <label>停利 (%) <input type="number" id="strategyBtTake" placeholder="可留空" step="0.1"></label>
+          <label>單日最大虧損 (%) <input type="number" id="strategyBtDailyLoss" placeholder="可留空" step="0.1"></label>
+          <label>冷卻天數 <input type="number" id="strategyBtCoolDown" value="1" min="0" step="1"></label>
+          <label>最少持有天數 <input type="number" id="strategyBtMinHold" value="1" min="0" step="1"></label>
+          <label>最多同時持倉 <input type="number" id="strategyBtMaxPos" value="1" min="1" step="1"></label>
+        </div>
+        <div class="actions">
+          <button type="button" class="ghost btn-sm" id="strategyBacktestReload">重新載入策略列表</button>
+          <button type="submit" class="primary">執行回測</button>
+        </div>
+        <div id="strategyBacktestMessage" class="message"></div>
+      </form>
+      <div id="strategyBacktestSummary" class="result-panel"></div>
+      <div id="strategyBacktestTrades" class="table"></div>
+    </section>
+
     <section class="panel span-2" id="tradePanel" data-section="trade">
       <div class="panel-head">
         <div>

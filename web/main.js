@@ -1396,6 +1396,7 @@ elements.btConditionSelect?.addEventListener("change", (e) => {
     e.target.value = "";
     updateOptionalFields();
     renderBacktestConditions();
+    scheduleAutoBacktest();
   }
 });
 document.getElementById("savePresetBtn")?.addEventListener("click", savePreset);
@@ -1435,6 +1436,7 @@ const applyBacktestPreset = (preset) => {
   if (!nextConds.length) nextConds.push("change", "volume");
   backtestSelections.conditions = nextConds;
   updateOptionalFields();
+  scheduleAutoBacktest();
 };
 
 async function loadPreset() {
@@ -3019,35 +3021,7 @@ const deleteCombo = async () => {
 if (elements.backtestForm) {
   elements.backtestForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    try {
-      requireLogin();
-      const start_date = document.getElementById("btStart").value;
-      const end_date = document.getElementById("btEnd").value;
-      if (!start_date || !end_date) {
-        renderChartPlaceholder("請設定回測日期區間");
-        return;
-      }
-  if (backtestSelections.conditions.length === 0) {
-    renderChartPlaceholder("請先選擇至少一個條件");
-    return;
-  }
-  const payload = buildBacktestPayload();
-  renderChartLoading();
-  const res = await api("/api/analysis/backtest", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-  const weighted = applyWeightedScoring(res);
-  state.lastBacktest = weighted;
-      renderBacktestSummary(weighted);
-      renderBacktestEvents(weighted);
-      if (state.lastChart && state.lastChart.items) {
-        renderHistoryChart(state.lastChart, weighted.events || []);
-      }
-      logActivity("條件回測", `命中 ${fmtInt(weighted.total_events)} 筆`);
-    } catch (err) {
-      renderChartPlaceholder(err.message);
-    }
+    await runBacktest({ auto: false });
   });
 }
 
@@ -3362,6 +3336,83 @@ function updateOptionalFields() {
   refreshConditionOptions();
 }
 
+const backtestInputs = [
+  "btStart",
+  "btEnd",
+  "btTotalMin",
+  "btChangeMin",
+  "btVolMin",
+  "btReturnMin",
+  "btMaGap",
+  "btChangeWeight",
+  "btVolWeight",
+  "btReturnWeight",
+  "btMaWeight",
+];
+
+backtestInputs.forEach((id) => {
+  const el = document.getElementById(id);
+  if (el) {
+    el.addEventListener("input", scheduleAutoBacktest);
+    el.addEventListener("change", scheduleAutoBacktest);
+  }
+});
+
+if (elements.btSelectedConditions) {
+  elements.btSelectedConditions.addEventListener("input", scheduleAutoBacktest);
+}
+
+let autoBacktestTimer = null;
+const scheduleAutoBacktest = () => {
+  clearTimeout(autoBacktestTimer);
+  autoBacktestTimer = setTimeout(() => {
+    runBacktest({ auto: true });
+  }, 600);
+};
+
+async function runBacktest({ auto = false } = {}) {
+  try {
+    requireLogin();
+  } catch (err) {
+    if (auto) return;
+    throw err;
+  }
+  const start_date = document.getElementById("btStart")?.value;
+  const end_date = document.getElementById("btEnd")?.value;
+  if (!start_date || !end_date) {
+    if (!auto) renderChartPlaceholder("請設定回測日期區間");
+    return;
+  }
+  if (backtestSelections.conditions.length === 0) {
+    if (!auto) renderChartPlaceholder("請先選擇至少一個條件");
+    return;
+  }
+  try {
+    if (!auto) {
+      renderChartLoading();
+    }
+    const payload = buildBacktestPayload();
+    const res = await api("/api/analysis/backtest", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    const weighted = applyWeightedScoring(res);
+    state.lastBacktest = weighted;
+    renderBacktestSummary(weighted);
+    renderBacktestEvents(weighted);
+    if (state.lastChart && state.lastChart.items) {
+      renderHistoryChart(state.lastChart, weighted.events || []);
+    }
+    if (!auto) {
+      logActivity("條件回測", `命中 ${fmtInt(weighted.total_events)} 筆`);
+    }
+  } catch (err) {
+    if (!auto) {
+      renderChartPlaceholder(err.message);
+    }
+  }
+}
+
 function applyBacktestConfig(cfg) {
   if (!cfg) return;
   document.getElementById("btStart").value = cfg.start_date || document.getElementById("btStart").value;
@@ -3392,6 +3443,7 @@ function applyBacktestConfig(cfg) {
   backtestSelections.conditions = nextConds;
   renderBacktestConditions();
   refreshConditionOptions();
+  scheduleAutoBacktest();
 }
 
 loadCombos();

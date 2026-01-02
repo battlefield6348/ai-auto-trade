@@ -3167,6 +3167,15 @@ navLinks.forEach((link) => {
   });
 });
 
+// 退場保險：委派監聽，避免事件漏掛
+document.body.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-section-target]");
+  if (!btn) return;
+  e.preventDefault();
+  const target = btn.dataset.sectionTarget;
+  if (target) showSection(target);
+});
+
 document.getElementById("summaryBtn").addEventListener("click", async () => {
   try {
     requireLogin();

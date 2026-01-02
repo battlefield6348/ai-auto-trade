@@ -78,18 +78,25 @@ const elements = {
   createStrategySymbol: document.getElementById("createStrategySymbol"),
   createStrategyTimeframe: document.getElementById("createStrategyTimeframe"),
   createStrategyEnv: document.getElementById("createStrategyEnv"),
-  createBuyJSON: document.getElementById("createBuyJSON"),
-  createSellJSON: document.getElementById("createSellJSON"),
-  createRiskJSON: document.getElementById("createRiskJSON"),
+  buyLogic: document.getElementById("buyLogic"),
+  sellLogic: document.getElementById("sellLogic"),
+  buyConditions: document.getElementById("buyConditions"),
+  sellConditions: document.getElementById("sellConditions"),
+  addBuyCondition: document.getElementById("addBuyCondition"),
+  addSellCondition: document.getElementById("addSellCondition"),
+  orderSizeMode: document.getElementById("orderSizeMode"),
+  orderSizeValue: document.getElementById("orderSizeValue"),
+  priceMode: document.getElementById("priceMode"),
+  feesPct: document.getElementById("feesPct"),
+  slippagePct: document.getElementById("slippagePct"),
+  stopLossPct: document.getElementById("stopLossPct"),
+  takeProfitPct: document.getElementById("takeProfitPct"),
+  coolDownDays: document.getElementById("coolDownDays"),
+  minHoldDays: document.getElementById("minHoldDays"),
+  maxPositions: document.getElementById("maxPositions"),
+  createStrategyPreview: document.getElementById("createStrategyPreview"),
   createStrategyMessage: document.getElementById("createStrategyMessage"),
   loadStrategyTemplate: document.getElementById("loadStrategyTemplate"),
-  applyStrategyFields: document.getElementById("applyStrategyFields"),
-  strategyBuyScore: document.getElementById("strategyBuyScore"),
-  strategySellScore: document.getElementById("strategySellScore"),
-  strategyOrderSize: document.getElementById("strategyOrderSize"),
-  strategyStopLoss: document.getElementById("strategyStopLoss"),
-  strategyTakeProfit: document.getElementById("strategyTakeProfit"),
-  strategyPriceMode: document.getElementById("strategyPriceMode"),
 };
 
 const sections = Array.from(document.querySelectorAll("[data-section]"));
@@ -1498,69 +1505,177 @@ const loadStrategies = async () => {
   setStatus("策略列表已更新", "good");
 };
 
-const loadStrategyTemplate = () => {
-  const buy = {
-    logic: "AND",
-    conditions: [
-      { type: "numeric", numeric: { field: "score", op: "gte", value: 60 } },
-    ],
-  };
-  const sell = {
-    logic: "AND",
-    conditions: [
-      { type: "numeric", numeric: { field: "score", op: "lte", value: 40 } },
-    ],
-  };
-  const risk = {
-    order_size_mode: "fixed_usdt",
-    order_size_value: 1000,
-    fees_pct: 0.001,
-    slippage_pct: 0.001,
-    cool_down_days: 1,
-    min_hold_days: 1,
-    max_positions: 1,
-    price_mode: "next_open",
-  };
-  if (elements.createBuyJSON) elements.createBuyJSON.value = JSON.stringify(buy, null, 2);
-  if (elements.createSellJSON) elements.createSellJSON.value = JSON.stringify(sell, null, 2);
-  if (elements.createRiskJSON) elements.createRiskJSON.value = JSON.stringify(risk, null, 2);
-};
+const conditionOps = [
+  { value: "gte", label: "≥" },
+  { value: "lte", label: "≤" },
+  { value: "gt", label: ">" },
+  { value: "lt", label: "<" },
+  { value: "eq", label: "=" },
+];
 
-const parseJSONSafe = (text) => {
-  try {
-    return { ok: true, value: JSON.parse(text) };
-  } catch (err) {
-    return { ok: false, error: err };
+function toPercent(raw, label, allowEmpty = true, defaultValue = null) {
+  if (raw === "" || raw === null || raw === undefined) {
+    return { ok: true, value: allowEmpty ? defaultValue : null };
   }
-};
+  const num = Number(raw);
+  if (Number.isNaN(num) || num < 0) {
+    return { ok: false, error: `${label}需為非負數字` };
+  }
+  return { ok: true, value: num / 100 };
+}
 
-const createStrategy = async () => {
+function addConditionRow(container, defaults = {}) {
+  if (!container) return;
+  const row = document.createElement("div");
+  row.className = "condition-row inline";
+  row.innerHTML = `
+    <label>欄位 <input type="text" data-field placeholder="score" value="${defaults.field || ""}"></label>
+    <label>運算子 <select data-op></select></label>
+    <label>數值 <input type="number" step="0.01" data-value value="${defaults.value ?? ""}"></label>
+    <button type="button" class="ghost btn-sm" data-remove>移除</button>
+  `;
+  const opSelect = row.querySelector("[data-op]");
+  conditionOps.forEach((op) => {
+    const opt = document.createElement("option");
+    opt.value = op.value;
+    opt.textContent = op.label;
+    opSelect.appendChild(opt);
+  });
+  opSelect.value = defaults.op || "gte";
+
+  row.querySelectorAll("input, select").forEach((el) => {
+    el.addEventListener("input", updateStrategyPreview);
+  });
+  row.querySelector("[data-remove]").addEventListener("click", () => {
+    row.remove();
+    updateStrategyPreview();
+  });
+  container.appendChild(row);
+}
+
+function resetConditionRows(container, defaults = []) {
+  if (!container) return;
+  container.innerHTML = "";
+  defaults.forEach((d) => addConditionRow(container, d));
+}
+
+function collectConditions(container, logicValue, strict = true) {
+  if (!container) return { ok: false, error: "條件容器遺失" };
+  const logic = logicValue || "AND";
+  if (logic !== "AND" && logic !== "OR") {
+    return { ok: false, error: "邏輯需為 AND 或 OR" };
+  }
+  const conditions = [];
+  let error = null;
+  container.querySelectorAll(".condition-row").forEach((row) => {
+    const field = (row.querySelector("[data-field]")?.value || "").trim();
+    const op = row.querySelector("[data-op]")?.value || "";
+    const rawValue = row.querySelector("[data-value]")?.value;
+    const value = rawValue === "" ? NaN : Number(rawValue);
+    if (!field && !error) error = "條件欄位不可空白";
+    if (!op && !error) error = "請選擇運算子";
+    if (Number.isNaN(value) && !error) error = "條件數值需為數字";
+    if (!error) {
+      conditions.push({ type: "numeric", numeric: { field, op, value } });
+    }
+  });
+  if (conditions.length === 0) {
+    return { ok: false, error: "請至少新增一條條件" };
+  }
+  if (error) {
+    return { ok: false, error };
+  }
+  return { ok: true, value: { logic, conditions } };
+}
+
+function collectRiskSettings(strict = true) {
+  const order_size_mode = elements.orderSizeMode?.value || "fixed_usdt";
+  const order_size_value = Number(elements.orderSizeValue?.value || 0);
+  const price_mode = elements.priceMode?.value || "next_open";
+  const fees_pct_raw = elements.feesPct?.value;
+  const slippage_pct_raw = elements.slippagePct?.value;
+  const stop_loss_pct_raw = elements.stopLossPct?.value;
+  const take_profit_pct_raw = elements.takeProfitPct?.value;
+  const cool_down_days = Number(elements.coolDownDays?.value || 0);
+  const min_hold_days = Number(elements.minHoldDays?.value || 0);
+  const max_positions = Number(elements.maxPositions?.value || 1);
+
+  if (strict) {
+    if (order_size_mode !== "fixed_usdt" && order_size_mode !== "percent_of_equity") {
+      return { ok: false, error: "下單模式需為固定金額或資金比例" };
+    }
+    if (!order_size_value || Number.isNaN(order_size_value) || order_size_value <= 0) {
+      return { ok: false, error: "下單金額/比例需為正數" };
+    }
+    if (order_size_mode === "percent_of_equity" && order_size_value > 1) {
+      return { ok: false, error: "資金比例請填 0-1 之間" };
+    }
+    if (!price_mode) {
+      return { ok: false, error: "請選擇成交價模式" };
+    }
+    if (Number.isNaN(cool_down_days) || cool_down_days < 0) {
+      return { ok: false, error: "冷卻天數需為 0 或正整數" };
+    }
+    if (Number.isNaN(min_hold_days) || min_hold_days < 0) {
+      return { ok: false, error: "最少持有天數需為 0 或正整數" };
+    }
+    if (Number.isNaN(max_positions) || max_positions < 1) {
+      return { ok: false, error: "最多持倉需為大於 0 的整數" };
+    }
+  }
+
+  const feesPctRes = toPercent(fees_pct_raw, "手續費", true, 0);
+  if (!feesPctRes.ok) return { ok: false, error: feesPctRes.error };
+  const slippagePctRes = toPercent(slippage_pct_raw, "滑價", true, 0);
+  if (!slippagePctRes.ok) return { ok: false, error: slippagePctRes.error };
+  const stopLossRes = toPercent(stop_loss_pct_raw, "停損", true, null);
+  if (!stopLossRes.ok) return { ok: false, error: stopLossRes.error };
+  const takeProfitRes = toPercent(take_profit_pct_raw, "停利", true, null);
+  if (!takeProfitRes.ok) return { ok: false, error: takeProfitRes.error };
+
+  return {
+    ok: true,
+    value: {
+      order_size_mode,
+      order_size_value,
+      price_mode,
+      fees_pct: feesPctRes.value ?? 0,
+      slippage_pct: slippagePctRes.value ?? 0,
+      stop_loss_pct: stopLossRes.value,
+      take_profit_pct: takeProfitRes.value,
+      cool_down_days,
+      min_hold_days,
+      max_positions,
+    },
+  };
+}
+
+function buildStrategyPayload(strict = true) {
   const name = (elements.createStrategyName?.value || "").trim();
   const base_symbol = (elements.createStrategySymbol?.value || "BTCUSDT").trim();
   const timeframe = (elements.createStrategyTimeframe?.value || "1d").trim();
   const env = elements.createStrategyEnv?.value || "both";
-  if (!name) {
-    setMessage(elements.createStrategyMessage, "請填寫策略名稱", "error");
-    return;
+
+  if (strict && !name) {
+    return { ok: false, error: "請填寫策略名稱" };
   }
-  try {
-    requireLogin();
-    const buyRes = parseJSONSafe(elements.createBuyJSON?.value || "{}");
-    const sellRes = parseJSONSafe(elements.createSellJSON?.value || "{}");
-    const riskRes = parseJSONSafe(elements.createRiskJSON?.value || "{}");
-    if (!buyRes.ok) {
-      setMessage(elements.createStrategyMessage, `買入條件 JSON 錯誤：${buyRes.error.message}`, "error");
-      return;
-    }
-    if (!sellRes.ok) {
-      setMessage(elements.createStrategyMessage, `賣出條件 JSON 錯誤：${sellRes.error.message}`, "error");
-      return;
-    }
-    if (!riskRes.ok) {
-      setMessage(elements.createStrategyMessage, `風控設定 JSON 錯誤：${riskRes.error.message}`, "error");
-      return;
-    }
-    const payload = {
+
+  const buyRes = collectConditions(elements.buyConditions, elements.buyLogic?.value, strict);
+  if (!buyRes.ok) {
+    return { ok: false, error: `買入條件錯誤：${buyRes.error}` };
+  }
+  const sellRes = collectConditions(elements.sellConditions, elements.sellLogic?.value, strict);
+  if (!sellRes.ok) {
+    return { ok: false, error: `賣出條件錯誤：${sellRes.error}` };
+  }
+  const riskRes = collectRiskSettings(strict);
+  if (!riskRes.ok) {
+    return { ok: false, error: `風控設定錯誤：${riskRes.error}` };
+  }
+
+  return {
+    ok: true,
+    value: {
       name,
       base_symbol,
       timeframe,
@@ -1568,13 +1683,61 @@ const createStrategy = async () => {
       buy_conditions: buyRes.value,
       sell_conditions: sellRes.value,
       risk_settings: riskRes.value,
-    };
+    },
+  };
+}
+
+function updateStrategyPreview() {
+  if (!elements.createStrategyPreview) return;
+  const res = buildStrategyPayload(false);
+  if (res.ok) {
+    elements.createStrategyPreview.value = JSON.stringify(res.value, null, 2);
+  } else {
+    elements.createStrategyPreview.value = `目前預覽無法產生：${res.error}`;
+  }
+}
+
+const loadStrategyTemplate = () => {
+  if (elements.createStrategyName) elements.createStrategyName.value = "";
+  if (elements.createStrategySymbol) elements.createStrategySymbol.value = "BTCUSDT";
+  if (elements.createStrategyTimeframe) elements.createStrategyTimeframe.value = "1d";
+  if (elements.createStrategyEnv) elements.createStrategyEnv.value = "both";
+  if (elements.buyLogic) elements.buyLogic.value = "AND";
+  if (elements.sellLogic) elements.sellLogic.value = "AND";
+
+  resetConditionRows(elements.buyConditions, [{ field: "score", op: "gte", value: 60 }]);
+  resetConditionRows(elements.sellConditions, [{ field: "score", op: "lte", value: 40 }]);
+
+  if (elements.orderSizeMode) elements.orderSizeMode.value = "fixed_usdt";
+  if (elements.orderSizeValue) elements.orderSizeValue.value = 1000;
+  if (elements.priceMode) elements.priceMode.value = "next_open";
+  if (elements.feesPct) elements.feesPct.value = 0.1;
+  if (elements.slippagePct) elements.slippagePct.value = 0.1;
+  if (elements.stopLossPct) elements.stopLossPct.value = 3;
+  if (elements.takeProfitPct) elements.takeProfitPct.value = 6;
+  if (elements.coolDownDays) elements.coolDownDays.value = 1;
+  if (elements.minHoldDays) elements.minHoldDays.value = 1;
+  if (elements.maxPositions) elements.maxPositions.value = 1;
+
+  updateStrategyPreview();
+  setMessage(elements.createStrategyMessage, "已載入範例設定", "info");
+};
+
+const createStrategy = async () => {
+  const res = buildStrategyPayload(true);
+  if (!res.ok) {
+    setMessage(elements.createStrategyMessage, res.error, "error");
+    return;
+  }
+  const payload = res.value;
+  try {
+    requireLogin();
     await api("/api/admin/strategies", {
       method: "POST",
       body: JSON.stringify(payload),
     });
     setMessage(elements.createStrategyMessage, "策略建立成功", "good");
-    logActivity("建立策略", `名稱 ${name} · env ${env}`);
+    logActivity("建立策略", `名稱 ${payload.name} · env ${payload.env}`);
     await loadStrategies();
   } catch (err) {
     setMessage(elements.createStrategyMessage, `建立失敗：${err.message}`, "error");
@@ -2128,41 +2291,41 @@ if (elements.loadStrategyTemplate) {
   elements.loadStrategyTemplate.addEventListener("click", loadStrategyTemplate);
 }
 
-if (elements.applyStrategyFields) {
-  elements.applyStrategyFields.addEventListener("click", () => {
-    const buyScore = Number(elements.strategyBuyScore?.value || 0);
-    const sellScore = Number(elements.strategySellScore?.value || 0);
-    const orderSize = Number(elements.strategyOrderSize?.value || 0);
-    const stopLoss = elements.strategyStopLoss?.value ? Number(elements.strategyStopLoss.value) / 100 : null;
-    const takeProfit = elements.strategyTakeProfit?.value ? Number(elements.strategyTakeProfit.value) / 100 : null;
-    const priceMode = elements.strategyPriceMode?.value || "next_open";
-
-    const buy = {
-      logic: "AND",
-      conditions: [{ type: "numeric", numeric: { field: "score", op: "gte", value: buyScore } }],
-    };
-    const sell = {
-      logic: "AND",
-      conditions: [{ type: "numeric", numeric: { field: "score", op: "lte", value: sellScore } }],
-    };
-    const risk = {
-      order_size_mode: "fixed_usdt",
-      order_size_value: orderSize,
-      fees_pct: 0.001,
-      slippage_pct: 0.001,
-      stop_loss_pct: stopLoss,
-      take_profit_pct: takeProfit,
-      cool_down_days: 1,
-      min_hold_days: 1,
-      max_positions: 1,
-      price_mode: priceMode,
-    };
-    if (elements.createBuyJSON) elements.createBuyJSON.value = JSON.stringify(buy, null, 2);
-    if (elements.createSellJSON) elements.createSellJSON.value = JSON.stringify(sell, null, 2);
-    if (elements.createRiskJSON) elements.createRiskJSON.value = JSON.stringify(risk, null, 2);
-    setMessage(elements.createStrategyMessage, "已套用欄位到 JSON，請確認後送出", "good");
+if (elements.addBuyCondition) {
+  elements.addBuyCondition.addEventListener("click", () => {
+    addConditionRow(elements.buyConditions, { field: "score", op: "gte", value: 60 });
+    updateStrategyPreview();
   });
 }
+
+if (elements.addSellCondition) {
+  elements.addSellCondition.addEventListener("click", () => {
+    addConditionRow(elements.sellConditions, { field: "score", op: "lte", value: 40 });
+    updateStrategyPreview();
+  });
+}
+
+[
+  "createStrategyName",
+  "createStrategySymbol",
+  "createStrategyTimeframe",
+  "createStrategyEnv",
+  "buyLogic",
+  "sellLogic",
+  "orderSizeMode",
+  "orderSizeValue",
+  "priceMode",
+  "feesPct",
+  "slippagePct",
+  "stopLossPct",
+  "takeProfitPct",
+  "coolDownDays",
+  "minHoldDays",
+  "maxPositions",
+].forEach((key) => {
+  const el = elements[key];
+  if (el) el.addEventListener("input", updateStrategyPreview);
+});
 
 if (elements.createStrategyForm && elements.loadStrategyTemplate) {
   loadStrategyTemplate();

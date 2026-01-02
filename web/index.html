@@ -270,7 +270,7 @@
       <div id="strategyMeta" class="meta-row"></div>
       <div id="strategyTable" class="table"></div>
 
-      <div class="subsection-title">建立策略（JSON）</div>
+      <div class="subsection-title">建立策略（欄位）</div>
       <form id="createStrategyForm" class="form">
         <div class="field-grid">
           <label>名稱 <input type="text" id="createStrategyName" placeholder="例如：突破策略" required></label>
@@ -283,31 +283,62 @@
               <option value="both">both</option>
             </select>
           </label>
-          <label>買入 Score ≥ <input type="number" id="strategyBuyScore" value="60" step="1"></label>
-          <label>賣出 Score ≤ <input type="number" id="strategySellScore" value="40" step="1"></label>
-          <label>下單金額 (USDT) <input type="number" id="strategyOrderSize" value="1000" step="10"></label>
-          <label>停損 (%) <input type="number" id="strategyStopLoss" value="3" step="0.1"></label>
-          <label>停利 (%) <input type="number" id="strategyTakeProfit" value="6" step="0.1"></label>
+        </div>
+
+        <div class="subsection-title">買入條件</div>
+        <div class="inline">
+          <label>邏輯
+            <select id="buyLogic">
+              <option value="AND">AND</option>
+              <option value="OR">OR</option>
+            </select>
+          </label>
+          <button type="button" class="ghost btn-sm" id="addBuyCondition">新增條件</button>
+        </div>
+        <div id="buyConditions" class="condition-list"></div>
+
+        <div class="subsection-title">賣出條件</div>
+        <div class="inline">
+          <label>邏輯
+            <select id="sellLogic">
+              <option value="AND">AND</option>
+              <option value="OR">OR</option>
+            </select>
+          </label>
+          <button type="button" class="ghost btn-sm" id="addSellCondition">新增條件</button>
+        </div>
+        <div id="sellConditions" class="condition-list"></div>
+
+        <div class="subsection-title">資金與風控</div>
+        <div class="field-grid">
+          <label>下單模式
+            <select id="orderSizeMode">
+              <option value="fixed_usdt">固定金額 (USDT)</option>
+              <option value="percent_of_equity">資金比例 (0-1)</option>
+            </select>
+          </label>
+          <label>下單金額/比例 <input type="number" id="orderSizeValue" value="1000" step="0.01"></label>
           <label>成交價模式
-            <select id="strategyPriceMode">
+            <select id="priceMode">
               <option value="next_open">次日開盤</option>
               <option value="next_close">次日收盤</option>
               <option value="current_close">當日收盤</option>
             </select>
           </label>
+          <label>手續費 (%) <input type="number" id="feesPct" value="0.1" step="0.01"></label>
+          <label>滑價 (%) <input type="number" id="slippagePct" value="0.1" step="0.01"></label>
+          <label>停損 (%) <input type="number" id="stopLossPct" value="3" step="0.1"></label>
+          <label>停利 (%) <input type="number" id="takeProfitPct" value="6" step="0.1"></label>
+          <label>冷卻天數 <input type="number" id="coolDownDays" value="1" min="0" step="1"></label>
+          <label>最少持有天數 <input type="number" id="minHoldDays" value="1" min="0" step="1"></label>
+          <label>最多同時持倉 <input type="number" id="maxPositions" value="1" min="1" step="1"></label>
         </div>
-        <label>買入條件 JSON（ConditionSet）
-          <textarea id="createBuyJSON" rows="4" spellcheck="false"></textarea>
-        </label>
-        <label>賣出條件 JSON（ConditionSet）
-          <textarea id="createSellJSON" rows="4" spellcheck="false"></textarea>
-        </label>
-        <label>風控設定 JSON（RiskSettings）
-          <textarea id="createRiskJSON" rows="3" spellcheck="false"></textarea>
+
+        <label>送出預覽（唯讀）
+          <textarea id="createStrategyPreview" rows="6" spellcheck="false" readonly></textarea>
         </label>
         <div class="actions">
           <button type="button" class="ghost btn-sm" id="loadStrategyTemplate">載入範例</button>
-          <button type="button" class="ghost btn-sm" id="applyStrategyFields">欄位套用至 JSON</button>
           <button type="submit" class="primary">建立策略</button>
         </div>
         <div id="createStrategyMessage" class="message"></div>

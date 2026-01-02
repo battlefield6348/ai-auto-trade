@@ -1519,6 +1519,14 @@ const loadStrategyTemplate = () => {
   if (elements.createRiskJSON) elements.createRiskJSON.value = JSON.stringify(risk, null, 2);
 };
 
+const parseJSONSafe = (text) => {
+  try {
+    return { ok: true, value: JSON.parse(text) };
+  } catch (err) {
+    return { ok: false, error: err };
+  }
+};
+
 const createStrategy = async () => {
   const name = (elements.createStrategyName?.value || "").trim();
   const base_symbol = (elements.createStrategySymbol?.value || "BTCUSDT").trim();
@@ -1530,17 +1538,29 @@ const createStrategy = async () => {
   }
   try {
     requireLogin();
-    const buy = JSON.parse(elements.createBuyJSON?.value || "{}");
-    const sell = JSON.parse(elements.createSellJSON?.value || "{}");
-    const risk = JSON.parse(elements.createRiskJSON?.value || "{}");
+    const buyRes = parseJSONSafe(elements.createBuyJSON?.value || "{}");
+    const sellRes = parseJSONSafe(elements.createSellJSON?.value || "{}");
+    const riskRes = parseJSONSafe(elements.createRiskJSON?.value || "{}");
+    if (!buyRes.ok) {
+      setMessage(elements.createStrategyMessage, `買入條件 JSON 錯誤：${buyRes.error.message}`, "error");
+      return;
+    }
+    if (!sellRes.ok) {
+      setMessage(elements.createStrategyMessage, `賣出條件 JSON 錯誤：${sellRes.error.message}`, "error");
+      return;
+    }
+    if (!riskRes.ok) {
+      setMessage(elements.createStrategyMessage, `風控設定 JSON 錯誤：${riskRes.error.message}`, "error");
+      return;
+    }
     const payload = {
       name,
       base_symbol,
       timeframe,
       env,
-      buy_conditions: buy,
-      sell_conditions: sell,
-      risk_settings: risk,
+      buy_conditions: buyRes.value,
+      sell_conditions: sellRes.value,
+      risk_settings: riskRes.value,
     };
     await api("/api/admin/strategies", {
       method: "POST",
@@ -2099,6 +2119,10 @@ if (elements.createStrategyForm) {
 }
 if (elements.loadStrategyTemplate) {
   elements.loadStrategyTemplate.addEventListener("click", loadStrategyTemplate);
+}
+
+if (elements.createStrategyForm && elements.loadStrategyTemplate) {
+  loadStrategyTemplate();
 }
 
 window.addEventListener("resize", () => {

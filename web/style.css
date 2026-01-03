@@ -274,6 +274,7 @@ p {
 
 .workspace-panel {
   padding: 0;
+  grid-column: span 12;
 }
 
 .workspace-grid {

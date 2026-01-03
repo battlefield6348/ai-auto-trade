@@ -159,14 +159,6 @@ func (s *Server) registerRoutes() {
 	s.mux.Handle("/api/auth/logout", s.wrapPost(s.handleLogout))
 	s.mux.Handle("/api/admin/ingestion/backfill", s.requireAuth(auth.PermIngestionTriggerBackfill, s.wrapPost(s.handleIngestionBackfill)))
 	s.mux.Handle("/api/analysis/history", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleAnalysisHistory)))
-	s.mux.Handle("/api/analysis/backtest", s.requireAuth(auth.PermAnalysisQuery, s.wrapPost(s.handleAnalysisBacktest)))
-	s.mux.Handle("/api/analysis/backtest/preset", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleGetBacktestPreset)))
-	s.mux.Handle("/api/analysis/backtest/preset/save", s.requireAuth(auth.PermAnalysisQuery, s.wrapPost(s.handleSaveBacktestPreset)))
-	s.mux.Handle("/api/analysis/backtest/presets", s.requireAuth(auth.PermAnalysisQuery, s.wrapMethods(map[string]http.HandlerFunc{
-		http.MethodGet:  s.handleListBacktestPresets,
-		http.MethodPost: s.handleCreateBacktestPreset,
-	})))
-	s.mux.Handle("/api/analysis/backtest/presets/", s.requireAuth(auth.PermAnalysisQuery, s.wrapDelete(s.handleDeleteBacktestPreset)))
 	s.mux.Handle("/api/analysis/summary", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleAnalysisSummary)))
 	// 策略與交易
 	s.mux.Handle("/api/admin/strategies", s.requireAuth(auth.PermStrategy, s.wrapMethods(map[string]http.HandlerFunc{

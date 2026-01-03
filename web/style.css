@@ -323,6 +323,25 @@ p {
   line-height: 1.6;
 }
 
+.quick-nav {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.quick-nav-title {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.quick-nav-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .meta-row {
   display: flex;
   flex-wrap: wrap;

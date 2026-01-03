@@ -1209,6 +1209,10 @@ select {
     grid-column: span 12;
   }
 
+  .panel.span-12 {
+    grid-column: span 12;
+  }
+
   .hero {
     grid-template-columns: 1fr;
   }

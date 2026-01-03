@@ -38,7 +38,6 @@ type Server struct {
 	tgConfig      config.TelegramConfig
 	autoInterval  time.Duration
 	backfillStart string
-	presetStore   backtestPresetStore
 	tradingSvc    *trading.Service
 }
 
@@ -50,20 +49,17 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 	var dataRepo DataRepository
 	var authRepo auth.UserRepository
 	var sessionStore authDomain.SessionStore
-	var presetStore backtestPresetStore
 	var tradingRepo trading.Repository
 	if db != nil {
 		dataRepo = postgres.NewRepo(db)
 		repo := postgres.NewAuthRepo(db)
 		authRepo = repo
 		sessionStore = repo
-		presetStore = pgPresetStore{repo: postgres.NewBacktestPresetStore(db)}
 		tradingRepo = postgres.NewTradingRepo(db)
 	} else {
 		dataRepo = memoryRepoAdapter{store: store}
 		authRepo = store
 		sessionStore = store
-		presetStore = memoryPresetStore{store: store}
 		tradingRepo = memory.NewTradingRepo()
 	}
 
@@ -104,7 +100,6 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 		tgConfig:      cfg.Notifier.Telegram,
 		autoInterval:  cfg.Ingestion.AutoInterval,
 		backfillStart: cfg.Ingestion.BackfillStartDate,
-		presetStore:   presetStore,
 		tradingSvc:    tradingSvc,
 	}
 	if db != nil {

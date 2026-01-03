@@ -121,8 +121,9 @@ p {
 
 .app-body {
   display: grid;
-  grid-template-columns: 230px 1fr;
+  grid-template-columns: 230px minmax(0, 1fr);
   align-items: start;
+  width: 100%;
 }
 
 .sidebar {

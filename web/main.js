@@ -25,11 +25,6 @@ const elements = {
   overviewTime: document.getElementById("overviewTime"),
   overviewMode: document.getElementById("overviewMode"),
   loginMessage: document.getElementById("loginMessage"),
-  comboName: document.getElementById("comboName"),
-  comboSelect: document.getElementById("comboSelect"),
-  comboSaveBtn: document.getElementById("comboSaveBtn"),
-  comboApplyBtn: document.getElementById("comboApplyBtn"),
-  comboDeleteBtn: document.getElementById("comboDeleteBtn"),
   resetZoomBtn: document.getElementById("resetZoomBtn"),
   chartForm: document.getElementById("chartForm"),
   chartStart: document.getElementById("chartStart"),
@@ -2884,22 +2879,6 @@ if (elements.resetZoomBtn) {
   elements.resetZoomBtn.addEventListener("click", resetZoom);
 }
 
-const comboStore = {
-  list: [],
-};
-
-const renderComboList = () => {
-  if (!elements.comboSelect) return;
-  const options =
-    comboStore.list.length === 0
-      ? `<option value="">尚未儲存組合</option>`
-      : `<option value="">選擇組合套用…</option>` +
-        comboStore.list
-          .map((c) => `<option value="${c.id}">${c.name || "未命名組合"}</option>`)
-          .join("");
-  elements.comboSelect.innerHTML = options;
-};
-
 async function loadChartHistory(auto = true) {
   try {
     requireLogin();
@@ -2931,57 +2910,6 @@ async function loadChartHistory(auto = true) {
     }
   }
 }
-
-async function fetchCombos() {
-  if (!state.token) return;
-  try {
-    const res = await api("/api/analysis/backtest/presets");
-    if (res.success) {
-      comboStore.list = res.items || [];
-      renderComboList();
-    }
-  } catch (err) {
-    console.warn("fetch combos failed", err);
-  }
-}
-
-const saveCombo = async () => {
-  try {
-    requireLogin();
-    const name = (elements.comboName?.value || "").trim() || "未命名組合";
-    const payload = buildBacktestPayload();
-    await api("/api/analysis/backtest/presets", {
-      method: "POST",
-      body: JSON.stringify({ name, config: payload }),
-    });
-    await fetchCombos();
-    setStatus(`已儲存組合：${name}`, "good");
-  } catch (err) {
-    setStatus(`儲存組合失敗：${err.message}`, "warn");
-  }
-};
-
-const applyCombo = () => {
-  const id = elements.comboSelect?.value;
-  if (!id) return;
-  const combo = comboStore.list.find((c) => c.id === id);
-  if (!combo) return;
-  applyBacktestConfig(combo.config || combo.payload);
-  setStatus(`已套用組合：${combo.name}`, "good");
-};
-
-const deleteCombo = async () => {
-  try {
-    requireLogin();
-    const id = elements.comboSelect?.value;
-    if (!id) return;
-    await api(`/api/analysis/backtest/presets/${id}`, { method: "DELETE" });
-    await fetchCombos();
-    setStatus("組合已刪除", "warn");
-  } catch (err) {
-    setStatus(`刪除組合失敗：${err.message}`, "warn");
-  }
-};
 
 if (elements.strategyForm) {
   elements.strategyForm.addEventListener("submit", async (e) => {

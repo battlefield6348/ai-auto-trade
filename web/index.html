@@ -132,64 +132,58 @@
         <button type="submit" class="primary">載入走勢</button>
         <button type="button" id="resetZoomBtn" class="ghost btn-sm hidden">重置範圍</button>
       </form>
-      <div class="chart-layout">
-        <div class="chart-col">
-          <div id="chartMeta" class="meta-row"></div>
-          <div class="chart-wrap">
-            <div id="chartCanvas" class="chart-canvas"></div>
-            <div id="chartTooltip" class="chart-tooltip"></div>
-          </div>
-          <div class="subsection-title">Score ≥ 50 高分時間點</div>
-          <div id="chartHighScores" class="highlight-grid"></div>
+      <div id="chartMeta" class="meta-row"></div>
+      <div class="chart-wrap">
+        <div id="chartCanvas" class="chart-canvas"></div>
+        <div id="chartTooltip" class="chart-tooltip"></div>
+      </div>
+      <div class="subsection-title">Score ≥ 50 高分時間點</div>
+      <div id="chartHighScores" class="highlight-grid"></div>
+      <div class="subsection-title">條件回測（加權分數）</div>
+      <div class="hint-box">
+        <p>條件說明：</p>
+        <ul>
+          <li>條件權重：條件達成即加上設定權重（0.0~1.0），未達成不加分。</li>
+          <li>門檻：各條件的啟用門檻，例如日漲幅、量能倍率、報酬、乖離。</li>
+          <li>總分門檻：加權總分需達到此值才算命中。</li>
+        </ul>
+      </div>
+      <form id="backtestForm" class="form inline">
+        <div class="meta-row">
+          <div class="meta-item">區間沿用走勢圖日期</div>
         </div>
-        <div class="chart-col">
-          <div class="subsection-title">條件回測（加權分數）</div>
-          <div class="hint-box">
-            <p>條件說明：</p>
-            <ul>
-              <li>條件權重：條件達成即加上設定權重（0.0~1.0），未達成不加分。</li>
-              <li>門檻：各條件的啟用門檻，例如日漲幅、量能倍率、報酬、乖離。</li>
-              <li>總分門檻：加權總分需達到此值才算命中（短線積極 60、保守可設 70～75）。</li>
-            </ul>
-          </div>
-          <form id="backtestForm" class="form inline">
-            <div class="meta-row">
-              <div class="meta-item">區間沿用走勢圖日期</div>
-            </div>
-            <label>總分門檻 <input type="number" step="0.1" id="btTotalMin" value="1"></label>
-            <label>新增條件
-              <select id="btConditionSelect">
-                <option value="">選擇條件…</option>
-                <option value="change">日漲跌條件</option>
-                <option value="volume">量能條件</option>
+        <label>總分門檻 <input type="number" step="0.1" id="btTotalMin" value="1"></label>
+        <label>新增條件
+          <select id="btConditionSelect">
+            <option value="">選擇條件…</option>
+            <option value="change">日漲跌條件</option>
+            <option value="volume">量能條件</option>
+          </select>
+        </label>
+        <div id="btSelectedConditions" class="condition-list"></div>
+        <div class="actions">
+          <button type="button" class="ghost" id="loadPresetBtn">載入已存設定</button>
+          <button type="button" class="ghost" id="savePresetBtn">儲存目前設定</button>
+          <button type="submit" class="primary">執行回測</button>
+        </div>
+        <div class="combo-bar">
+          <div class="combo-fields">
+            <label>組合名稱 <input type="text" id="comboName" placeholder="例如：動能+量能加權"></label>
+            <label>已儲存組合
+              <select id="comboSelect">
+                <option value="">選擇組合套用…</option>
               </select>
             </label>
-            <div id="btSelectedConditions" class="condition-list"></div>
-            <div class="actions">
-              <button type="button" class="ghost" id="loadPresetBtn">載入已存設定</button>
-              <button type="button" class="ghost" id="savePresetBtn">儲存目前設定</button>
-              <button type="submit" class="primary">執行回測</button>
-            </div>
-            <div class="combo-bar">
-              <div class="combo-fields">
-                <label>組合名稱 <input type="text" id="comboName" placeholder="例如：動能+量能加權"></label>
-                <label>已儲存組合
-                  <select id="comboSelect">
-                    <option value="">選擇組合套用…</option>
-                  </select>
-                </label>
-              </div>
-              <div class="combo-actions">
-                <button type="button" class="ghost btn-sm" id="comboSaveBtn">儲存為新組合</button>
-                <button type="button" class="ghost btn-sm" id="comboApplyBtn">套用組合</button>
-                <button type="button" class="ghost btn-sm" id="comboDeleteBtn">刪除組合</button>
-              </div>
-            </div>
-          </form>
-          <div id="backtestSummary" class="result-panel"></div>
-          <div id="backtestEvents" class="highlight-grid"></div>
+          </div>
+          <div class="combo-actions">
+            <button type="button" class="ghost btn-sm" id="comboSaveBtn">儲存為新組合</button>
+            <button type="button" class="ghost btn-sm" id="comboApplyBtn">套用組合</button>
+            <button type="button" class="ghost btn-sm" id="comboDeleteBtn">刪除組合</button>
+          </div>
         </div>
-      </div>
+      </form>
+      <div id="backtestSummary" class="result-panel"></div>
+      <div id="backtestEvents" class="highlight-grid"></div>
     </section>
 
     <section class="panel" id="summaryPanel" data-section="overview">

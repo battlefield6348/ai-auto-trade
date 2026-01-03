@@ -32,11 +32,6 @@ const elements = {
   chartMeta: document.getElementById("chartMeta"),
   chartCanvas: document.getElementById("chartCanvas"),
   chartTooltip: document.getElementById("chartTooltip"),
-  backtestForm: document.getElementById("backtestForm"),
-  backtestSummary: document.getElementById("backtestSummary"),
-  backtestEvents: document.getElementById("backtestEvents"),
-  btConditionSelect: document.getElementById("btConditionSelect"),
-  btSelectedConditions: document.getElementById("btSelectedConditions"),
   summaryView: document.getElementById("summaryView"),
   activityList: document.getElementById("activityList"),
   strategyForm: document.getElementById("strategyForm"),
@@ -196,25 +191,7 @@ const chartState = {
   focusDot: null,
 };
 
-const backtestSelections = {
-  conditions: ["change", "volume", "return", "ma"],
-};
-
-const refreshConditionOptions = () => {
-  if (!elements.btConditionSelect) return;
-  const options = [
-    { value: "change", label: "日漲跌條件" },
-    { value: "volume", label: "量能條件" },
-    { value: "return", label: "近 5 日報酬條件" },
-    { value: "ma", label: "均線乖離條件" },
-  ];
-  const available = options.filter((opt) => !backtestSelections.conditions.includes(opt.value));
-  const placeholder = available.length ? "選擇條件…" : "已套用所有條件";
-  elements.btConditionSelect.innerHTML = `<option value="">${placeholder}</option>${available
-    .map((opt) => `<option value="${opt.value}">${opt.label}</option>`)
-    .join("")}`;
-  elements.btConditionSelect.disabled = available.length === 0;
-};
+const backtestSelections = { conditions: [] };
 
 const mapTrend = (trend) => {
   if (trend === "bullish") return { label: "偏多", className: "up", tone: "good" };
@@ -1303,8 +1280,6 @@ renderEmptyState(elements.logTable, "尚未查詢");
 renderActivity();
 renderKpis();
 updateOverviewMode();
-renderBacktestConditions();
-refreshConditionOptions();
 showSection("overview");
 toggleProtectedSections(false);
 refreshAccessToken().then((ok) => {
@@ -1313,7 +1288,6 @@ refreshAccessToken().then((ok) => {
     logActivity("自動登入", "沿用前一次的登入狀態");
     showSection("overview");
     loadChartHistory(true).catch(() => {});
-    fetchCombos();
     loadStrategies().catch(() => {});
     loadTrades().catch(() => {});
     loadPositions().catch(() => {});
@@ -1333,20 +1307,6 @@ const startOfYear = new Date(Date.UTC(new Date().getUTCFullYear(), 0, 1)).toISOS
 });
 if (elements.chartStart) elements.chartStart.value = startOfYear;
 setStrategyBacktestDefaults();
-updateOptionalFields();
-loadPreset();
-elements.btConditionSelect?.addEventListener("change", (e) => {
-  const val = e.target.value;
-  if (val && !backtestSelections.conditions.includes(val)) {
-    backtestSelections.conditions.push(val);
-    e.target.value = "";
-    updateOptionalFields();
-    renderBacktestConditions();
-    scheduleAutoBacktest();
-  }
-});
-document.getElementById("savePresetBtn")?.addEventListener("click", savePreset);
-document.getElementById("loadPresetBtn")?.addEventListener("click", loadPreset);
 
 Array.from(document.querySelectorAll(".chip[data-email]")).forEach((chip) => {
   chip.addEventListener("click", () => {
@@ -1355,61 +1315,6 @@ Array.from(document.querySelectorAll(".chip[data-email]")).forEach((chip) => {
     document.getElementById("password").value = "password123";
   });
 });
-
-const applyBacktestPreset = (preset) => {
-  if (!preset) return;
-  const c = preset;
-  document.getElementById("btTotalMin").value = c.thresholds?.total_min ?? 1;
-  if (c.thresholds) {
-    document.getElementById("btChangeMin").value = (c.thresholds.change_min || 0) * 100;
-    document.getElementById("btVolMin").value = c.thresholds.volume_ratio_min || 0;
-    document.getElementById("btReturnMin").value = (c.thresholds.return5_min || 0) * 100;
-    document.getElementById("btMaGap").value = (c.thresholds.ma_gap_min || 0) * 100;
-  }
-  if (c.weights) {
-    document.getElementById("btChangeWeight").value = c.weights.change_weight || 1;
-    document.getElementById("btVolWeight").value = c.weights.volume_weight || 1;
-    document.getElementById("btReturnWeight").value = c.weights.return_weight || 1;
-    document.getElementById("btMaWeight").value = c.weights.ma_weight || 1;
-  }
-  const nextConds = [];
-  if (c.flags?.use_change) nextConds.push("change");
-  if (c.flags?.use_volume) nextConds.push("volume");
-  if (c.flags?.use_return) nextConds.push("return");
-  if (c.flags?.use_ma) nextConds.push("ma");
-  if (!nextConds.length) nextConds.push("change", "volume");
-  backtestSelections.conditions = nextConds;
-  updateOptionalFields();
-  scheduleAutoBacktest();
-};
-
-async function loadPreset() {
-  if (!state.token) return;
-  try {
-    const res = await api("/api/analysis/backtest/preset");
-    if (res.success && res.preset) {
-      applyBacktestPreset(res.preset);
-      setStatus("已載入回測預設", "good");
-    }
-  } catch (err) {
-    console.warn("load preset failed", err);
-  }
-}
-
-async function savePreset() {
-  try {
-    requireLogin();
-    const payload = buildBacktestPayload();
-    await api("/api/analysis/backtest/preset/save", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-    setStatus("已儲存回測預設", "good");
-    logActivity("儲存回測設定", `${backtestSelections.conditions.join(",")} 條件`);
-  } catch (err) {
-    setMessage(elements.loginMessage, `儲存失敗：${err.message}`, "error");
-  }
-}
 
 const renderStrategyTable = (items = []) => {
   if (!elements.strategyTable) return;
@@ -2899,7 +2804,7 @@ async function loadChartHistory(auto = true) {
       `/api/analysis/history?symbol=BTCUSDT&start_date=${start_date}&end_date=${end_date}&only_success=true`
     );
     state.lastChart = res;
-    renderHistoryChart(res, state.lastBacktest?.events || []);
+    renderHistoryChart(res, []);
     if (!auto) {
       logActivity("載入走勢圖", `區間 ${start_date} ~ ${end_date} · 筆數 ${fmtInt(res.total_count)}`);
     }
@@ -3145,7 +3050,7 @@ if (elements.createStrategyForm && elements.loadStrategyTemplate) {
 
 window.addEventListener("resize", () => {
   if (state.lastChart && state.lastChart.items && state.lastChart.items.length) {
-    renderHistoryChart(state.lastChart, state.lastBacktest?.events || []);
+    renderHistoryChart(state.lastChart, []);
   }
 });
 
@@ -3155,12 +3060,7 @@ function updateOptionalFields() {
 }
 
 let autoBacktestTimer = null;
-function scheduleAutoBacktest() {
-  clearTimeout(autoBacktestTimer);
-  autoBacktestTimer = setTimeout(() => {
-    runBacktest({ auto: true });
-  }, 600);
-}
+function scheduleAutoBacktest() {}
 
 const backtestInputs = [
   "btTotalMin",
@@ -3186,48 +3086,7 @@ if (elements.btSelectedConditions) {
   elements.btSelectedConditions.addEventListener("input", scheduleAutoBacktest);
 }
 
-async function runBacktest({ auto = false } = {}) {
-  try {
-    requireLogin();
-  } catch (err) {
-    if (auto) return;
-    throw err;
-  }
-  const start_date = elements.chartStart?.value;
-  const end_date = elements.chartEnd?.value;
-  if (!start_date || !end_date) {
-    if (!auto) renderChartPlaceholder("請設定回測日期區間");
-    return;
-  }
-  if (backtestSelections.conditions.length === 0) {
-    if (!auto) renderChartPlaceholder("請先選擇至少一個條件");
-    return;
-  }
-  try {
-    if (!auto) {
-      renderChartLoading();
-    }
-    const payload = buildBacktestPayload();
-    const res = await api("/api/analysis/backtest", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-    const weighted = applyWeightedScoring(res);
-    state.lastBacktest = weighted;
-    renderBacktestSummary(weighted);
-    renderBacktestEvents(weighted);
-    if (state.lastChart && state.lastChart.items) {
-      renderHistoryChart(state.lastChart, weighted.events || []);
-    }
-    if (!auto) {
-      logActivity("條件回測", `命中 ${fmtInt(weighted.total_events)} 筆`);
-    }
-  } catch (err) {
-    if (!auto) {
-      renderChartPlaceholder(err.message);
-    }
-  }
-}
+async function runBacktest() {}
 
 function applyBacktestConfig(cfg) {
   if (!cfg) return;

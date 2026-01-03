@@ -119,36 +119,6 @@
             <div id="chartCanvas" class="chart-canvas"></div>
             <div id="chartTooltip" class="chart-tooltip"></div>
           </div>
-          <div class="subsection-title">條件回測（加權分數）</div>
-          <div class="hint-box">
-            <p>條件說明：</p>
-            <ul>
-              <li>條件權重：條件達成即加上設定權重（0.0~1.0），未達成不加分。</li>
-              <li>門檻：各條件的啟用門檻，例如日漲幅、量能倍率、報酬、乖離。</li>
-              <li>總分門檻：加權總分需達到此值才算命中。</li>
-            </ul>
-          </div>
-          <form id="backtestForm" class="form inline">
-            <div class="meta-row">
-              <div class="meta-item">區間沿用走勢圖日期</div>
-            </div>
-            <label>總分門檻 <input type="number" step="0.1" id="btTotalMin" value="1"></label>
-            <label>新增條件
-              <select id="btConditionSelect">
-                <option value="">選擇條件…</option>
-                <option value="change">日漲跌條件</option>
-                <option value="volume">量能條件</option>
-              </select>
-            </label>
-            <div id="btSelectedConditions" class="condition-list"></div>
-            <div class="actions">
-              <button type="button" class="ghost" id="loadPresetBtn">載入已存設定</button>
-              <button type="button" class="ghost" id="savePresetBtn">儲存目前設定</button>
-              <button type="submit" class="primary">執行回測</button>
-            </div>
-          </form>
-          <div id="backtestSummary" class="result-panel"></div>
-          <div id="backtestEvents" class="highlight-grid"></div>
         </div>
         <aside class="workspace-side">
           <div class="side-card">

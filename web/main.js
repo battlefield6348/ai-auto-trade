@@ -3177,14 +3177,14 @@ if (elements.strategyBtGoReports) {
 
 if (elements.addBuyCondition) {
   elements.addBuyCondition.addEventListener("click", () => {
-    addConditionRow(elements.buyConditions, { field: "score", op: "gte", value: 60 });
+    resetConditionRows(elements.buyConditions, [{ field: "score", op: "gte", value: 60 }]);
     updateStrategyPreview();
   });
 }
 
 if (elements.addSellCondition) {
   elements.addSellCondition.addEventListener("click", () => {
-    addConditionRow(elements.sellConditions, { field: "score", op: "lte", value: 40 });
+    resetConditionRows(elements.sellConditions, [{ field: "score", op: "lte", value: 40 }]);
     updateStrategyPreview();
   });
 }

@@ -82,42 +82,45 @@
 
       <main class="layout content">
         <section class="panel hero span-2" data-section="overview">
-      <div class="hero-copy">
-        <h2>市場快照與作業狀態</h2>
-        <p>集中顯示近期的擷取、分析與強勢篩選資訊，搭配走勢摘要快速判斷方向。</p>
-        <div class="meta-row">
-          <div id="overviewTime" class="meta-item">最後更新：--</div>
-          <div id="overviewMode" class="meta-item">資料來源：--</div>
-        </div>
-      </div>
-      <div class="kpi-grid">
-        <article class="kpi" id="kpiHealth">
-          <div class="kpi-title">系統狀態</div>
-          <div class="kpi-value">--</div>
-          <div class="kpi-note">等待健康檢查</div>
-        </article>
-        <article class="kpi" id="kpiIngestion">
-          <div class="kpi-title">日 K 擷取</div>
-          <div class="kpi-value">尚未執行</div>
-          <div class="kpi-note">交易日 --</div>
-        </article>
-        <article class="kpi" id="kpiAnalysis">
-          <div class="kpi-title">日批次分析</div>
-          <div class="kpi-value">尚未執行</div>
-          <div class="kpi-note">交易日 --</div>
-        </article>
-        <article class="kpi" id="kpiSummary">
-          <div class="kpi-title">趨勢摘要</div>
-          <div class="kpi-value">等待更新</div>
-          <div class="kpi-note">--</div>
-        </article>
-        <article class="kpi" id="kpiScreener">
-          <div class="kpi-title">強勢交易對</div>
-          <div class="kpi-value">尚未查詢</div>
-          <div class="kpi-note">--</div>
-        </article>
-      </div>
-    </section>
+          <div class="hero-copy">
+            <h2>市場快照與作業狀態</h2>
+            <p>集中顯示近期的擷取、分析與強勢篩選資訊，搭配走勢摘要快速判斷方向。</p>
+            <div class="meta-row">
+              <div id="overviewTime" class="meta-item">最後更新：--</div>
+              <div id="overviewMode" class="meta-item">資料來源：--</div>
+            </div>
+            <details class="compact-status">
+              <summary>顯示系統狀態卡片</summary>
+              <div class="kpi-grid">
+                <article class="kpi" id="kpiHealth">
+                  <div class="kpi-title">系統狀態</div>
+                  <div class="kpi-value">--</div>
+                  <div class="kpi-note">等待健康檢查</div>
+                </article>
+                <article class="kpi" id="kpiIngestion">
+                  <div class="kpi-title">日 K 擷取</div>
+                  <div class="kpi-value">尚未執行</div>
+                  <div class="kpi-note">交易日 --</div>
+                </article>
+                <article class="kpi" id="kpiAnalysis">
+                  <div class="kpi-title">日批次分析</div>
+                  <div class="kpi-value">尚未執行</div>
+                  <div class="kpi-note">交易日 --</div>
+                </article>
+                <article class="kpi" id="kpiSummary">
+                  <div class="kpi-title">趨勢摘要</div>
+                  <div class="kpi-value">等待更新</div>
+                  <div class="kpi-note">--</div>
+                </article>
+                <article class="kpi" id="kpiScreener">
+                  <div class="kpi-title">強勢交易對</div>
+                  <div class="kpi-value">尚未查詢</div>
+                  <div class="kpi-note">--</div>
+                </article>
+              </div>
+            </details>
+          </div>
+        </section>
 
     <section class="panel span-2" id="chartPanel" data-section="overview">
       <div class="panel-head">

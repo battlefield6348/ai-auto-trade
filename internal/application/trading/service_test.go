@@ -92,3 +92,26 @@ func TestBacktestEngine_BuyThenSellNextDay(t *testing.T) {
 		t.Fatalf("expected win rate 1, got %f", result.Stats.WinRate)
 	}
 }
+
+func TestValidateStrategyContent_SingleConditionLimit(t *testing.T) {
+	s := tradingDomain.Strategy{
+		Buy: tradingDomain.ConditionSet{
+			Logic: analysis.LogicAND,
+			Conditions: []analysis.Condition{
+				{Type: analysis.ConditionNumeric, Numeric: &analysis.NumericCondition{Field: analysis.FieldScore, Op: analysis.OpGTE, Value: 60}},
+				{Type: analysis.ConditionNumeric, Numeric: &analysis.NumericCondition{Field: analysis.FieldScore, Op: analysis.OpGTE, Value: 70}},
+			},
+		},
+		Sell: tradingDomain.ConditionSet{
+			Logic: analysis.LogicAND,
+			Conditions: []analysis.Condition{
+				{Type: analysis.ConditionNumeric, Numeric: &analysis.NumericCondition{Field: analysis.FieldScore, Op: analysis.OpLTE, Value: 40}},
+			},
+		},
+		Risk: tradingDomain.RiskSettings{OrderSizeMode: tradingDomain.OrderFixedUSDT, OrderSizeValue: 1000, PriceMode: tradingDomain.PriceNextOpen},
+	}
+
+	if err := validateStrategyContent(s); err == nil {
+		t.Fatalf("expected validation to fail when buy has more than one condition")
+	}
+}

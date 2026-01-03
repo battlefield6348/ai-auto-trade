@@ -702,6 +702,9 @@ func validateConditionSet(set tradingDomain.ConditionSet) error {
 	if len(set.Conditions) == 0 {
 		return fmt.Errorf("conditions 不可為空")
 	}
+	if len(set.Conditions) > 1 {
+		return fmt.Errorf("MVP 限制僅允許 1 條條件，請精簡條件")
+	}
 	for i, c := range set.Conditions {
 		switch c.Type {
 		case analysis.ConditionNumeric:

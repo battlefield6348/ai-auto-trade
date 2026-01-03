@@ -1378,6 +1378,7 @@ refreshAccessToken().then((ok) => {
     setMessage(elements.loginMessage, "已自動登入，Token 已更新", "good");
     logActivity("自動登入", "沿用前一次的登入狀態");
     showSection("overview");
+    loadChartHistory(true).catch(() => {});
     fetchCombos();
     loadStrategies().catch(() => {});
     loadTrades().catch(() => {});
@@ -2924,6 +2925,7 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
     toggleProtectedSections(true);
     showSection("overview");
     logActivity("登入成功", `帳號 ${email}`);
+    await loadChartHistory(true);
     fetchCombos();
     loadStrategies().catch(() => {});
     loadTrades().catch(() => {});
@@ -2937,25 +2939,7 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
 if (elements.chartForm) {
   elements.chartForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    try {
-      requireLogin();
-      const start_date = elements.chartStart.value;
-      const end_date = elements.chartEnd.value;
-      if (!start_date || !end_date) {
-        renderChartPlaceholder("請設定起始與結束日期");
-        return;
-      }
-      renderChartLoading();
-      const res = await api(
-        `/api/analysis/history?symbol=BTCUSDT&start_date=${start_date}&end_date=${end_date}&only_success=true`
-      );
-      state.lastChart = res;
-      renderHistoryChart(res, state.lastBacktest?.events || []);
-      logActivity("載入走勢圖", `區間 ${start_date} ~ ${end_date} · 筆數 ${fmtInt(res.total_count)}`);
-      scheduleAutoBacktest();
-    } catch (err) {
-      renderChartPlaceholder(err.message);
-    }
+    await loadChartHistory(false);
   });
 }
 
@@ -2978,6 +2962,38 @@ const renderComboList = () => {
           .join("");
   elements.comboSelect.innerHTML = options;
 };
+
+async function loadChartHistory(auto = true) {
+  try {
+    requireLogin();
+  } catch (err) {
+    if (auto) return;
+    renderChartPlaceholder("請先登入以載入走勢");
+    return;
+  }
+  const start_date = elements.chartStart?.value;
+  const end_date = elements.chartEnd?.value;
+  if (!start_date || !end_date) {
+    if (!auto) renderChartPlaceholder("請設定起始與結束日期");
+    return;
+  }
+  try {
+    renderChartLoading();
+    const res = await api(
+      `/api/analysis/history?symbol=BTCUSDT&start_date=${start_date}&end_date=${end_date}&only_success=true`
+    );
+    state.lastChart = res;
+    renderHistoryChart(res, state.lastBacktest?.events || []);
+    if (!auto) {
+      logActivity("載入走勢圖", `區間 ${start_date} ~ ${end_date} · 筆數 ${fmtInt(res.total_count)}`);
+    }
+    scheduleAutoBacktest();
+  } catch (err) {
+    if (!auto) {
+      renderChartPlaceholder(err.message);
+    }
+  }
+}
 
 async function fetchCombos() {
   if (!state.token) return;

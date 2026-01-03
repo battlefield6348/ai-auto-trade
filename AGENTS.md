@@ -31,9 +31,7 @@
 - 登入：`POST /api/auth/login`
 - 手動擷取：`POST /api/admin/ingestion/daily`
 - 手動分析：`POST /api/admin/analysis/daily`
-- 分析查詢：`GET /api/analysis/daily`
 - 走勢摘要：`GET /api/analysis/summary`
-- 強勢交易對：`GET /api/screener/strong-stocks`
 
 ## 交付規範
 - 變更需更新 `README.md`（若涉及使用方式或設定）。

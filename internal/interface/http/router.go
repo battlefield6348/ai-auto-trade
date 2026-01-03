@@ -8,7 +8,6 @@ import (
 
 	"ai-auto-trade/internal/application/analysis"
 	"ai-auto-trade/internal/application/auth"
-	"ai-auto-trade/internal/application/mvp"
 	"ai-auto-trade/internal/application/trading"
 	authDomain "ai-auto-trade/internal/domain/auth"
 	"ai-auto-trade/internal/infra/memory"
@@ -28,7 +27,6 @@ type Server struct {
 	logoutUC      *auth.LogoutUseCase
 	authz         *auth.Authorizer
 	queryUC       *analysis.QueryUseCase
-	screenerUC    *mvp.StrongScreener
 	tokenTTL      time.Duration
 	refreshTTL    time.Duration
 	db            *sql.DB
@@ -82,7 +80,6 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 	logoutUC := auth.NewLogoutUseCase(tokenSvc)
 	authz := auth.NewAuthorizer(authRepo, memory.OwnerChecker{})
 	queryUC := analysis.NewQueryUseCase(dataRepo)
-	screenerUC := mvp.NewStrongScreener(dataRepo)
 	tradingSvc := trading.NewService(tradingRepo, dataRepo)
 	var tgClient *notify.TelegramClient
 	if cfg.Notifier.Telegram.Enabled && cfg.Notifier.Telegram.Token != "" && cfg.Notifier.Telegram.ChatID != 0 {
@@ -96,7 +93,6 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 		logoutUC:      logoutUC,
 		authz:         authz,
 		queryUC:       queryUC,
-		screenerUC:    screenerUC,
 		tokenTTL:      ttl,
 		refreshTTL:    refreshTTL,
 		db:            db,
@@ -162,7 +158,6 @@ func (s *Server) registerRoutes() {
 	s.mux.Handle("/api/auth/refresh", s.wrapPost(s.handleRefresh))
 	s.mux.Handle("/api/auth/logout", s.wrapPost(s.handleLogout))
 	s.mux.Handle("/api/admin/ingestion/backfill", s.requireAuth(auth.PermIngestionTriggerBackfill, s.wrapPost(s.handleIngestionBackfill)))
-	s.mux.Handle("/api/analysis/daily", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleAnalysisQuery)))
 	s.mux.Handle("/api/analysis/history", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleAnalysisHistory)))
 	s.mux.Handle("/api/analysis/backtest", s.requireAuth(auth.PermAnalysisQuery, s.wrapPost(s.handleAnalysisBacktest)))
 	s.mux.Handle("/api/analysis/backtest/preset", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleGetBacktestPreset)))
@@ -173,7 +168,6 @@ func (s *Server) registerRoutes() {
 	})))
 	s.mux.Handle("/api/analysis/backtest/presets/", s.requireAuth(auth.PermAnalysisQuery, s.wrapDelete(s.handleDeleteBacktestPreset)))
 	s.mux.Handle("/api/analysis/summary", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleAnalysisSummary)))
-	s.mux.Handle("/api/screener/strong-stocks", s.requireAuth(auth.PermScreenerUse, s.wrapGet(s.handleStrongStocks)))
 	// 策略與交易
 	s.mux.Handle("/api/admin/strategies", s.requireAuth(auth.PermStrategy, s.wrapMethods(map[string]http.HandlerFunc{
 		http.MethodGet:  s.handleListStrategies,

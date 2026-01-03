@@ -5,8 +5,6 @@ const state = {
   lastIngestion: null,
   lastAnalysis: null,
   lastSummary: null,
-  lastQuery: null,
-  lastScreener: null,
   lastBackfill: null,
   lastChart: null,
   strategies: [],
@@ -39,19 +37,12 @@ const elements = {
   chartMeta: document.getElementById("chartMeta"),
   chartCanvas: document.getElementById("chartCanvas"),
   chartTooltip: document.getElementById("chartTooltip"),
-  chartHighScores: document.getElementById("chartHighScores"),
   backtestForm: document.getElementById("backtestForm"),
   backtestSummary: document.getElementById("backtestSummary"),
   backtestEvents: document.getElementById("backtestEvents"),
   btConditionSelect: document.getElementById("btConditionSelect"),
   btSelectedConditions: document.getElementById("btSelectedConditions"),
   summaryView: document.getElementById("summaryView"),
-  queryMeta: document.getElementById("queryMeta"),
-  queryHighlights: document.getElementById("queryHighlights"),
-  queryTable: document.getElementById("queryTable"),
-  screenerMeta: document.getElementById("screenerMeta"),
-  screenerHighlights: document.getElementById("screenerHighlights"),
-  screenerTable: document.getElementById("screenerTable"),
   activityList: document.getElementById("activityList"),
   strategyForm: document.getElementById("strategyForm"),
   strategyStatus: document.getElementById("strategyStatus"),
@@ -480,7 +471,6 @@ const renderChartPlaceholder = (message) => {
   renderEmptyState(elements.chartCanvas, message || "尚未載入走勢資料");
   if (elements.chartMeta) elements.chartMeta.innerHTML = "";
   if (elements.chartTooltip) elements.chartTooltip.classList.remove("show");
-  if (elements.chartHighScores) renderEmptyState(elements.chartHighScores, "尚無高分點（Score ≥ 50）");
   if (elements.backtestSummary) elements.backtestSummary.innerHTML = "";
   if (elements.backtestEvents) renderEmptyState(elements.backtestEvents, "尚無回測結果");
 };
@@ -572,11 +562,6 @@ const renderHistoryChart = (res, backtestEvents = [], options = {}) => {
       `最低收盤：${fmtPrice(minClose)}`,
     ]);
   }
-  if (elements.chartHighScores) {
-    const highRows = rows.filter((row) => typeof row.score === "number" && row.score >= 50);
-    renderHighScoreList(elements.chartHighScores, highRows);
-  }
-
   const canvas = elements.chartCanvas;
   const width = canvas.clientWidth || 640;
   const height = canvas.clientHeight || 320;
@@ -987,37 +972,6 @@ const renderHighlights = (container, rows) => {
   container.innerHTML = cards.join("");
 };
 
-const renderHighScoreList = (container, rows) => {
-  if (!container) return;
-  if (!rows.length) {
-    renderEmptyState(container, "尚無高分點（Score ≥ 50）");
-    return;
-  }
-  const list = rows
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 8)
-    .map(
-      (row) => `
-        <article class="highlight-card">
-          <h4>${row.trade_date}</h4>
-          <div class="highlight-item"><span>收盤</span><span>${fmtPrice(row.close_price)}</span></div>
-          <div class="highlight-item"><span>日漲跌</span><span class="delta ${deltaClass(
-            row.change_percent
-          )}">${fmtPercent(row.change_percent)}</span></div>
-          <div class="highlight-item"><span>近 5 日</span><span class="delta ${deltaClass(
-            row.return_5d
-          )}">${fmtPercent(row.return_5d)}</span></div>
-          <div class="highlight-item"><span>量能倍率</span><span>${fmtRatio(
-            row.volume_ratio
-          )}</span></div>
-          <div class="highlight-item"><span>Score</span><span>${fmtScore(row.score)}</span></div>
-        </article>
-      `
-    )
-    .join("");
-  container.innerHTML = list;
-};
-
 const renderBacktestSummary = (res) => {
   if (!elements.backtestSummary) return;
   const returns = res.stats?.returns || {};
@@ -1325,17 +1279,6 @@ const requireLogin = () => {
   if (!state.token) throw new Error("請先登入後再操作");
 };
 
-const columns = [
-  { key: "trading_pair", label: "交易對", className: "mono" },
-  { key: "close_price", label: "收盤", format: fmtPrice },
-  { key: "change_percent", label: "日漲跌", format: fmtPercent, delta: true },
-  { key: "return_5d", label: "近 5 日", format: fmtPercent, delta: true },
-  { key: "volume", label: "成交量", format: fmtInt },
-  { key: "volume_ratio", label: "量能倍率", format: fmtRatio },
-  { key: "score", label: "Score", format: fmtScore },
-  { key: "market_type", label: "市場", format: fmtText },
-];
-
 async function initHealth() {
   try {
     const res = await fetch("/api/health");
@@ -1357,10 +1300,6 @@ async function initHealth() {
 
 initHealth();
 renderChartPlaceholder();
-renderEmptyState(elements.queryTable, "尚未查詢");
-renderEmptyState(elements.screenerTable, "尚未查詢");
-renderEmptyState(elements.queryHighlights, "尚無亮點資料");
-renderEmptyState(elements.screenerHighlights, "尚無亮點資料");
 renderEmptyState(elements.strategyTable, "尚未載入策略");
 renderEmptyState(elements.tradeTable, "尚未查詢");
 renderEmptyState(elements.reportTable, "尚未查詢");
@@ -1393,7 +1332,7 @@ refreshAccessToken().then((ok) => {
 
 const today = new Date().toISOString().slice(0, 10);
 const startOfYear = new Date(Date.UTC(new Date().getUTCFullYear(), 0, 1)).toISOString().slice(0, 10);
-["queryDate", "screenerDate", "chartEnd"].forEach((id) => {
+["chartEnd"].forEach((id) => {
   const el = document.getElementById(id);
   if (el) el.value = today;
 });
@@ -1425,8 +1364,6 @@ Array.from(document.querySelectorAll(".chip[data-email]")).forEach((chip) => {
 const applyBacktestPreset = (preset) => {
   if (!preset) return;
   const c = preset;
-  document.getElementById("btStart").value = c.start_date || document.getElementById("btStart").value;
-  document.getElementById("btEnd").value = c.end_date || document.getElementById("btEnd").value;
   document.getElementById("btTotalMin").value = c.thresholds?.total_min ?? 1;
   if (c.thresholds) {
     document.getElementById("btChangeMin").value = (c.thresholds.change_min || 0) * 100;
@@ -3045,81 +2982,6 @@ const deleteCombo = async () => {
     setStatus(`刪除組合失敗：${err.message}`, "warn");
   }
 };
-
-if (elements.backtestForm) {
-  elements.backtestForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    await runBacktest({ auto: false });
-  });
-}
-
-if (elements.comboSaveBtn) {
-  elements.comboSaveBtn.addEventListener("click", saveCombo);
-}
-
-if (elements.comboApplyBtn) {
-  elements.comboApplyBtn.addEventListener("click", applyCombo);
-}
-
-if (elements.comboDeleteBtn) {
-  elements.comboDeleteBtn.addEventListener("click", deleteCombo);
-}
-
-document.getElementById("queryForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  try {
-    requireLogin();
-    const trade_date = document.getElementById("queryDate").value;
-    const limit = document.getElementById("queryLimit").value || 20;
-    const offset = document.getElementById("queryOffset").value || 0;
-    const res = await api(
-      `/api/analysis/daily?trade_date=${trade_date}&limit=${limit}&offset=${offset}`
-    );
-    state.lastQuery = res;
-    renderMeta(elements.queryMeta, [
-      `交易日：${fmtText(res.trade_date)}`,
-      `總筆數：${fmtInt(res.total_count)}`,
-      `顯示：${fmtInt(res.items?.length || 0)}`,
-    ]);
-    renderHighlights(elements.queryHighlights, res.items || []);
-    renderTable(elements.queryTable, res.items || [], columns);
-    logActivity("查詢分析結果", `交易日 ${trade_date} · 筆數 ${fmtInt(res.items?.length || 0)}`);
-  } catch (err) {
-    renderMeta(elements.queryMeta, ["查詢失敗"]);
-    renderEmptyState(elements.queryHighlights, err.message);
-    renderEmptyState(elements.queryTable, err.message);
-  }
-});
-
-document.getElementById("screenerForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  try {
-    requireLogin();
-    const trade_date = document.getElementById("screenerDate").value;
-    const score_min = document.getElementById("scoreMin").value || 70;
-    const volume_ratio_min = document.getElementById("volMin").value || 1.5;
-    const limit = document.getElementById("screenerLimit").value || 20;
-    const res = await api(
-      `/api/screener/strong-stocks?trade_date=${trade_date}&score_min=${score_min}&volume_ratio_min=${volume_ratio_min}&limit=${limit}`
-    );
-    state.lastScreener = res;
-    renderMeta(elements.screenerMeta, [
-      `交易日：${fmtText(res.trade_date)}`,
-      `條件：Score ≥ ${fmtNumber(res.params?.score_min)} · 量能 ≥ ${fmtNumber(
-        res.params?.volume_ratio_min
-      )}`,
-      `筆數：${fmtInt(res.total_count)}`,
-    ]);
-    renderHighlights(elements.screenerHighlights, res.items || []);
-    renderTable(elements.screenerTable, res.items || [], columns);
-    renderKpis();
-    logActivity("查詢強勢交易對", `交易日 ${trade_date} · 筆數 ${fmtInt(res.items?.length || 0)}`);
-  } catch (err) {
-    renderMeta(elements.screenerMeta, ["查詢失敗"]);
-    renderEmptyState(elements.screenerHighlights, err.message);
-    renderEmptyState(elements.screenerTable, err.message);
-  }
-});
 
 if (elements.strategyForm) {
   elements.strategyForm.addEventListener("submit", async (e) => {

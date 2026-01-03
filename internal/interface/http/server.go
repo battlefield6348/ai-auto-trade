@@ -16,7 +16,6 @@ import (
 
 	"ai-auto-trade/internal/application/analysis"
 	"ai-auto-trade/internal/application/auth"
-	"ai-auto-trade/internal/application/mvp"
 	"ai-auto-trade/internal/application/trading"
 	analysisDomain "ai-auto-trade/internal/domain/analysis"
 	dataDomain "ai-auto-trade/internal/domain/dataingestion"
@@ -1048,82 +1047,7 @@ func (s *Server) handleDeleteBacktestPreset(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *Server) handleStrongStocks(w http.ResponseWriter, r *http.Request) {
-	tradeDateStr := r.URL.Query().Get("trade_date")
-	if tradeDateStr == "" {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "trade_date required")
-		return
-	}
-	tradeDate, err := time.Parse("2006-01-02", tradeDateStr)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid trade_date")
-		return
-	}
-	limit := parseIntDefault(r.URL.Query().Get("limit"), 50)
-	if limit > 200 {
-		limit = 200
-	}
-	scoreMin := parseFloatDefault(r.URL.Query().Get("score_min"), 70)
-	volMin := parseFloatDefault(r.URL.Query().Get("volume_ratio_min"), 1.5)
-
-	hasAnalysis, err := s.dataRepo.HasAnalysisForDate(r.Context(), tradeDate)
-	if err != nil {
-		log.Printf("check analysis ready failed: %v", err)
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "internal error")
-		return
-	}
-	if !hasAnalysis {
-		writeError(w, http.StatusNotFound, errCodeAnalysisNotReady, "analysis results not ready for trade_date")
-		return
-	}
-
-	res, err := s.screenerUC.Run(r.Context(), mvp.StrongScreenerInput{
-		TradeDate:      tradeDate,
-		Limit:          limit,
-		ScoreMin:       scoreMin,
-		VolumeRatioMin: volMin,
-	})
-	if err != nil {
-		log.Printf("strong stocks screener failed date=%s: %v", tradeDate.Format("2006-01-02"), err)
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "internal error")
-		return
-	}
-
-	type item struct {
-		TradingPair   string   `json:"trading_pair"`
-		MarketType    string   `json:"market_type"`
-		ClosePrice    float64  `json:"close_price"`
-		ChangePercent float64  `json:"change_percent"`
-		Return5d      *float64 `json:"return_5d,omitempty"`
-		Volume        int64    `json:"volume"`
-		VolumeRatio   *float64 `json:"volume_ratio,omitempty"`
-		Score         float64  `json:"score"`
-	}
-	items := make([]item, 0, len(res.Items))
-	for _, r := range res.Items {
-		items = append(items, item{
-			TradingPair:   r.Symbol,
-			MarketType:    string(r.Market),
-			ClosePrice:    r.Close,
-			ChangePercent: r.ChangeRate,
-			Return5d:      r.Return5,
-			Volume:        r.Volume,
-			VolumeRatio:   r.VolumeMultiple,
-			Score:         r.Score,
-		})
-	}
-
-	log.Printf("strong stocks query done date=%s total=%d returned=%d", tradeDate.Format("2006-01-02"), res.TotalCount, len(items))
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"success":    true,
-		"trade_date": tradeDate.Format("2006-01-02"),
-		"params": map[string]interface{}{
-			"score_min":        scoreMin,
-			"volume_ratio_min": volMin,
-			"limit":            limit,
-		},
-		"total_count": res.TotalCount,
-		"items":       items,
-	})
+	// 已移除強勢篩選功能。
 }
 
 // --- Strategies / Backtest / Trades ---
@@ -1565,38 +1489,40 @@ func (s *Server) pushTelegramSummary(ctx context.Context) {
 		volMin = 1.5
 	}
 
-	res, err := s.screenerUC.Run(ctx, mvp.StrongScreenerInput{
-		TradeDate:      latestDate,
-		Limit:          limit,
-		ScoreMin:       scoreMin,
-		VolumeRatioMin: volMin,
+	out, err := s.queryUC.QueryByDate(ctx, analysis.QueryByDateInput{
+		Date: latestDate,
+		Filter: analysis.QueryFilter{
+			OnlySuccess: true,
+		},
+		Pagination: analysis.Pagination{Offset: 0, Limit: 500},
 	})
-	if err != nil {
-		log.Printf("telegram push: screener error: %v", err)
+	if err != nil || len(out.Results) == 0 {
+		log.Printf("telegram push skipped: no analysis results to report")
 		return
 	}
 
-	var best analysisDomain.DailyAnalysisResult
-	if len(res.Items) > 0 {
-		best = res.Items[0]
-	} else {
-		out, err := s.queryUC.QueryByDate(ctx, analysis.QueryByDateInput{
-			Date: latestDate,
-			Filter: analysis.QueryFilter{
-				OnlySuccess: true,
-			},
-			Pagination: analysis.Pagination{Offset: 0, Limit: 100},
-		})
-		if err != nil || len(out.Results) == 0 {
-			log.Printf("telegram push skipped: no analysis results to report")
-			return
+	best := out.Results[0]
+	for _, r := range out.Results {
+		if r.Score > best.Score {
+			best = r
 		}
-		best = out.Results[0]
-		for _, r := range out.Results {
-			if r.Score > best.Score {
-				best = r
-			}
+	}
+
+	candidates := make([]analysisDomain.DailyAnalysisResult, 0, len(out.Results))
+	for _, r := range out.Results {
+		vol := 0.0
+		if r.VolumeMultiple != nil {
+			vol = *r.VolumeMultiple
 		}
+		if r.Score >= scoreMin && vol >= volMin {
+			candidates = append(candidates, r)
+		}
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].Score > candidates[j].Score
+	})
+	if len(candidates) > limit {
+		candidates = candidates[:limit]
 	}
 
 	builder := strings.Builder{}
@@ -1610,9 +1536,9 @@ func (s *Server) pushTelegramSummary(ctx context.Context) {
 		formatOptionalTimes(best.VolumeMultiple),
 	))
 
-	if len(res.Items) > 0 {
+	if len(candidates) > 0 {
 		builder.WriteString("Top 強勢交易對:\n")
-		for i, item := range res.Items {
+		for i, item := range candidates {
 			builder.WriteString(fmt.Sprintf("%d) %s | 分數 %.1f | 收盤 %.2f | 日漲跌 %s | 近5日 %s | 量能 %s\n",
 				i+1,
 				item.Symbol,

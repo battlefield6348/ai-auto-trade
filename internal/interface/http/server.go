@@ -1557,7 +1557,7 @@ func (s *Server) pushTelegramSummary(ctx context.Context) {
 		log.Printf("telegram push failed: %v", err)
 		return
 	}
-	log.Printf("telegram push sent trade_date=%s items=%d", latestDate.Format("2006-01-02"), len(res.Items))
+	log.Printf("telegram push sent trade_date=%s items=%d", latestDate.Format("2006-01-02"), len(candidates))
 }
 
 // startAutoPipeline 每隔 autoInterval 自動跑當日 ingestion + analysis。

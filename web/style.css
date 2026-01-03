@@ -272,6 +272,10 @@ p {
   grid-column: span 8;
 }
 
+.panel.span-12 {
+  grid-column: span 12;
+}
+
 .workspace-panel {
   padding: 0;
   grid-column: span 12;

@@ -272,6 +272,45 @@ p {
   grid-column: span 8;
 }
 
+.workspace-panel {
+  padding: 0;
+}
+
+.workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(320px, 0.85fr);
+  gap: 16px;
+  padding: 18px 18px 20px;
+  align-items: start;
+}
+
+.workspace-main {
+  display: grid;
+  gap: 14px;
+}
+
+.workspace-side {
+  display: grid;
+  gap: 12px;
+}
+
+.side-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px 14px 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.side-card .panel-head {
+  padding: 0;
+}
+
+.side-card .panel-head h3 {
+  margin: 0;
+}
+
 .hero {
   display: grid;
   grid-template-columns: minmax(240px, 1.1fr) minmax(280px, 1fr);
@@ -344,6 +383,12 @@ p {
 
 .compact-status .kpi-grid {
   margin-top: 10px;
+}
+
+@media (max-width: 1200px) {
+  .workspace-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .kpi {

@@ -1,17 +1,16 @@
 package main
 
 import (
+	"database/sql"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"ai-auto-trade/internal/infrastructure/config"
-
-	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
+	_ "github.com/lib/pq"
 )
 
 func main() {
@@ -36,14 +35,30 @@ func main() {
 		log.Fatalf("migrations 目錄不存在: %v", err)
 	}
 
-	src := fmt.Sprintf("file://%s", absDir)
-	m, err := migrate.New(src, cfg.DB.DSN)
+	files, err := filepath.Glob(filepath.Join(absDir, "*.sql"))
 	if err != nil {
-		log.Fatalf("初始化 migration 失敗: %v", err)
+		log.Fatalf("讀取 migrations 失敗: %v", err)
 	}
+	if len(files) == 0 {
+		log.Fatal("找不到任何 .sql migration 檔案")
+	}
+	sort.Strings(files)
 
-	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-		log.Fatalf("migration 執行失敗: %v", err)
+	db, err := sql.Open("postgres", cfg.DB.DSN)
+	if err != nil {
+		log.Fatalf("連線資料庫失敗: %v", err)
+	}
+	defer db.Close()
+
+	for _, f := range files {
+		sqlBytes, err := os.ReadFile(f)
+		if err != nil {
+			log.Fatalf("讀取檔案 %s 失敗: %v", f, err)
+		}
+		log.Printf("執行 migration: %s", filepath.Base(f))
+		if _, err := db.Exec(string(sqlBytes)); err != nil {
+			log.Fatalf("執行 %s 失敗: %v", filepath.Base(f), err)
+		}
 	}
 
 	fmt.Println("Migration 完成")

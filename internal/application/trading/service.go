@@ -88,6 +88,9 @@ func (s *Service) CreateStrategy(ctx context.Context, input tradingDomain.Strate
 	if input.CreatedBy == "" && input.UpdatedBy != "" {
 		input.CreatedBy = input.UpdatedBy
 	}
+	if input.CreatedBy == "" {
+		return tradingDomain.Strategy{}, fmt.Errorf("created_by (user_id) is required")
+	}
 	input.Risk = applyRiskDefaults(input.Risk)
 	if err := input.Validate(); err != nil {
 		return input, err

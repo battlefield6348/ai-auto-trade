@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,7 +20,6 @@ import (
 	dataDomain "ai-auto-trade/internal/domain/dataingestion"
 	tradingDomain "ai-auto-trade/internal/domain/trading"
 	"ai-auto-trade/internal/infra/memory"
-	"ai-auto-trade/internal/infrastructure/persistence/postgres"
 )
 
 const (
@@ -53,6 +51,53 @@ type DataRepository interface {
 // memoryRepoAdapter 讓 memory.Store 相容 DataRepository。
 type memoryRepoAdapter struct {
 	store *memory.Store
+}
+
+func (m memoryRepoAdapter) UpsertTradingPair(ctx context.Context, pair, name string, market dataDomain.Market, industry string) (string, error) {
+	return m.store.UpsertTradingPair(pair, name, market, industry), nil
+}
+
+func (m memoryRepoAdapter) InsertDailyPrice(ctx context.Context, stockID string, price dataDomain.DailyPrice) error {
+	m.store.InsertDailyPrice(price)
+	return nil
+}
+
+func (m memoryRepoAdapter) PricesByDate(ctx context.Context, date time.Time) ([]dataDomain.DailyPrice, error) {
+	return m.store.PricesByDate(date), nil
+}
+
+func (m memoryRepoAdapter) PricesByPair(ctx context.Context, pair string) ([]dataDomain.DailyPrice, error) {
+	return m.store.PricesByPair(pair), nil
+}
+
+func (m memoryRepoAdapter) InsertAnalysisResult(ctx context.Context, stockID string, res analysisDomain.DailyAnalysisResult) error {
+	m.store.InsertAnalysisResult(res)
+	return nil
+}
+
+func (m memoryRepoAdapter) HasAnalysisForDate(ctx context.Context, date time.Time) (bool, error) {
+	return m.store.HasAnalysisForDate(date), nil
+}
+
+func (m memoryRepoAdapter) LatestAnalysisDate(ctx context.Context) (time.Time, error) {
+	d, ok := m.store.LatestAnalysisDate()
+	if !ok {
+		return time.Time{}, fmt.Errorf("no analysis data")
+	}
+	return d, nil
+}
+
+// Analysis query implementations
+func (m memoryRepoAdapter) FindByDate(ctx context.Context, date time.Time, filter analysis.QueryFilter, sortOpt analysis.SortOption, pagination analysis.Pagination) ([]analysisDomain.DailyAnalysisResult, int, error) {
+	return m.store.FindByDate(ctx, date, filter, sortOpt, pagination)
+}
+
+func (m memoryRepoAdapter) FindHistory(ctx context.Context, symbol string, from, to *time.Time, limit int, onlySuccess bool) ([]analysisDomain.DailyAnalysisResult, error) {
+	return m.store.FindHistory(ctx, symbol, from, to, limit, onlySuccess)
+}
+
+func (m memoryRepoAdapter) Get(ctx context.Context, symbol string, date time.Time) (analysisDomain.DailyAnalysisResult, error) {
+	return m.store.Get(ctx, symbol, date)
 }
 
 type analysisRunSummary struct {
@@ -502,377 +547,6 @@ func (s *Server) handleAnalysisSummary(w http.ResponseWriter, r *http.Request) {
 			"volume_ratio":   best.VolumeMultiple,
 			"score":          best.Score,
 		},
-	})
-}
-
-func (s *Server) handleAnalysisBacktest(w http.ResponseWriter, r *http.Request) {
-	var body backtestConfig
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
-		return
-	}
-	symbol := strings.ToUpper(strings.TrimSpace(body.Symbol))
-	if symbol == "" {
-		symbol = "BTCUSDT"
-	}
-	if body.Start == "" || body.End == "" {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "start_date and end_date required")
-		return
-	}
-	startDate, err := time.Parse("2006-01-02", body.Start)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid start_date")
-		return
-	}
-	endDate, err := time.Parse("2006-01-02", body.End)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid end_date")
-		return
-	}
-	if endDate.Before(startDate) {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "end_date must be after start_date")
-		return
-	}
-
-	weights := body.Weights
-	if weights.Score == 0 {
-		weights.Score = 1
-	}
-	if weights.ChangeBonus == 0 {
-		weights.ChangeBonus = 10
-	}
-	if weights.VolumeBonus == 0 {
-		weights.VolumeBonus = 10
-	}
-	if weights.ReturnBonus == 0 {
-		weights.ReturnBonus = 8
-	}
-	if weights.MABonus == 0 {
-		weights.MABonus = 5
-	}
-	thresholds := body.Thresholds
-	if thresholds.TotalMin == 0 {
-		thresholds.TotalMin = 60
-	}
-	if thresholds.ChangeMin == 0 {
-		thresholds.ChangeMin = 0.0
-	}
-	if thresholds.VolumeRatioMin == 0 {
-		thresholds.VolumeRatioMin = 1.0
-	}
-	if thresholds.Return5Min == 0 {
-		thresholds.Return5Min = 0.0
-	}
-	if thresholds.MAGapMin == 0 {
-		thresholds.MAGapMin = 0.0
-	}
-	horizons := body.Horizons
-	if len(horizons) == 0 {
-		horizons = []int{3, 5, 10}
-	}
-	useChange := true
-	useVolume := true
-	useReturn := false
-	useMA := false
-	if body.Flags.UseChange != nil {
-		useChange = *body.Flags.UseChange
-	}
-	if body.Flags.UseVolume != nil {
-		useVolume = *body.Flags.UseVolume
-	}
-	if body.Flags.UseReturn != nil {
-		useReturn = *body.Flags.UseReturn
-	}
-	if body.Flags.UseMA != nil {
-		useMA = *body.Flags.UseMA
-	}
-
-	out, err := s.queryUC.QueryHistory(r.Context(), analysis.QueryHistoryInput{
-		Symbol:      symbol,
-		From:        &startDate,
-		To:          &endDate,
-		Limit:       2000,
-		OnlySuccess: true,
-	})
-	if err != nil {
-		log.Printf("analysis backtest failed symbol=%s: %v", symbol, err)
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "internal error")
-		return
-	}
-	if len(out) == 0 {
-		writeError(w, http.StatusNotFound, errCodeAnalysisNotReady, "analysis results not ready")
-		return
-	}
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].TradeDate.Before(out[j].TradeDate)
-	})
-
-	type event struct {
-		TradingPair   string              `json:"trading_pair"`
-		TradeDate     string              `json:"trade_date"`
-		ClosePrice    float64             `json:"close_price"`
-		ChangePercent float64             `json:"change_percent"`
-		Return5d      *float64            `json:"return_5d,omitempty"`
-		VolumeRatio   *float64            `json:"volume_ratio,omitempty"`
-		Score         float64             `json:"score"`
-		TotalScore    float64             `json:"total_score"`
-		Components    map[string]float64  `json:"components"`
-		Forward       map[string]*float64 `json:"forward_returns"`
-		MAGap         *float64            `json:"ma_gap,omitempty"`
-	}
-
-	events := make([]event, 0)
-	retSums := make(map[int]float64)
-	retWins := make(map[int]int)
-	retCounts := make(map[int]int)
-
-	for idx, row := range out {
-		if row.Close == 0 {
-			continue
-		}
-		total := row.Score * weights.Score
-		components := map[string]float64{
-			"score": total,
-		}
-		if useChange && row.ChangeRate >= thresholds.ChangeMin {
-			total += weights.ChangeBonus
-			components["change_bonus"] = weights.ChangeBonus
-		}
-		if useVolume && row.VolumeMultiple != nil && *row.VolumeMultiple >= thresholds.VolumeRatioMin {
-			total += weights.VolumeBonus
-			components["volume_bonus"] = weights.VolumeBonus
-		}
-		if useReturn && row.Return5 != nil && *row.Return5 >= thresholds.Return5Min {
-			total += weights.ReturnBonus
-			components["return_bonus"] = weights.ReturnBonus
-		}
-		if useMA && row.MA20 != nil && row.Close > 0 {
-			gap := (row.Close / *row.MA20) - 1
-			if gap >= thresholds.MAGapMin {
-				total += weights.MABonus
-				components["ma_bonus"] = weights.MABonus
-			}
-		}
-		if total < thresholds.TotalMin {
-			continue
-		}
-		fwd := make(map[string]*float64)
-		for _, h := range horizons {
-			targetIdx := idx + h
-			if targetIdx >= len(out) {
-				fwd[fmt.Sprintf("d%d", h)] = nil
-				continue
-			}
-			base := row.Close
-			next := out[targetIdx].Close
-			if base == 0 {
-				fwd[fmt.Sprintf("d%d", h)] = nil
-				continue
-			}
-			ret := (next / base) - 1
-			retVal := ret
-			fwd[fmt.Sprintf("d%d", h)] = &retVal
-			retSums[h] += ret
-			retCounts[h]++
-			if ret > 0 {
-				retWins[h]++
-			}
-		}
-		events = append(events, event{
-			TradingPair:   row.Symbol,
-			TradeDate:     row.TradeDate.Format("2006-01-02"),
-			ClosePrice:    row.Close,
-			ChangePercent: row.ChangeRate,
-			Return5d:      row.Return5,
-			VolumeRatio:   row.VolumeMultiple,
-			Score:         row.Score,
-			TotalScore:    total,
-			Components:    components,
-			Forward:       fwd,
-			MAGap: func() *float64 {
-				if row.MA20 == nil || row.Close == 0 {
-					return nil
-				}
-				g := (row.Close / *row.MA20) - 1
-				return &g
-			}(),
-		})
-	}
-
-	statsRet := make(map[string]map[string]float64)
-	for _, h := range horizons {
-		avg := 0.0
-		winRate := 0.0
-		if retCounts[h] > 0 {
-			avg = retSums[h] / float64(retCounts[h])
-			winRate = float64(retWins[h]) / float64(retCounts[h])
-		}
-		statsRet[fmt.Sprintf("d%d", h)] = map[string]float64{
-			"avg_return": avg,
-			"win_rate":   winRate,
-		}
-	}
-
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"success":      true,
-		"symbol":       symbol,
-		"start_date":   startDate.Format("2006-01-02"),
-		"end_date":     endDate.Format("2006-01-02"),
-		"total_events": len(events),
-		"config": map[string]interface{}{
-			"weights":    weights,
-			"thresholds": thresholds,
-			"flags": map[string]bool{
-				"use_change": useChange,
-				"use_volume": useVolume,
-				"use_return": useReturn,
-				"use_ma":     useMA,
-			},
-			"horizons": horizons,
-		},
-		"events": events,
-		"stats": map[string]interface{}{
-			"returns": statsRet,
-		},
-	})
-}
-
-func (s *Server) handleSaveBacktestPreset(w http.ResponseWriter, r *http.Request) {
-	userID := currentUserID(r)
-	if userID == "" || s.presetStore == nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "preset store not available")
-		return
-	}
-	var body backtestConfig
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
-		return
-	}
-	raw, err := json.Marshal(body)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "marshal preset failed")
-		return
-	}
-	if err := s.presetStore.Save(r.Context(), userID, raw); err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "save preset failed")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"success": true,
-	})
-}
-
-func (s *Server) handleGetBacktestPreset(w http.ResponseWriter, r *http.Request) {
-	userID := currentUserID(r)
-	if userID == "" || s.presetStore == nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "preset store not available")
-		return
-	}
-	cfgRaw, err := s.presetStore.Load(r.Context(), userID)
-	if err != nil {
-		if s.presetStore.NotFound(err) {
-			writeJSON(w, http.StatusOK, map[string]interface{}{
-				"success": false,
-				"message": "preset not found",
-			})
-			return
-		}
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "load preset failed")
-		return
-	}
-	var cfg backtestConfig
-	if err := json.Unmarshal(cfgRaw, &cfg); err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "decode preset failed")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"success": true,
-		"preset":  cfg,
-	})
-}
-
-func (s *Server) handleCreateBacktestPreset(w http.ResponseWriter, r *http.Request) {
-	userID := currentUserID(r)
-	if userID == "" || s.presetStore == nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "preset store not available")
-		return
-	}
-	var body struct {
-		Name   string         `json:"name"`
-		Config backtestConfig `json:"config"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
-		return
-	}
-	raw, err := json.Marshal(body.Config)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "marshal preset failed")
-		return
-	}
-	id, err := s.presetStore.SaveNamed(r.Context(), userID, body.Name, raw)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "save preset failed")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"success": true,
-		"id":      id,
-	})
-}
-
-func (s *Server) handleListBacktestPresets(w http.ResponseWriter, r *http.Request) {
-	userID := currentUserID(r)
-	if userID == "" || s.presetStore == nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "preset store not available")
-		return
-	}
-	rows, err := s.presetStore.List(r.Context(), userID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "load presets failed")
-		return
-	}
-	items := make([]map[string]interface{}, 0, len(rows))
-	for _, row := range rows {
-		var cfg backtestConfig
-		if err := json.Unmarshal(row.Config, &cfg); err != nil {
-			continue
-		}
-		items = append(items, map[string]interface{}{
-			"id":         row.ID,
-			"name":       row.Name,
-			"config":     cfg,
-			"created_at": row.CreatedAt,
-			"updated_at": row.UpdatedAt,
-		})
-	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"success": true,
-		"items":   items,
-	})
-}
-
-func (s *Server) handleDeleteBacktestPreset(w http.ResponseWriter, r *http.Request) {
-	userID := currentUserID(r)
-	if userID == "" || s.presetStore == nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "preset store not available")
-		return
-	}
-	id := strings.TrimPrefix(r.URL.Path, "/api/analysis/backtest/presets/")
-	if id == "" {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "preset id required")
-		return
-	}
-	if err := s.presetStore.Delete(r.Context(), userID, id); err != nil {
-		if s.presetStore.NotFound(err) {
-			writeError(w, http.StatusNotFound, errCodeNotFound, "preset not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "delete preset failed")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"success": true,
 	})
 }
 

@@ -35,7 +35,7 @@ func TestMvpE2EFlow(t *testing.T) {
 	}, http.StatusOK)
 
 	userToken := login(t, ts, "user@example.com", "password123")
-	getJSON(t, ts, "/api/analysis/summary", userToken, http.StatusNotFound)
+	getJSON(t, ts, "/api/analysis/summary", userToken, http.StatusOK)
 
 	res := getJSON(t, ts, "/api/health", "", http.StatusOK)
 	if !res.Success {

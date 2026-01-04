@@ -85,6 +85,9 @@ func (s *Service) CreateStrategy(ctx context.Context, input tradingDomain.Strate
 	if input.Version == 0 {
 		input.Version = 1
 	}
+	if input.CreatedBy == "" && input.UpdatedBy != "" {
+		input.CreatedBy = input.UpdatedBy
+	}
 	input.Risk = applyRiskDefaults(input.Risk)
 	if err := input.Validate(); err != nil {
 		return input, err

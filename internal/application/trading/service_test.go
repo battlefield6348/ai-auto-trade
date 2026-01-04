@@ -190,6 +190,96 @@ func TestCreateStrategy_DefaultsAndPersist(t *testing.T) {
 	}
 }
 
+func TestValidateConditionSet_InvalidLogic(t *testing.T) {
+	set := tradingDomain.ConditionSet{
+		Logic: "X",
+		Conditions: []analysis.Condition{
+			{Type: analysis.ConditionNumeric, Numeric: &analysis.NumericCondition{Field: analysis.FieldScore, Op: analysis.OpGTE, Value: 1}},
+		},
+	}
+	if err := validateConditionSet(set); err == nil {
+		t.Fatalf("expected invalid logic to fail")
+	}
+}
+
+func TestApplyRiskDefaults(t *testing.T) {
+	r := tradingDomain.RiskSettings{}
+	out := applyRiskDefaults(r)
+	if out.OrderSizeMode != tradingDomain.OrderFixedUSDT || out.OrderSizeValue == 0 {
+		t.Fatalf("order size defaults not applied: %+v", out)
+	}
+	if out.PriceMode != tradingDomain.PriceNextOpen {
+		t.Fatalf("price mode default missing: %+v", out)
+	}
+	if out.FeesPct == 0 || out.SlippagePct == 0 {
+		t.Fatalf("fees/slippage defaults missing: %+v", out)
+	}
+	if out.MaxPositions != 1 {
+		t.Fatalf("max positions default missing: %+v", out)
+	}
+}
+
+func TestMergeParamsOverrides(t *testing.T) {
+	stop := 0.05
+	take := 0.1
+	maxDaily := 0.2
+	cool := 2
+	minHold := 1
+	maxPos := 3
+	priceMode := tradingDomain.PriceCurrentClose
+	fees := 0.002
+	slip := 0.003
+	strategy := tradingDomain.Strategy{
+		Risk: tradingDomain.RiskSettings{
+			PriceMode:       tradingDomain.PriceNextOpen,
+			FeesPct:         0.001,
+			SlippagePct:     0.001,
+			StopLossPct:     &stop,
+			TakeProfitPct:   &take,
+			MaxDailyLossPct: &maxDaily,
+			CoolDownDays:    5,
+			MinHoldDays:     2,
+			MaxPositions:    1,
+		},
+	}
+	start := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 0, 10)
+	input := BacktestInput{
+		StartDate:     start,
+		EndDate:       end,
+		InitialEquity: 20000,
+		PriceMode:     &priceMode,
+		FeesPct:       &fees,
+		SlippagePct:   &slip,
+		CoolDownDays:  &cool,
+		MinHoldDays:   &minHold,
+		MaxPositions:  &maxPos,
+	}
+
+	params := mergeParams(strategy, input)
+	if params.PriceMode != priceMode || params.FeesPct != fees || params.SlippagePct != slip {
+		t.Fatalf("overrides not applied: %+v", params)
+	}
+	if params.CoolDownDays != cool || params.MinHoldDays != minHold || params.MaxPositions != maxPos {
+		t.Fatalf("int overrides not applied: %+v", params)
+	}
+	if params.InitialEquity != 20000 {
+		t.Fatalf("initial equity override missing: %f", params.InitialEquity)
+	}
+	if params.StartDate != start || params.EndDate != end {
+		t.Fatalf("date not propagated")
+	}
+	if params.StopLossPct == nil || *params.StopLossPct != stop {
+		t.Fatalf("stop loss lost: %+v", params.StopLossPct)
+	}
+	if params.TakeProfitPct == nil || *params.TakeProfitPct != take {
+		t.Fatalf("take profit lost: %+v", params.TakeProfitPct)
+	}
+	if params.MaxDailyLossPct == nil || *params.MaxDailyLossPct != maxDaily {
+		t.Fatalf("max daily loss lost: %+v", params.MaxDailyLossPct)
+	}
+}
+
 type fakeRepo struct {
 	createCalled int
 	lastStrategy tradingDomain.Strategy

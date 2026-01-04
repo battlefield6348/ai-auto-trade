@@ -563,6 +563,10 @@ func (s *Server) handleCreateStrategy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userID := currentUserID(r)
+	if userID == "" {
+		writeError(w, http.StatusUnauthorized, errCodeUnauthorized, "missing user")
+		return
+	}
 	body.CreatedBy = userID
 	body.UpdatedBy = userID
 	strat, err := s.tradingSvc.CreateStrategy(r.Context(), body)

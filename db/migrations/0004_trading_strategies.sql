@@ -23,11 +23,6 @@ CREATE TABLE IF NOT EXISTS strategies (
     CONSTRAINT chk_strategy_status CHECK (status IN ('draft','active','archived'))
 );
 
--- 同一交易對/週期/環境僅允許一個 active 策略
-CREATE UNIQUE INDEX IF NOT EXISTS idx_strategies_active_env
-ON strategies (base_symbol, timeframe, env)
-WHERE status = 'active';
-
 CREATE TABLE IF NOT EXISTS strategy_backtests (
     id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     strategy_id      UUID REFERENCES strategies(id) ON DELETE CASCADE,

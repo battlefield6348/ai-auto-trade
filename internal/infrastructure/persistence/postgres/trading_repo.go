@@ -38,7 +38,10 @@ func (r *TradingRepo) CreateStrategy(ctx context.Context, s tradingDomain.Strate
 	}
 	const q = `
 INSERT INTO strategies (name, description, base_symbol, timeframe, env, status, version, buy_conditions, sell_conditions, risk_settings, user_id, created_by, updated_by)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+        COALESCE($11, $12, $13),
+        COALESCE($12, $11),
+        COALESCE($13, $11))
 RETURNING id, created_at, updated_at;
 `
 	var id string
@@ -48,11 +51,24 @@ RETURNING id, created_at, updated_at;
 		userID = nullableUUID(s.UpdatedBy)
 	}
 	if !userID.Valid {
-		return "", fmt.Errorf("user_id (created_by) is required")
+		// fallback: 使用最早建立的使用者（通常是 admin）
+		uid, err := r.fallbackUser(ctx)
+		if err != nil {
+			return "", fmt.Errorf("user_id (created_by) is required")
+		}
+		userID = nullableUUID(uid)
+	}
+	createdBy := nullableUUID(s.CreatedBy)
+	if !createdBy.Valid {
+		createdBy = userID
+	}
+	updatedBy := nullableUUID(s.UpdatedBy)
+	if !updatedBy.Valid {
+		updatedBy = userID
 	}
 	if err := r.db.QueryRowContext(ctx, q,
 		s.Name, s.Description, s.BaseSymbol, s.Timeframe, string(s.Env), string(s.Status), s.Version,
-		buyJSON, sellJSON, riskJSON, userID, nullableUUID(s.CreatedBy), nullableUUID(s.UpdatedBy),
+		buyJSON, sellJSON, riskJSON, userID, createdBy, updatedBy,
 	).Scan(&id, &createdAt, &updatedAt); err != nil {
 		return "", err
 	}
@@ -516,4 +532,13 @@ func nullableUUID(id string) sql.NullString {
 		return sql.NullString{}
 	}
 	return sql.NullString{String: id, Valid: true}
+}
+
+func (r *TradingRepo) fallbackUser(ctx context.Context) (string, error) {
+	const q = `SELECT id FROM users ORDER BY created_at ASC LIMIT 1;`
+	var id string
+	if err := r.db.QueryRowContext(ctx, q).Scan(&id); err != nil {
+		return "", err
+	}
+	return id, nil
 }

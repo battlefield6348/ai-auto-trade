@@ -37,15 +37,22 @@ func (r *TradingRepo) CreateStrategy(ctx context.Context, s tradingDomain.Strate
 		return "", err
 	}
 	const q = `
-INSERT INTO strategies (name, description, base_symbol, timeframe, env, status, version, buy_conditions, sell_conditions, risk_settings, created_by, updated_by)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+INSERT INTO strategies (name, description, base_symbol, timeframe, env, status, version, buy_conditions, sell_conditions, risk_settings, user_id, created_by, updated_by)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
 RETURNING id, created_at, updated_at;
 `
 	var id string
 	var createdAt, updatedAt time.Time
+	userID := nullableUUID(s.CreatedBy)
+	if !userID.Valid {
+		userID = nullableUUID(s.UpdatedBy)
+	}
+	if !userID.Valid {
+		return "", fmt.Errorf("user_id (created_by) is required")
+	}
 	if err := r.db.QueryRowContext(ctx, q,
 		s.Name, s.Description, s.BaseSymbol, s.Timeframe, string(s.Env), string(s.Status), s.Version,
-		buyJSON, sellJSON, riskJSON, nullableUUID(s.CreatedBy), nullableUUID(s.UpdatedBy),
+		buyJSON, sellJSON, riskJSON, userID, nullableUUID(s.CreatedBy), nullableUUID(s.UpdatedBy),
 	).Scan(&id, &createdAt, &updatedAt); err != nil {
 		return "", err
 	}
@@ -504,7 +511,7 @@ LIMIT 100;
 	return out, rows.Err()
 }
 
-func nullableUUID(id string) interface{} {
+func nullableUUID(id string) sql.NullString {
 	if id == "" {
 		return sql.NullString{}
 	}

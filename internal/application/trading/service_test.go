@@ -1,6 +1,7 @@
 package trading
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -114,4 +115,139 @@ func TestValidateStrategyContent_SingleConditionLimit(t *testing.T) {
 	if err := validateStrategyContent(s); err == nil {
 		t.Fatalf("expected validation to fail when buy has more than one condition")
 	}
+}
+
+func TestCreateStrategy_RequireUser(t *testing.T) {
+	repo := &fakeRepo{}
+	svc := NewService(repo, dummyDataProvider{})
+
+	input := tradingDomain.Strategy{
+		Name: "no-user",
+		Buy: tradingDomain.ConditionSet{
+			Logic: analysis.LogicAND,
+			Conditions: []analysis.Condition{
+				{Type: analysis.ConditionNumeric, Numeric: &analysis.NumericCondition{Field: analysis.FieldScore, Op: analysis.OpGTE, Value: 60}},
+			},
+		},
+		Sell: tradingDomain.ConditionSet{
+			Logic: analysis.LogicAND,
+			Conditions: []analysis.Condition{
+				{Type: analysis.ConditionNumeric, Numeric: &analysis.NumericCondition{Field: analysis.FieldScore, Op: analysis.OpLTE, Value: 40}},
+			},
+		},
+		Risk: tradingDomain.RiskSettings{OrderSizeValue: 500},
+	}
+
+	if _, err := svc.CreateStrategy(context.Background(), input); err == nil {
+		t.Fatalf("expected error when created_by is missing")
+	}
+	if repo.createCalled != 0 {
+		t.Fatalf("repo should not be called when user missing")
+	}
+}
+
+func TestCreateStrategy_DefaultsAndPersist(t *testing.T) {
+	repo := &fakeRepo{id: "id-123"}
+	svc := NewService(repo, dummyDataProvider{})
+
+	input := tradingDomain.Strategy{
+		Name:        "with-user",
+		Description: "desc",
+		CreatedBy:   "user-1",
+		Buy: tradingDomain.ConditionSet{
+			Logic: analysis.LogicAND,
+			Conditions: []analysis.Condition{
+				{Type: analysis.ConditionNumeric, Numeric: &analysis.NumericCondition{Field: analysis.FieldScore, Op: analysis.OpGTE, Value: 60}},
+			},
+		},
+		Sell: tradingDomain.ConditionSet{
+			Logic: analysis.LogicAND,
+			Conditions: []analysis.Condition{
+				{Type: analysis.ConditionNumeric, Numeric: &analysis.NumericCondition{Field: analysis.FieldScore, Op: analysis.OpLTE, Value: 40}},
+			},
+		},
+		Risk: tradingDomain.RiskSettings{OrderSizeValue: 800},
+	}
+
+	out, err := svc.CreateStrategy(context.Background(), input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.ID != "id-123" {
+		t.Fatalf("expected id-123, got %s", out.ID)
+	}
+	if repo.createCalled != 1 {
+		t.Fatalf("expected repo CreateStrategy called once, got %d", repo.createCalled)
+	}
+	if repo.lastStrategy.BaseSymbol != "BTCUSDT" || repo.lastStrategy.Timeframe != "1d" || repo.lastStrategy.Env != tradingDomain.EnvBoth {
+		t.Fatalf("defaults not applied: %+v", repo.lastStrategy)
+	}
+	if repo.lastStrategy.Status != tradingDomain.StatusDraft || repo.lastStrategy.Version != 1 {
+		t.Fatalf("status/version defaults incorrect: %+v", repo.lastStrategy)
+	}
+	if repo.lastStrategy.Risk.OrderSizeValue == 0 {
+		t.Fatalf("risk defaults not applied")
+	}
+}
+
+type fakeRepo struct {
+	createCalled int
+	lastStrategy tradingDomain.Strategy
+	id           string
+}
+
+func (f *fakeRepo) CreateStrategy(_ context.Context, s tradingDomain.Strategy) (string, error) {
+	f.createCalled++
+	f.lastStrategy = s
+	if f.id == "" {
+		return "fake-id", nil
+	}
+	return f.id, nil
+}
+
+func (f *fakeRepo) UpdateStrategy(context.Context, tradingDomain.Strategy) error { return nil }
+func (f *fakeRepo) GetStrategy(context.Context, string) (tradingDomain.Strategy, error) {
+	return f.lastStrategy, nil
+}
+func (f *fakeRepo) ListStrategies(context.Context, StrategyFilter) ([]tradingDomain.Strategy, error) {
+	return nil, nil
+}
+func (f *fakeRepo) SetStatus(context.Context, string, tradingDomain.Status, tradingDomain.Environment) error {
+	return nil
+}
+func (f *fakeRepo) SaveBacktest(context.Context, tradingDomain.BacktestRecord) (string, error) {
+	return "", nil
+}
+func (f *fakeRepo) ListBacktests(context.Context, string) ([]tradingDomain.BacktestRecord, error) {
+	return nil, nil
+}
+func (f *fakeRepo) SaveTrade(context.Context, tradingDomain.TradeRecord) error { return nil }
+func (f *fakeRepo) ListTrades(context.Context, tradingDomain.TradeFilter) ([]tradingDomain.TradeRecord, error) {
+	return nil, nil
+}
+func (f *fakeRepo) GetOpenPosition(context.Context, string, tradingDomain.Environment) (*tradingDomain.Position, error) {
+	return nil, nil
+}
+func (f *fakeRepo) ListOpenPositions(context.Context) ([]tradingDomain.Position, error) {
+	return nil, nil
+}
+func (f *fakeRepo) UpsertPosition(context.Context, tradingDomain.Position) error    { return nil }
+func (f *fakeRepo) ClosePosition(context.Context, string, time.Time, float64) error { return nil }
+func (f *fakeRepo) SaveLog(context.Context, tradingDomain.LogEntry) error           { return nil }
+func (f *fakeRepo) ListLogs(context.Context, tradingDomain.LogFilter) ([]tradingDomain.LogEntry, error) {
+	return nil, nil
+}
+func (f *fakeRepo) SaveReport(context.Context, tradingDomain.Report) (string, error) { return "", nil }
+func (f *fakeRepo) ListReports(context.Context, string) ([]tradingDomain.Report, error) {
+	return nil, nil
+}
+
+type dummyDataProvider struct{}
+
+func (dummyDataProvider) FindHistory(context.Context, string, *time.Time, *time.Time, int, bool) ([]analysisDomain.DailyAnalysisResult, error) {
+	return nil, nil
+}
+
+func (dummyDataProvider) PricesByPair(context.Context, string) ([]dataDomain.DailyPrice, error) {
+	return nil, nil
 }

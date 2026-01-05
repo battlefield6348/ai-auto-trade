@@ -20,6 +20,7 @@ type Repository interface {
 	UpdateStrategy(ctx context.Context, s tradingDomain.Strategy) error
 	GetStrategy(ctx context.Context, id string) (tradingDomain.Strategy, error)
 	ListStrategies(ctx context.Context, filter StrategyFilter) ([]tradingDomain.Strategy, error)
+	DeleteStrategy(ctx context.Context, id string) error
 	SetStatus(ctx context.Context, id string, status tradingDomain.Status, env tradingDomain.Environment) error
 
 	SaveBacktest(ctx context.Context, rec tradingDomain.BacktestRecord) (string, error)
@@ -148,6 +149,11 @@ func (s *Service) UpdateStrategy(ctx context.Context, id string, input tradingDo
 // SetStatus 切換策略狀態。
 func (s *Service) SetStatus(ctx context.Context, id string, status tradingDomain.Status, env tradingDomain.Environment) error {
 	return s.repo.SetStatus(ctx, id, status, env)
+}
+
+// DeleteStrategy 刪除策略。
+func (s *Service) DeleteStrategy(ctx context.Context, id string) error {
+	return s.repo.DeleteStrategy(ctx, id)
 }
 
 // GetStrategy 取得單筆策略。

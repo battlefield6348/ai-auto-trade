@@ -133,6 +133,13 @@ FROM strategies WHERE id=$1;
 	return s, nil
 }
 
+// DeleteStrategy 刪除策略（相關表透過 ON DELETE CASCADE 清理）。
+func (r *TradingRepo) DeleteStrategy(ctx context.Context, id string) error {
+	const q = `DELETE FROM strategies WHERE id=$1;`
+	_, err := r.db.ExecContext(ctx, q, id)
+	return err
+}
+
 // ListStrategies 列出策略。
 func (r *TradingRepo) ListStrategies(ctx context.Context, filter trading.StrategyFilter) ([]tradingDomain.Strategy, error) {
 	q := `

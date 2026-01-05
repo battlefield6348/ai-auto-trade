@@ -104,6 +104,37 @@ func (r *TradingRepo) SetStatus(_ context.Context, id string, status tradingDoma
 	return nil
 }
 
+func (r *TradingRepo) DeleteStrategy(_ context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.strategies[id]; !ok {
+		return fmt.Errorf("strategy not found")
+	}
+	delete(r.strategies, id)
+	delete(r.backtests, id)
+	delete(r.reports, id)
+	for key := range r.positions {
+		if strings.HasPrefix(key, id+"|") {
+			delete(r.positions, key)
+		}
+	}
+	filterTrades := r.trades[:0]
+	for _, t := range r.trades {
+		if t.StrategyID != id {
+			filterTrades = append(filterTrades, t)
+		}
+	}
+	r.trades = filterTrades
+	filterLogs := r.logs[:0]
+	for _, l := range r.logs {
+		if l.StrategyID != id {
+			filterLogs = append(filterLogs, l)
+		}
+	}
+	r.logs = filterLogs
+	return nil
+}
+
 func (r *TradingRepo) SaveBacktest(_ context.Context, rec tradingDomain.BacktestRecord) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

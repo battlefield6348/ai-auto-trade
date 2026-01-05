@@ -505,6 +505,7 @@ func TestUpdateStrategy_VersionBump(t *testing.T) {
 type fakeRepo struct {
 	createCalled       int
 	updateCalled       int
+	deleteCalled       int
 	saveBacktestCalled int
 	lastStrategy       tradingDomain.Strategy
 	lastBacktest       tradingDomain.BacktestRecord
@@ -524,6 +525,10 @@ func (f *fakeRepo) CreateStrategy(_ context.Context, s tradingDomain.Strategy) (
 func (f *fakeRepo) UpdateStrategy(_ context.Context, s tradingDomain.Strategy) error {
 	f.updateCalled++
 	f.lastStrategy = s
+	return nil
+}
+func (f *fakeRepo) DeleteStrategy(_ context.Context, id string) error {
+	f.deleteCalled++
 	return nil
 }
 func (f *fakeRepo) GetStrategy(context.Context, string) (tradingDomain.Strategy, error) {

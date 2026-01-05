@@ -673,6 +673,14 @@ func (s *Server) handleStrategyGetOrUpdate(w http.ResponseWriter, r *http.Reques
 			"success":  true,
 			"strategy": strat,
 		})
+	case http.MethodDelete:
+		if err := s.tradingSvc.DeleteStrategy(r.Context(), id); err != nil {
+			writeError(w, http.StatusBadRequest, errCodeBadRequest, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"success": true,
+		})
 	case http.MethodPut:
 		var body tradingDomain.Strategy
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {

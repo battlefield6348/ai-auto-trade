@@ -1339,6 +1339,7 @@ const renderStrategyTable = (items = []) => {
         <button class="ghost btn-sm" data-action="activate" data-env="test" data-id="${fmtText(s.id)}">啟用 test</button>
         <button class="ghost btn-sm" data-action="activate" data-env="prod" data-id="${fmtText(s.id)}">啟用 prod</button>
         <button class="ghost btn-sm" data-action="deactivate" data-id="${fmtText(s.id)}">停用</button>
+        <button class="danger ghost btn-sm" data-action="delete" data-id="${fmtText(s.id)}">刪除</button>
       </div>
     `,
   }));
@@ -2476,6 +2477,11 @@ const deactivateStrategy = async (id) => {
   logActivity("停用策略", `ID ${id}`);
 };
 
+const deleteStrategy = async (id) => {
+  await api(`/api/admin/strategies/${id}`, { method: "DELETE" });
+  logActivity("刪除策略", `ID ${id}`);
+};
+
 const runStrategyOnce = async (id, env) => {
   const qs = env ? `?env=${env}` : "";
   const res = await api(`/api/admin/strategies/${id}/run${qs}`, { method: "POST" });
@@ -2504,6 +2510,12 @@ const bindStrategyActions = () => {
           await deactivateStrategy(id);
         } else if (action === "run") {
           await runStrategyOnce(id, env);
+        } else if (action === "delete") {
+          if (!confirm("確定刪除策略？相關回測、交易與報告也會被移除。")) {
+            setStatus("已取消刪除", "warn");
+            return;
+          }
+          await deleteStrategy(id);
         }
         await loadStrategies();
         setStatus("操作完成", "good");

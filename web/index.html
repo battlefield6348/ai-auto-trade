@@ -69,7 +69,7 @@
         <div class="nav-head">功能導航</div>
         <nav class="nav-list">
           <button class="nav-link" data-section-target="overview">概覽</button>
-          <button class="nav-link" data-section-target="overview">策略 / 回測</button>
+          <button class="nav-link" data-section-target="strategy">策略 / 回測</button>
           <button class="nav-link" data-section-target="trade">交易</button>
           <button class="nav-link" data-section-target="report">報告</button>
           <button class="nav-link" data-section-target="position">持倉</button>
@@ -167,263 +167,259 @@
       </div>
     </section>
 
-    <section class="panel span-2" id="strategyPanel" data-section="overview">
+        <section class="panel span-12 workspace-panel" id="strategyConsole" data-section="strategy">
       <div class="panel-head">
         <div>
-          <h2>策略列表（測試版）</h2>
-          <p>檢視後端已建立的策略，快速查看狀態與版本。</p>
+          <h2>策略控制台</h2>
+          <p>左側管理策略列表與回測，右側建立/調整策略；底部收合交易、報告、日誌。</p>
         </div>
       </div>
-      <form id="strategyForm" class="form inline">
-        <label>狀態
-          <select id="strategyStatus">
-            <option value="">全部</option>
-            <option value="active">active</option>
-            <option value="draft">draft</option>
-            <option value="archived">archived</option>
-          </select>
-        </label>
-        <label>環境
-          <select id="strategyEnv">
-            <option value="">全部</option>
-            <option value="test">test</option>
-            <option value="prod">prod</option>
-          </select>
-        </label>
-        <label>名稱關鍵字 <input type="text" id="strategyName" placeholder="例如 momentum"></label>
-        <button type="submit" class="primary">載入策略</button>
-      </form>
-      <div id="strategyMeta" class="meta-row"></div>
-      <div id="strategyTable" class="table"></div>
-      <div class="subsection-title">試跑結果</div>
-      <div id="strategyRunResult" class="table"></div>
+      <div class="workspace-grid">
+        <div class="workspace-main">
+          <div class="subsection-title">策略列表與試跑</div>
+          <form id="strategyForm" class="form inline">
+            <label>狀態
+              <select id="strategyStatus">
+                <option value="">全部</option>
+                <option value="active">active</option>
+                <option value="draft">draft</option>
+                <option value="archived">archived</option>
+              </select>
+            </label>
+            <label>環境
+              <select id="strategyEnv">
+                <option value="">全部</option>
+                <option value="test">test</option>
+                <option value="prod">prod</option>
+              </select>
+            </label>
+            <label>名稱關鍵字 <input type="text" id="strategyName" placeholder="例如 momentum"></label>
+            <button type="submit" class="primary">載入策略</button>
+          </form>
+          <div id="strategyMeta" class="meta-row"></div>
+          <div id="strategyTable" class="table"></div>
+          <div class="subsection-title">試跑結果</div>
+          <div id="strategyRunResult" class="table"></div>
 
-      <div class="subsection-title">建立策略（欄位）</div>
-      <form id="createStrategyForm" class="form">
-        <div class="field-grid">
-          <label>名稱 <input type="text" id="createStrategyName" placeholder="例如：突破策略" required></label>
-          <label>交易對 <input type="text" id="createStrategySymbol" value="BTCUSDT"></label>
-          <label>週期 <input type="text" id="createStrategyTimeframe" value="1d"></label>
-          <label>環境
-            <select id="createStrategyEnv">
-              <option value="test">test</option>
-              <option value="prod">prod</option>
-              <option value="both">both</option>
-            </select>
-          </label>
+          <div class="subsection-title">策略回測（區間買賣）</div>
+          <form id="strategyBacktestForm" class="form inline">
+            <div class="field-grid">
+              <label>選擇策略
+                <select id="strategyBacktestSelect">
+                  <option value="">請先載入策略列表</option>
+                </select>
+              </label>
+              <label>或輸入策略 ID <input type="text" id="strategyBacktestId" placeholder="直接貼策略 ID"></label>
+              <label>起始日 <input type="date" id="strategyBtStart" required></label>
+              <label>結束日 <input type="date" id="strategyBtEnd" required></label>
+              <label>初始資金 (USDT) <input type="number" id="strategyBtEquity" value="10000" step="100"></label>
+              <label>成交價模式
+                <select id="strategyBtPriceMode">
+                  <option value="next_open">次日開盤</option>
+                  <option value="next_close">次日收盤</option>
+                  <option value="current_close">當日收盤</option>
+                </select>
+              </label>
+              <label>手續費 (%) <input type="number" id="strategyBtFees" value="0.1" step="0.01"></label>
+              <label>滑價 (%) <input type="number" id="strategyBtSlippage" value="0.1" step="0.01"></label>
+              <label>停損 (%) <input type="number" id="strategyBtStop" placeholder="可留空" step="0.1"></label>
+              <label>停利 (%) <input type="number" id="strategyBtTake" placeholder="可留空" step="0.1"></label>
+              <label>單日最大虧損 (%) <input type="number" id="strategyBtDailyLoss" placeholder="可留空" step="0.1"></label>
+              <label>冷卻天數 <input type="number" id="strategyBtCoolDown" value="1" min="0" step="1"></label>
+              <label>最少持有天數 <input type="number" id="strategyBtMinHold" value="1" min="0" step="1"></label>
+              <label>最多同時持倉 <input type="number" id="strategyBtMaxPos" value="1" min="1" step="1"></label>
+            </div>
+            <div class="actions">
+              <button type="button" class="ghost btn-sm" id="strategyBacktestReload">重新載入策略列表</button>
+              <button type="submit" class="primary">執行回測</button>
+            </div>
+            <div id="strategyBacktestMessage" class="message"></div>
+          </form>
+          <div id="strategyBacktestSummary" class="result-panel"></div>
+          <div id="strategyBacktestTrades" class="table"></div>
+          <div class="subsection-title">歷史回測紀錄</div>
+          <form id="strategyBacktestFilterForm" class="form inline">
+            <label>開始日 <input type="date" id="strategyBtHistStart"></label>
+            <label>結束日 <input type="date" id="strategyBtHistEnd"></label>
+            <label>版次 <input type="number" id="strategyBtHistVersion" min="1" placeholder="可留空"></label>
+            <label>每頁筆數 <input type="number" id="strategyBtHistPageSize" value="10" min="1" max="200"></label>
+            <button type="submit" class="ghost btn-sm">套用篩選</button>
+          </form>
+          <div id="strategyBacktestHistory" class="table"></div>
+          <div class="pagination">
+            <button type="button" class="ghost btn-sm" id="strategyBtHistPrev">上一頁</button>
+            <span id="strategyBtHistPageInfo"></span>
+            <button type="button" class="ghost btn-sm" id="strategyBtHistNext">下一頁</button>
+            <div class="spacer"></div>
+            <button type="button" class="ghost btn-sm" id="exportBtTrades">匯出交易 CSV</button>
+            <button type="button" class="ghost btn-sm" id="exportBtEquity">匯出淨值 CSV</button>
+            <button type="button" class="ghost btn-sm" id="strategyBtGoReports">查看報告</button>
+          </div>
+          <div class="subsection-title">淨值曲線（回測）</div>
+          <div class="chart-wrap">
+            <div id="strategyEquityChart" class="chart-canvas small"></div>
+          </div>
         </div>
 
-        <div class="subsection-title">買入條件</div>
-        <p class="note">目前策略僅支援單一買入條件，點「新增條件」會覆蓋上一個設定。</p>
-        <div class="inline">
-          <label>邏輯
-            <select id="buyLogic">
-              <option value="AND">AND</option>
-              <option value="OR">OR</option>
-            </select>
-          </label>
-          <button type="button" class="ghost btn-sm" id="addBuyCondition">新增條件</button>
-        </div>
-        <div id="buyConditions" class="condition-list"></div>
+        <aside class="workspace-side">
+          <div class="side-card">
+            <div class="panel-head">
+              <div>
+                <h3>建立 / 編輯策略</h3>
+                <p>精簡欄位，右側即可完成建立。</p>
+              </div>
+            </div>
+            <form id="createStrategyForm" class="form">
+              <div class="field-grid">
+                <label>名稱 <input type="text" id="createStrategyName" placeholder="例如：突破策略" required></label>
+                <label>交易對 <input type="text" id="createStrategySymbol" value="BTCUSDT"></label>
+                <label>週期 <input type="text" id="createStrategyTimeframe" value="1d"></label>
+                <label>環境
+                  <select id="createStrategyEnv">
+                    <option value="test">test</option>
+                    <option value="prod">prod</option>
+                    <option value="both">both</option>
+                  </select>
+                </label>
+              </div>
 
-        <div class="subsection-title">賣出條件</div>
-        <p class="note">賣出同樣僅一條條件，新增時會覆蓋前一個設定。</p>
-        <div class="inline">
-          <label>邏輯
-            <select id="sellLogic">
-              <option value="AND">AND</option>
-              <option value="OR">OR</option>
-            </select>
-          </label>
-          <button type="button" class="ghost btn-sm" id="addSellCondition">新增條件</button>
-        </div>
-        <div id="sellConditions" class="condition-list"></div>
+              <details open class="compact-card">
+                <summary>買入條件</summary>
+                <p class="note">目前策略僅支援單一買入條件，點「新增條件」會覆蓋上一個設定。</p>
+                <div class="inline">
+                  <label>邏輯
+                    <select id="buyLogic">
+                      <option value="AND">AND</option>
+                      <option value="OR">OR</option>
+                    </select>
+                  </label>
+                  <button type="button" class="ghost btn-sm" id="addBuyCondition">新增條件</button>
+                </div>
+                <div id="buyConditions" class="condition-list"></div>
+              </details>
 
-        <div class="subsection-title">資金與風控</div>
-        <div class="field-grid">
-          <label>下單模式
-            <select id="orderSizeMode">
-              <option value="fixed_usdt">固定金額 (USDT)</option>
-              <option value="percent_of_equity">資金比例 (0-1)</option>
-            </select>
-          </label>
-          <label>下單金額/比例 <input type="number" id="orderSizeValue" value="1000" step="0.01"></label>
-          <label>成交價模式
-            <select id="priceMode">
-              <option value="next_open">次日開盤</option>
-              <option value="next_close">次日收盤</option>
-              <option value="current_close">當日收盤</option>
-            </select>
-          </label>
-          <label>手續費 (%) <input type="number" id="feesPct" value="0.1" step="0.01"></label>
-          <label>滑價 (%) <input type="number" id="slippagePct" value="0.1" step="0.01"></label>
-          <label>停損 (%) <input type="number" id="stopLossPct" value="3" step="0.1"></label>
-          <label>停利 (%) <input type="number" id="takeProfitPct" value="6" step="0.1"></label>
-          <label>冷卻天數 <input type="number" id="coolDownDays" value="1" min="0" step="1"></label>
-          <label>最少持有天數 <input type="number" id="minHoldDays" value="1" min="0" step="1"></label>
-          <label>最多同時持倉 <input type="number" id="maxPositions" value="1" min="1" step="1"></label>
-        </div>
+              <details open class="compact-card">
+                <summary>賣出條件</summary>
+                <p class="note">賣出同樣僅一條條件，新增時會覆蓋前一個設定。</p>
+                <div class="inline">
+                  <label>邏輯
+                    <select id="sellLogic">
+                      <option value="AND">AND</option>
+                      <option value="OR">OR</option>
+                    </select>
+                  </label>
+                  <button type="button" class="ghost btn-sm" id="addSellCondition">新增條件</button>
+                </div>
+                <div id="sellConditions" class="condition-list"></div>
+              </details>
 
-        <label>送出預覽（唯讀）
-          <textarea id="createStrategyPreview" rows="6" spellcheck="false" readonly></textarea>
-        </label>
-        <div class="actions">
-          <button type="button" class="ghost btn-sm" id="loadStrategyTemplate">載入範例</button>
-          <button type="submit" class="primary">建立策略</button>
-        </div>
-        <div id="createStrategyMessage" class="message"></div>
-      </form>
-    </section>
+              <details open class="compact-card">
+                <summary>資金與風控</summary>
+                <div class="field-grid">
+                  <label>下單模式
+                    <select id="orderSizeMode">
+                      <option value="fixed_usdt">固定金額 (USDT)</option>
+                      <option value="percent_of_equity">資金比例 (0-1)</option>
+                    </select>
+                  </label>
+                  <label>下單金額/比例 <input type="number" id="orderSizeValue" value="1000" step="0.01"></label>
+                  <label>成交價模式
+                    <select id="priceMode">
+                      <option value="next_open">次日開盤</option>
+                      <option value="next_close">次日收盤</option>
+                      <option value="current_close">當日收盤</option>
+                    </select>
+                  </label>
+                  <label>手續費 (%) <input type="number" id="feesPct" value="0.1" step="0.01"></label>
+                  <label>滑價 (%) <input type="number" id="slippagePct" value="0.1" step="0.01"></label>
+                  <label>停損 (%) <input type="number" id="stopLossPct" value="3" step="0.1"></label>
+                  <label>停利 (%) <input type="number" id="takeProfitPct" value="6" step="0.1"></label>
+                  <label>冷卻天數 <input type="number" id="coolDownDays" value="1" min="0" step="1"></label>
+                  <label>最少持有天數 <input type="number" id="minHoldDays" value="1" min="0" step="1"></label>
+                  <label>最多同時持倉 <input type="number" id="maxPositions" value="1" min="1" step="1"></label>
+                </div>
+              </details>
 
-    <section class="panel span-2" id="strategyBacktestPanel" data-section="overview">
-      <div class="panel-head">
-        <div>
-          <h2>策略回測（區間買賣）</h2>
-          <p>選擇策略與日期區間，使用策略條件在歷史資料中反覆買入/賣出並產出統計。</p>
-        </div>
+              <label>送出預覽（唯讀）
+                <textarea id="createStrategyPreview" rows="6" spellcheck="false" readonly></textarea>
+              </label>
+              <div class="actions">
+                <button type="button" class="ghost btn-sm" id="loadStrategyTemplate">載入範例</button>
+                <button type="submit" class="primary">建立策略</button>
+              </div>
+              <div id="createStrategyMessage" class="message"></div>
+            </form>
+          </div>
+
+          <details class="side-card" id="tradePanel" data-section="trade">
+            <summary>交易紀錄</summary>
+            <p>查詢指定策略的紙本/正式交易紀錄。</p>
+            <form id="tradeForm" class="form inline">
+              <label>策略 ID <input type="text" id="tradeStrategyId" placeholder="可留空查全部"></label>
+              <label>環境
+                <select id="tradeEnv">
+                  <option value="">全部</option>
+                  <option value="test">test</option>
+                  <option value="prod">prod</option>
+                </select>
+              </label>
+              <label>開始日 <input type="date" id="tradeStart"></label>
+              <label>結束日 <input type="date" id="tradeEnd"></label>
+              <button type="submit" class="primary">查詢交易</button>
+            </form>
+            <div id="tradeMeta" class="meta-row"></div>
+            <div id="tradeTable" class="table"></div>
+          </details>
+
+          <details class="side-card" id="reportPanel" data-section="report">
+            <summary>報告列表</summary>
+            <p>輸入策略 ID 取得已保存的回測/交易報告。</p>
+            <form id="reportForm" class="form inline">
+              <label>策略 ID <input type="text" id="reportStrategyId" required></label>
+              <button type="submit" class="primary">查詢報告</button>
+            </form>
+            <div id="reportMeta" class="meta-row"></div>
+            <div id="reportTable" class="table"></div>
+            <div class="subsection-title">報告詳情</div>
+            <div id="reportDetail" class="result-panel"></div>
+          </details>
+
+          <details class="side-card" id="positionPanel" data-section="position">
+            <summary>持倉列表</summary>
+            <p>查看目前未平倉部位（紙本/正式）。</p>
+            <form id="positionForm" class="form inline">
+              <label>環境
+                <select id="positionEnv">
+                  <option value="">全部</option>
+                  <option value="test">test</option>
+                  <option value="prod">prod</option>
+                </select>
+              </label>
+              <button type="submit" class="primary">查詢持倉</button>
+            </form>
+            <div id="positionMeta" class="meta-row"></div>
+            <div id="positionTable" class="table"></div>
+          </details>
+
+          <details class="side-card" id="logPanel" data-section="logs">
+            <summary>策略日誌</summary>
+            <p>查看策略執行訊息，可依環境與筆數過濾。</p>
+            <form id="logForm" class="form inline">
+              <label>策略 ID <input type="text" id="logStrategyId" required></label>
+              <label>環境
+                <select id="logEnv">
+                  <option value="">全部</option>
+                  <option value="test">test</option>
+                  <option value="prod">prod</option>
+                </select>
+              </label>
+              <label>筆數 <input type="number" id="logLimit" value="50" min="1" max="200"></label>
+              <button type="submit" class="primary">查詢日誌</button>
+            </form>
+            <div id="logTable" class="table"></div>
+          </details>
+        </aside>
       </div>
-      <form id="strategyBacktestForm" class="form inline">
-        <div class="field-grid">
-          <label>選擇策略
-            <select id="strategyBacktestSelect">
-              <option value="">請先載入策略列表</option>
-            </select>
-          </label>
-          <label>或輸入策略 ID <input type="text" id="strategyBacktestId" placeholder="直接貼策略 ID"></label>
-          <label>起始日 <input type="date" id="strategyBtStart" required></label>
-          <label>結束日 <input type="date" id="strategyBtEnd" required></label>
-          <label>初始資金 (USDT) <input type="number" id="strategyBtEquity" value="10000" step="100"></label>
-          <label>成交價模式
-            <select id="strategyBtPriceMode">
-              <option value="next_open">次日開盤</option>
-              <option value="next_close">次日收盤</option>
-              <option value="current_close">當日收盤</option>
-            </select>
-          </label>
-          <label>手續費 (%) <input type="number" id="strategyBtFees" value="0.1" step="0.01"></label>
-          <label>滑價 (%) <input type="number" id="strategyBtSlippage" value="0.1" step="0.01"></label>
-          <label>停損 (%) <input type="number" id="strategyBtStop" placeholder="可留空" step="0.1"></label>
-          <label>停利 (%) <input type="number" id="strategyBtTake" placeholder="可留空" step="0.1"></label>
-          <label>單日最大虧損 (%) <input type="number" id="strategyBtDailyLoss" placeholder="可留空" step="0.1"></label>
-          <label>冷卻天數 <input type="number" id="strategyBtCoolDown" value="1" min="0" step="1"></label>
-          <label>最少持有天數 <input type="number" id="strategyBtMinHold" value="1" min="0" step="1"></label>
-          <label>最多同時持倉 <input type="number" id="strategyBtMaxPos" value="1" min="1" step="1"></label>
-        </div>
-        <div class="actions">
-          <button type="button" class="ghost btn-sm" id="strategyBacktestReload">重新載入策略列表</button>
-          <button type="submit" class="primary">執行回測</button>
-        </div>
-        <div id="strategyBacktestMessage" class="message"></div>
-      </form>
-      <div id="strategyBacktestSummary" class="result-panel"></div>
-      <div id="strategyBacktestTrades" class="table"></div>
-      <div class="subsection-title">歷史回測紀錄</div>
-      <form id="strategyBacktestFilterForm" class="form inline">
-        <label>開始日 <input type="date" id="strategyBtHistStart"></label>
-        <label>結束日 <input type="date" id="strategyBtHistEnd"></label>
-        <label>版次 <input type="number" id="strategyBtHistVersion" min="1" placeholder="可留空"></label>
-        <label>每頁筆數 <input type="number" id="strategyBtHistPageSize" value="10" min="1" max="200"></label>
-        <button type="submit" class="ghost btn-sm">套用篩選</button>
-      </form>
-      <div id="strategyBacktestHistory" class="table"></div>
-      <div class="pagination">
-        <button type="button" class="ghost btn-sm" id="strategyBtHistPrev">上一頁</button>
-        <span id="strategyBtHistPageInfo"></span>
-        <button type="button" class="ghost btn-sm" id="strategyBtHistNext">下一頁</button>
-        <div class="spacer"></div>
-        <button type="button" class="ghost btn-sm" id="exportBtTrades">匯出交易 CSV</button>
-        <button type="button" class="ghost btn-sm" id="exportBtEquity">匯出淨值 CSV</button>
-        <button type="button" class="ghost btn-sm" id="strategyBtGoReports">查看報告</button>
-      </div>
-      <div class="subsection-title">淨值曲線（回測）</div>
-      <div class="chart-wrap">
-        <div id="strategyEquityChart" class="chart-canvas small"></div>
-      </div>
-    </section>
-
-    <section class="panel span-2" id="tradePanel" data-section="trade">
-      <div class="panel-head">
-        <div>
-          <h2>交易紀錄</h2>
-          <p>查詢指定策略的紙本/正式交易紀錄。</p>
-        </div>
-      </div>
-      <form id="tradeForm" class="form inline">
-        <label>策略 ID <input type="text" id="tradeStrategyId" placeholder="可留空查全部"></label>
-        <label>環境
-          <select id="tradeEnv">
-            <option value="">全部</option>
-            <option value="test">test</option>
-            <option value="prod">prod</option>
-          </select>
-        </label>
-        <label>開始日 <input type="date" id="tradeStart"></label>
-        <label>結束日 <input type="date" id="tradeEnd"></label>
-        <button type="submit" class="primary">查詢交易</button>
-      </form>
-      <div id="tradeMeta" class="meta-row"></div>
-      <div id="tradeTable" class="table"></div>
-    </section>
-
-    <section class="panel span-2" id="reportPanel" data-section="report">
-      <div class="panel-head">
-        <div>
-          <h2>報告列表</h2>
-          <p>輸入策略 ID 取得已保存的回測/交易報告。</p>
-        </div>
-      </div>
-      <form id="reportForm" class="form inline">
-        <label>策略 ID <input type="text" id="reportStrategyId" required></label>
-        <button type="submit" class="primary">查詢報告</button>
-      </form>
-      <div id="reportMeta" class="meta-row"></div>
-      <div id="reportTable" class="table"></div>
-      <div class="subsection-title">報告詳情</div>
-      <div id="reportDetail" class="result-panel"></div>
-    </section>
-
-    <section class="panel span-2" id="positionPanel" data-section="position">
-      <div class="panel-head">
-        <div>
-          <h2>持倉列表</h2>
-          <p>查看目前未平倉部位（紙本/正式）。</p>
-        </div>
-      </div>
-      <form id="positionForm" class="form inline">
-        <label>環境
-          <select id="positionEnv">
-            <option value="">全部</option>
-            <option value="test">test</option>
-            <option value="prod">prod</option>
-          </select>
-        </label>
-        <button type="submit" class="primary">查詢持倉</button>
-      </form>
-      <div id="positionMeta" class="meta-row"></div>
-      <div id="positionTable" class="table"></div>
-    </section>
-
-    <section class="panel span-2" id="logPanel" data-section="logs">
-      <div class="panel-head">
-        <div>
-          <h2>策略日誌</h2>
-          <p>查看策略執行訊息，可依環境與筆數過濾。</p>
-        </div>
-      </div>
-      <form id="logForm" class="form inline">
-        <label>策略 ID <input type="text" id="logStrategyId" required></label>
-        <label>環境
-          <select id="logEnv">
-            <option value="">全部</option>
-            <option value="test">test</option>
-            <option value="prod">prod</option>
-          </select>
-        </label>
-        <label>筆數 <input type="number" id="logLimit" value="50" min="1" max="200"></label>
-        <button type="submit" class="primary">查詢日誌</button>
-      </form>
-      <div id="logMeta" class="meta-row"></div>
-      <div id="logTable" class="table"></div>
     </section>
 
     <section class="panel" id="activityPanel" data-section="activity">

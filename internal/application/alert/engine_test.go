@@ -3,6 +3,7 @@ package alert
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -197,6 +198,113 @@ func TestEngine_NotifierErrorContinue(t *testing.T) {
 	)
 	if err := engine.Run(context.Background(), date); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestEngine_ScreenerThresholdSkip(t *testing.T) {
+	date := time.Date(2024, 12, 2, 0, 0, 0, 0, time.UTC)
+	notifier := &fakeNotifier{}
+	engine := NewEngine(
+		fakeSubsRepo{list: []alertDomain.Subscription{{
+			ID:         "sub1",
+			Name:       "強勢股",
+			Type:       alertDomain.SubscriptionScreener,
+			Enabled:    true,
+			Threshold:  3,
+			Logic:      analysis.LogicAND,
+			Conditions: []analysis.Condition{numericCondForTest(analysis.FieldScore, analysis.OpGTE, 50)},
+			Channels:   []alertDomain.Channel{alertDomain.ChannelEmail},
+		}}},
+		fakeScreener{out: analysis.ScreenerOutput{Total: 2}},
+		fakeAnalysisQuery{},
+		fakeHealth{},
+		notifier,
+	)
+	if err := engine.Run(context.Background(), date); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(notifier.sent) != 0 {
+		t.Fatalf("should skip when below threshold")
+	}
+}
+
+func TestEngine_StockQueryError(t *testing.T) {
+	date := time.Date(2024, 12, 2, 0, 0, 0, 0, time.UTC)
+	notifier := &fakeNotifier{}
+	engine := NewEngine(
+		fakeSubsRepo{list: []alertDomain.Subscription{{
+			ID:       "stock1",
+			Name:     "單股監控",
+			Type:     alertDomain.SubscriptionStock,
+			Enabled:  true,
+			Symbol:   "2330",
+			Channels: []alertDomain.Channel{alertDomain.ChannelEmail},
+		}}},
+		fakeScreener{},
+		fakeAnalysisQuery{err: errors.New("query fail")},
+		fakeHealth{},
+		notifier,
+	)
+	if err := engine.Run(context.Background(), date); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(notifier.sent) != 0 {
+		t.Fatalf("should not send when query fails")
+	}
+}
+
+func TestEngine_SystemNoMetrics(t *testing.T) {
+	date := time.Date(2024, 12, 2, 0, 0, 0, 0, time.UTC)
+	notifier := &fakeNotifier{}
+	engine := NewEngine(
+		fakeSubsRepo{list: []alertDomain.Subscription{{
+			ID:       "sys1",
+			Name:     "系統警報",
+			Type:     alertDomain.SubscriptionSystem,
+			Enabled:  true,
+			Channels: []alertDomain.Channel{alertDomain.ChannelWebhook},
+		}}},
+		fakeScreener{},
+		fakeAnalysisQuery{},
+		fakeHealth{metrics: []alertDomain.SystemMetric{}},
+		notifier,
+	)
+	if err := engine.Run(context.Background(), date); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(notifier.sent) != 0 {
+		t.Fatalf("should not send when no metrics")
+	}
+}
+
+func TestMapStocksLimit(t *testing.T) {
+	var results []analysisDomain.DailyAnalysisResult
+	for i := 0; i < 12; i++ {
+		results = append(results, analysisDomain.DailyAnalysisResult{
+			Symbol:    fmt.Sprintf("S%02d", i),
+			Market:    dataingestion.MarketTWSE,
+			TradeDate: time.Now(),
+			Close:     float64(i),
+		})
+	}
+	out := mapStocks(results)
+	if len(out) != 10 {
+		t.Fatalf("expected limit 10, got %d", len(out))
+	}
+	if out[0].Symbol != "S00" || out[9].Symbol != "S09" {
+		t.Fatalf("unexpected ordering or truncation: first %s last %s", out[0].Symbol, out[9].Symbol)
+	}
+}
+
+func TestSendAllMultipleChannels(t *testing.T) {
+	notifier := &fakeNotifier{}
+	engine := &Engine{notifier: notifier}
+	sub := alertDomain.Subscription{Channels: []alertDomain.Channel{alertDomain.ChannelEmail, alertDomain.ChannelWebhook}}
+	if err := engine.sendAll(context.Background(), sub, alertDomain.Notification{SubscriptionID: "x"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(notifier.sent) != 2 {
+		t.Fatalf("expected two notifications, got %d", len(notifier.sent))
 	}
 }
 

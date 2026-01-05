@@ -1300,12 +1300,13 @@ refreshAccessToken().then((ok) => {
 });
 
 const today = new Date().toISOString().slice(0, 10);
-const startOfYear = new Date(Date.UTC(new Date().getUTCFullYear(), 0, 1)).toISOString().slice(0, 10);
+// 預設從比特幣早期有價格資料的時間開始（避免每年重設太短的區間）
+const btcStart = "2010-07-17";
 ["chartEnd"].forEach((id) => {
   const el = document.getElementById(id);
   if (el) el.value = today;
 });
-if (elements.chartStart) elements.chartStart.value = startOfYear;
+if (elements.chartStart) elements.chartStart.value = btcStart;
 setStrategyBacktestDefaults();
 
 Array.from(document.querySelectorAll(".chip[data-email]")).forEach((chip) => {

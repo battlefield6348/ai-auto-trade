@@ -2,6 +2,7 @@ package trading
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -357,10 +358,158 @@ func TestComputeStats(t *testing.T) {
 	}
 }
 
+func TestBacktest_RequireDates(t *testing.T) {
+	repo := &fakeRepo{}
+	svc := NewService(repo, dummyDataProvider{})
+	if _, err := svc.Backtest(context.Background(), BacktestInput{}); err == nil {
+		t.Fatalf("expected error when dates missing")
+	}
+	if repo.saveBacktestCalled != 0 {
+		t.Fatalf("should not save backtest on invalid input")
+	}
+}
+
+func TestBacktest_InlineStrategyAndSave(t *testing.T) {
+	day1 := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	day2 := day1.AddDate(0, 0, 1)
+	history := []analysisDomain.DailyAnalysisResult{
+		{TradeDate: day1, Close: 100, Score: 60},
+		{TradeDate: day2, Close: 110, Score: 80},
+	}
+	prices := []dataDomain.DailyPrice{
+		{TradeDate: day1, Open: 100, Close: 100},
+		{TradeDate: day2, Open: 110, Close: 110},
+	}
+	repo := &fakeRepo{}
+	svc := NewService(repo, stubDataProvider{history: history, prices: prices})
+
+	strategy := tradingDomain.Strategy{
+		ID:         "s1",
+		Name:       "inline",
+		BaseSymbol: "BTCUSDT",
+		Buy: tradingDomain.ConditionSet{
+			Logic: analysis.LogicAND,
+			Conditions: []analysis.Condition{
+				{Type: analysis.ConditionNumeric, Numeric: &analysis.NumericCondition{Field: analysis.FieldScore, Op: analysis.OpGTE, Value: 50}},
+			},
+		},
+		Sell: tradingDomain.ConditionSet{
+			Logic: analysis.LogicAND,
+			Conditions: []analysis.Condition{
+				{Type: analysis.ConditionNumeric, Numeric: &analysis.NumericCondition{Field: analysis.FieldScore, Op: analysis.OpGTE, Value: 70}},
+			},
+		},
+		Risk: tradingDomain.RiskSettings{OrderSizeValue: 1000, PriceMode: tradingDomain.PriceCurrentClose},
+	}
+
+	input := BacktestInput{
+		Inline:        &strategy,
+		StartDate:     day1,
+		EndDate:       day2,
+		InitialEquity: 5000,
+		CreatedBy:     "u1",
+		Save:          true,
+	}
+	rec, err := svc.Backtest(context.Background(), input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if repo.saveBacktestCalled != 1 {
+		t.Fatalf("expected save backtest once, got %d", repo.saveBacktestCalled)
+	}
+	if rec.Result.Stats.TradeCount == 0 {
+		t.Fatalf("expected trades in result")
+	}
+	if repo.lastBacktest.StrategyID != "s1" {
+		t.Fatalf("strategy id not propagated")
+	}
+}
+
+func TestBacktest_GetStrategyError(t *testing.T) {
+	repo := &fakeRepo{getErr: fmt.Errorf("boom")}
+	svc := NewService(repo, dummyDataProvider{})
+	_, err := svc.Backtest(context.Background(), BacktestInput{
+		StrategyID: "s1",
+		StartDate:  time.Now(),
+		EndDate:    time.Now().AddDate(0, 0, 1),
+	})
+	if err == nil {
+		t.Fatalf("expected error when repo get fails")
+	}
+}
+
+func TestUpdateStrategy_VersionBump(t *testing.T) {
+	repo := &fakeRepo{
+		lastStrategy: tradingDomain.Strategy{
+			ID:         "s1",
+			Name:       "old",
+			BaseSymbol: "BTCUSDT",
+			Timeframe:  "1d",
+			Env:        tradingDomain.EnvBoth,
+			Status:     tradingDomain.StatusDraft,
+			Version:    1,
+			Buy: tradingDomain.ConditionSet{
+				Logic: analysis.LogicAND,
+				Conditions: []analysis.Condition{
+					{Type: analysis.ConditionNumeric, Numeric: &analysis.NumericCondition{Field: analysis.FieldScore, Op: analysis.OpGTE, Value: 50}},
+				},
+			},
+			Sell: tradingDomain.ConditionSet{
+				Logic: analysis.LogicAND,
+				Conditions: []analysis.Condition{
+					{Type: analysis.ConditionNumeric, Numeric: &analysis.NumericCondition{Field: analysis.FieldScore, Op: analysis.OpLTE, Value: 30}},
+				},
+			},
+			Risk: tradingDomain.RiskSettings{OrderSizeValue: 1000, PriceMode: tradingDomain.PriceNextOpen},
+		},
+	}
+	svc := NewService(repo, dummyDataProvider{})
+	update := tradingDomain.Strategy{
+		Name:        "new",
+		Description: "desc",
+		Status:      tradingDomain.StatusActive,
+		Buy: tradingDomain.ConditionSet{
+			Logic: analysis.LogicAND,
+			Conditions: []analysis.Condition{
+				{Type: analysis.ConditionNumeric, Numeric: &analysis.NumericCondition{Field: analysis.FieldScore, Op: analysis.OpGTE, Value: 60}},
+			},
+		},
+		Sell: tradingDomain.ConditionSet{
+			Logic: analysis.LogicAND,
+			Conditions: []analysis.Condition{
+				{Type: analysis.ConditionNumeric, Numeric: &analysis.NumericCondition{Field: analysis.FieldScore, Op: analysis.OpLTE, Value: 20}},
+			},
+		},
+		Risk:      tradingDomain.RiskSettings{OrderSizeValue: 2000},
+		UpdatedBy: "u1",
+	}
+
+	out, err := svc.UpdateStrategy(context.Background(), "s1", update)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if out.Version != 2 {
+		t.Fatalf("expected version bump to 2, got %d", out.Version)
+	}
+	if repo.updateCalled != 1 {
+		t.Fatalf("expected repo update called once")
+	}
+	if repo.lastStrategy.Risk.OrderSizeValue != 2000 {
+		t.Fatalf("risk update not applied: %+v", repo.lastStrategy.Risk)
+	}
+	if repo.lastStrategy.Name != "new" || repo.lastStrategy.Status != tradingDomain.StatusActive {
+		t.Fatalf("fields not updated")
+	}
+}
+
 type fakeRepo struct {
-	createCalled int
-	lastStrategy tradingDomain.Strategy
-	id           string
+	createCalled       int
+	updateCalled       int
+	saveBacktestCalled int
+	lastStrategy       tradingDomain.Strategy
+	lastBacktest       tradingDomain.BacktestRecord
+	id                 string
+	getErr             error
 }
 
 func (f *fakeRepo) CreateStrategy(_ context.Context, s tradingDomain.Strategy) (string, error) {
@@ -372,8 +521,15 @@ func (f *fakeRepo) CreateStrategy(_ context.Context, s tradingDomain.Strategy) (
 	return f.id, nil
 }
 
-func (f *fakeRepo) UpdateStrategy(context.Context, tradingDomain.Strategy) error { return nil }
+func (f *fakeRepo) UpdateStrategy(_ context.Context, s tradingDomain.Strategy) error {
+	f.updateCalled++
+	f.lastStrategy = s
+	return nil
+}
 func (f *fakeRepo) GetStrategy(context.Context, string) (tradingDomain.Strategy, error) {
+	if f.getErr != nil {
+		return tradingDomain.Strategy{}, f.getErr
+	}
 	return f.lastStrategy, nil
 }
 func (f *fakeRepo) ListStrategies(context.Context, StrategyFilter) ([]tradingDomain.Strategy, error) {
@@ -382,8 +538,10 @@ func (f *fakeRepo) ListStrategies(context.Context, StrategyFilter) ([]tradingDom
 func (f *fakeRepo) SetStatus(context.Context, string, tradingDomain.Status, tradingDomain.Environment) error {
 	return nil
 }
-func (f *fakeRepo) SaveBacktest(context.Context, tradingDomain.BacktestRecord) (string, error) {
-	return "", nil
+func (f *fakeRepo) SaveBacktest(_ context.Context, rec tradingDomain.BacktestRecord) (string, error) {
+	f.saveBacktestCalled++
+	f.lastBacktest = rec
+	return "bt-1", nil
 }
 func (f *fakeRepo) ListBacktests(context.Context, string) ([]tradingDomain.BacktestRecord, error) {
 	return nil, nil
@@ -417,4 +575,17 @@ func (dummyDataProvider) FindHistory(context.Context, string, *time.Time, *time.
 
 func (dummyDataProvider) PricesByPair(context.Context, string) ([]dataDomain.DailyPrice, error) {
 	return nil, nil
+}
+
+type stubDataProvider struct {
+	history []analysisDomain.DailyAnalysisResult
+	prices  []dataDomain.DailyPrice
+}
+
+func (s stubDataProvider) FindHistory(context.Context, string, *time.Time, *time.Time, int, bool) ([]analysisDomain.DailyAnalysisResult, error) {
+	return s.history, nil
+}
+
+func (s stubDataProvider) PricesByPair(context.Context, string) ([]dataDomain.DailyPrice, error) {
+	return s.prices, nil
 }

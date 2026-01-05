@@ -39,9 +39,9 @@ func (r *TradingRepo) CreateStrategy(ctx context.Context, s tradingDomain.Strate
 	const q = `
 INSERT INTO strategies (name, description, base_symbol, timeframe, env, status, version, buy_conditions, sell_conditions, risk_settings, user_id, created_by, updated_by)
 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-        COALESCE($11, $12, $13),
-        COALESCE($12, $11),
-        COALESCE($13, $11))
+        COALESCE($11::uuid, $12::uuid, $13::uuid),
+        COALESCE($12::uuid, $11::uuid),
+        COALESCE($13::uuid, $11::uuid))
 RETURNING id, created_at, updated_at;
 `
 	var id string

@@ -2006,20 +2006,20 @@ const conditionTypeOptions = [
 ];
 
 const numericFieldOptions = [
-  { value: "score", label: "score" },
-  { value: "return5", label: "return5" },
-  { value: "return20", label: "return20" },
-  { value: "return60", label: "return60" },
-  { value: "volume_multiple", label: "volume_multiple" },
-  { value: "deviation20", label: "deviation20" },
-  { value: "range_pos20", label: "range_pos20" },
-  { value: "amplitude", label: "amplitude" },
-  { value: "avg_amplitude20", label: "avg_amplitude20" },
-  { value: "ma5", label: "ma5" },
-  { value: "ma10", label: "ma10" },
-  { value: "ma20", label: "ma20" },
-  { value: "ma60", label: "ma60" },
-  { value: "close", label: "close" },
+  { value: "score", label: "分數 (score)" },
+  { value: "return5", label: "近5日報酬 (%)" },
+  { value: "return20", label: "近20日報酬 (%)" },
+  { value: "return60", label: "近60日報酬 (%)" },
+  { value: "volume_multiple", label: "量能倍率 (vs 20 日)" },
+  { value: "deviation20", label: "乖離率 (MA20)" },
+  { value: "range_pos20", label: "20 日區間位置 (0-1)" },
+  { value: "amplitude", label: "當日振幅" },
+  { value: "avg_amplitude20", label: "近20日平均振幅" },
+  { value: "ma5", label: "MA5" },
+  { value: "ma10", label: "MA10" },
+  { value: "ma20", label: "MA20" },
+  { value: "ma60", label: "MA60" },
+  { value: "close", label: "收盤價" },
 ];
 
 const conditionOps = [

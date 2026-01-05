@@ -280,6 +280,83 @@ func TestMergeParamsOverrides(t *testing.T) {
 	}
 }
 
+func TestMergeParams_DefaultInitialEquity(t *testing.T) {
+	strategy := tradingDomain.Strategy{Risk: tradingDomain.RiskSettings{PriceMode: tradingDomain.PriceNextOpen}}
+	start := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 0, 1)
+	params := mergeParams(strategy, BacktestInput{StartDate: start, EndDate: end})
+	if params.InitialEquity != 10000 {
+		t.Fatalf("expected default initial equity 10000, got %f", params.InitialEquity)
+	}
+}
+
+func TestOrderSizePercentEquity(t *testing.T) {
+	engine := backtestEngine{
+		params: tradingDomain.BacktestParams{
+			Strategy: tradingDomain.Strategy{
+				Risk: tradingDomain.RiskSettings{
+					OrderSizeMode:  tradingDomain.OrderPercentEquity,
+					OrderSizeValue: 0.1,
+				},
+			},
+		},
+	}
+	if v := engine.orderSize(10000); v != 1000 {
+		t.Fatalf("percent equity order size wrong: %f", v)
+	}
+}
+
+func TestPickPriceModes(t *testing.T) {
+	date := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	priceMap := map[string]dataDomain.DailyPrice{
+		"2025-01-02": {Open: 10, Close: 12},
+	}
+	engine := backtestEngine{}
+
+	price, ok := engine.pickPrice(date, priceMap, tradingDomain.PriceNextOpen, 9)
+	if !ok || price != 10 {
+		t.Fatalf("next open failed, price=%f ok=%v", price, ok)
+	}
+	price, ok = engine.pickPrice(date, priceMap, tradingDomain.PriceNextClose, 9)
+	if !ok || price != 12 {
+		t.Fatalf("next close failed, price=%f ok=%v", price, ok)
+	}
+	_, ok = engine.pickPrice(date, priceMap, "unknown", 9)
+	if ok {
+		t.Fatalf("unknown mode should fail")
+	}
+}
+
+func TestComputeStats(t *testing.T) {
+	trades := []tradingDomain.BacktestTrade{
+		{PNL: 100}, {PNL: -50}, {PNL: 150},
+	}
+	equity := []tradingDomain.EquityPoint{
+		{Date: time.Now(), Equity: 10000},
+		{Date: time.Now(), Equity: 9000},
+		{Date: time.Now(), Equity: 12000},
+	}
+	stats := computeStats(trades, equity, 10000)
+	if stats.TotalReturn < 0.19 || stats.TotalReturn > 0.21 {
+		t.Fatalf("unexpected total return %f", stats.TotalReturn)
+	}
+	if stats.MaxDrawdown < 0.09 || stats.MaxDrawdown > 0.11 {
+		t.Fatalf("unexpected max drawdown %f", stats.MaxDrawdown)
+	}
+	if stats.TradeCount != 3 || stats.WinRate < 0.65 || stats.WinRate > 0.67 {
+		t.Fatalf("unexpected trade count/win rate: %d %f", stats.TradeCount, stats.WinRate)
+	}
+	if stats.ProfitFactor < 4.9 || stats.ProfitFactor > 5.1 {
+		t.Fatalf("unexpected profit factor %f", stats.ProfitFactor)
+	}
+	if stats.AvgGain < 124 || stats.AvgGain > 126 {
+		t.Fatalf("unexpected avg gain %f", stats.AvgGain)
+	}
+	if stats.AvgLoss > -49 || stats.AvgLoss < -51 {
+		t.Fatalf("unexpected avg loss %f", stats.AvgLoss)
+	}
+}
+
 type fakeRepo struct {
 	createCalled int
 	lastStrategy tradingDomain.Strategy

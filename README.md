@@ -100,7 +100,7 @@
 ├── frontend
 │   └── web-console         # 前端 Web Console
 ├── docs
-│   ├── architecture.md
+│   ├── 系統架構.md
 │   ├── strategy            # 價格行為與交易策略文件
 │   ├── backend
 │   └── frontend

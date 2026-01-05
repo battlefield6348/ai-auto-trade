@@ -1,5 +1,5 @@
 -- Initial schema for Taiwan Stock Analyzer (PostgreSQL)
--- Generated from docs/specs/database_schema.md v1.0 (2025-12-03)
+-- Generated from docs/specs/資料庫結構.md v1.0 (2025-12-03)
 
 -- Helpers
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";

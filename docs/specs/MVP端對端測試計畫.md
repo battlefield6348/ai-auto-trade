@@ -19,7 +19,7 @@
 
 ## 2. 測試範圍
 
-對應 `/docs/specs/mvp_end_to_end_flow.md`，測試項目包含：
+對應 `/docs/specs/MVP端對端流程.md`，測試項目包含：
 
 1. 使用者登入  
 2. Data Ingestion（單日抓取，BTC/USDT）  

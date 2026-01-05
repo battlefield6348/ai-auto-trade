@@ -11,7 +11,7 @@
 本文件將 `/docs/specs/*.md` 中與 MVP 相關的規格，轉換為「可執行的開發任務清單」，供 Codex 依序實作。
 
 目標：  
-完成一條可跑通的端到端流程（詳見 `/docs/specs/mvp_end_to_end_flow.md`），現已改為 **BTC 現貨（BTC/USDT）** 場景：
+完成一條可跑通的端到端流程（詳見 `/docs/specs/MVP端對端流程.md`），現已改為 **BTC 現貨（BTC/USDT）** 場景：
 
 > 已登入的使用者，可以呼叫 API，取得某一交易日的「BTC 分析與強勢條件結果」，  
 > 並且這份清單以交易所日 K 資料（預設 Binance 1d；失敗時允許合成日 K 備援）計算而得。
@@ -22,14 +22,14 @@
 
 MVP 需遵守以下規格文件（僅取子集實作）：
 
-- `/docs/specs/authentication_authorization.md`
-- `/docs/specs/roles_permissions.md`
-- `/docs/specs/database_schema.md`
-- `/docs/specs/data_ingestion.md`（MVP 子集，目標來源為 Binance BTC/USDT 1d K 線；允許合成備援）
-- `/docs/specs/daily_batch_analysis.md`（MVP 子集，針對 BTC 單一交易對）
-- `/docs/specs/query_and_export.md`（MVP 子集）
-- `/docs/specs/stock_screener.md`（MVP 子集；目前僅 BTCUSDT 但預留擴充）
-- `/docs/specs/mvp_end_to_end_flow.md`
+- `/docs/specs/身分驗證與授權.md`
+- `/docs/specs/角色與權限.md`
+- `/docs/specs/資料庫結構.md`
+- `/docs/specs/資料擷取流程.md`（MVP 子集，目標來源為 Binance BTC/USDT 1d K 線；允許合成備援）
+- `/docs/specs/日批次分析.md`（MVP 子集，針對 BTC 單一交易對）
+- `/docs/specs/查詢與匯出.md`（MVP 子集）
+- `/docs/specs/選股篩選器.md`（MVP 子集；目前僅 BTCUSDT 但預留擴充）
+- `/docs/specs/MVP端對端流程.md`
 
 ---
 
@@ -72,7 +72,7 @@ MVP 實作分為以下階段，須依照順序：
 
 3. 預留 migration 機制：
    - 定義一個標準執行 migration 的入口（例如啟動時自動或獨立指令）。
-   - 後續由 Codex 依 `database_schema.md` 產生 migration。
+   - 後續由 Codex 依 `資料庫結構.md` 產生 migration。
 
 ---
 
@@ -88,7 +88,7 @@ MVP 實作分為以下階段，須依照順序：
 
 ### 5.2 任務
 
-1. 依 `database_schema.md` 實作以下資料表：
+1. 依 `資料庫結構.md` 實作以下資料表：
    - `users`
    - `roles`
    - `user_roles`
@@ -100,7 +100,7 @@ MVP 實作分為以下階段，須依照順序：
    - 能建立初始使用者帳號（例如 seed 一個 admin、一個 user）。
 
 3. 實作登入流程：
-   - 依 `authentication_authorization.md` 與 `mvp_end_to_end_flow.md` 定義的 `/api/auth/login`。
+   - 依 `身分驗證與授權.md` 與 `MVP端對端流程.md` 定義的 `/api/auth/login`。
    - 驗證 email + 密碼，簽發 Access Token。
 
 4. 實作 token 驗證 middleware：
@@ -109,7 +109,7 @@ MVP 實作分為以下階段，須依照順序：
    - 將目前使用者上下文注入後續 handler。
 
 5. 實作權限檢查機制：
-   - 依 `roles_permissions.md` 設計角色 → 權限 mapping。
+   - 依 `角色與權限.md` 設計角色 → 權限 mapping。
    - 提供統一方法檢查「目前使用者是否擁有某權限」。
 
 6. 為後續 API 定義基本保護規則：
@@ -126,7 +126,7 @@ MVP 實作分為以下階段，須依照順序：
 
 ### 6.2 任務
 
-1. 依 `database_schema.md` 建立以下資料表與對應 Domain Model / Repository 介面：
+1. 依 `資料庫結構.md` 建立以下資料表與對應 Domain Model / Repository 介面：
    - `stocks`（交易對，預設 BTC/USDT）
    - `daily_prices`
    - `analysis_results`
@@ -157,7 +157,7 @@ MVP 實作分為以下階段，須依照順序：
 
 ### 7.2 任務
 
-1. 根據 `data_ingestion.md` 與 `mvp_end_to_end_flow.md`：
+1. 根據 `資料擷取流程.md` 與 `MVP端對端流程.md`：
    - 定義 `/api/admin/ingestion/daily` 的 Handler 行為。
 
 2. Ingestion 流程（MVP）：
@@ -176,7 +176,7 @@ MVP 實作分為以下階段，須依照順序：
    - 僅 `admin` / `analyst` 且具 `ingestion.trigger_daily` 權限的使用者可呼叫。
 
 4. 輸出：
-   - 按 `mvp_end_to_end_flow.md` 定義的回應格式回傳結果統計。
+   - 按 `MVP端對端流程.md` 定義的回應格式回傳結果統計。
 
 ---
 
@@ -190,7 +190,7 @@ MVP 實作分為以下階段，須依照順序：
 
 ### 8.2 任務
 
-1. 依 `daily_batch_analysis.md` 與 `mvp_end_to_end_flow.md`：
+1. 依 `日批次分析.md` 與 `MVP端對端流程.md`：
    - 定義 `/api/admin/analysis/daily` 行為。
 
 2. 分析流程（MVP）：
@@ -227,7 +227,7 @@ MVP 實作分為以下階段，須依照順序：
 
 ### 9.2 任務
 
-1. 依 `query_and_export.md` 與 `mvp_end_to_end_flow.md`：
+1. 依 `查詢與匯出.md` 與 `MVP端對端流程.md`：
    - 實作 `/api/analysis/daily`：
 
      - 欄位：
@@ -266,7 +266,7 @@ MVP 實作分為以下階段，須依照順序：
 
 ### 10.2 任務
 
-1. 依 `stock_screener.md` 與 `mvp_end_to_end_flow.md`：
+1. 依 `選股篩選器.md` 與 `MVP端對端流程.md`：
    - 實作 `/api/screener/strong-stocks`：
 
      - Query 參數：
@@ -304,7 +304,7 @@ MVP 實作分為以下階段，須依照順序：
 
 ### 11.2 任務
 
-1. 統一錯誤回應格式（對照 `mvp_end_to_end_flow.md`）。  
+1. 統一錯誤回應格式（對照 `MVP端對端流程.md`）。  
 2. 為以下情境提供明確錯誤碼：
    - 未登入 / token 錯誤。
    - 權限不足。
@@ -324,10 +324,10 @@ MVP 實作分為以下階段，須依照順序：
 以下為建議直接給 Codex 的執行順序：
 
 1. 讀取：
-   - `/docs/specs/database_schema.md`
-   - `/docs/specs/authentication_authorization.md`
-   - `/docs/specs/roles_permissions.md`
-   - `/docs/specs/mvp_end_to_end_flow.md`
+   - `/docs/specs/資料庫結構.md`
+   - `/docs/specs/身分驗證與授權.md`
+   - `/docs/specs/角色與權限.md`
+   - `/docs/specs/MVP端對端流程.md`
 
 2. 先完成：
    - DB schema + migration

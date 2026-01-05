@@ -1,5 +1,5 @@
 -- Trading strategies, backtests, trades, positions, logs, reports
--- Derived from docs/specs/trade_conditions_backtesting.md v1.0
+-- Derived from docs/specs/交易策略與回測.md v1.0
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 

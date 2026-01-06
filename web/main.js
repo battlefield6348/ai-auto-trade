@@ -83,6 +83,7 @@ const elements = {
   strategyBacktestSummary: document.getElementById("strategyBacktestSummary"),
   strategyBacktestTrades: document.getElementById("strategyBacktestTrades"),
   strategyBacktestHistory: document.getElementById("strategyBacktestHistory"),
+  strategyPriceChart: document.getElementById("strategyPriceChart"),
   strategyBtHistStart: document.getElementById("strategyBtHistStart"),
   strategyBtHistEnd: document.getElementById("strategyBtHistEnd"),
   strategyBtHistVersion: document.getElementById("strategyBtHistVersion"),
@@ -1600,12 +1601,91 @@ const renderEquityChart = (equity = [], trades = []) => {
   `;
 };
 
+const renderPriceChart = (prices = [], trades = []) => {
+  if (!elements.strategyPriceChart) return;
+  if (!prices.length) {
+    renderEmptyState(elements.strategyPriceChart, "尚無走勢資料");
+    return;
+  }
+  const width = elements.strategyPriceChart.clientWidth || 640;
+  const height = elements.strategyPriceChart.clientHeight || 220;
+  const padding = { top: 16, right: 16, bottom: 28, left: 48 };
+  const plotWidth = Math.max(width - padding.left - padding.right, 1);
+  const plotHeight = Math.max(height - padding.top - padding.bottom, 1);
+  const values = prices.map((p) => p.close_price);
+  const minV = Math.min(...values);
+  const maxV = Math.max(...values);
+  const range = maxV - minV || 1;
+  const step = prices.length > 1 ? plotWidth / (prices.length - 1) : plotWidth;
+  const points = prices.map((p, idx) => {
+    const x = padding.left + (prices.length > 1 ? idx * step : plotWidth / 2);
+    const y = padding.top + (1 - (p.close_price - minV) / range) * plotHeight;
+    return { x, y, date: p.trade_date, close: p.close_price };
+  });
+  const linePath = points.map((pt, idx) => `${idx === 0 ? "M" : "L"}${pt.x},${pt.y}`).join(" ");
+  const areaPath = `${linePath} L ${padding.left + plotWidth},${padding.top + plotHeight} L ${
+    padding.left
+  },${padding.top + plotHeight} Z`;
+
+  const gridLines = [];
+  const axisLabels = [];
+  const tickCount = 4;
+  for (let i = 0; i <= tickCount; i++) {
+    const y = padding.top + (plotHeight / tickCount) * i;
+    const val = maxV - (range / tickCount) * i;
+    gridLines.push(`<line x1="${padding.left}" y1="${y}" x2="${padding.left + plotWidth}" y2="${y}" />`);
+    axisLabels.push(`<text x="${padding.left - 6}" y="${y + 4}" text-anchor="end">${fmtPrice(val)}</text>`);
+  }
+  const xLabels = [];
+  const labelIndexes = [0, Math.floor((prices.length - 1) / 2), prices.length - 1].filter(
+    (v, i, arr) => arr.indexOf(v) === i
+  );
+  labelIndexes.forEach((idx) => {
+    const pt = points[idx];
+    if (!pt) return;
+    xLabels.push(
+      `<text x="${pt.x}" y="${padding.top + plotHeight + 18}" text-anchor="middle">${fmtDate(pt.date)}</text>`
+    );
+  });
+
+  const entryDates = new Set(trades.map((t) => fmtDate(t.entry_date)));
+  const exitDates = new Set(trades.map((t) => fmtDate(t.exit_date)));
+  const markers = points
+    .map((pt) => {
+      const date = fmtDate(pt.date);
+      const markersForDay = [];
+      if (entryDates.has(date)) {
+        markersForDay.push(
+          `<circle cx="${pt.x}" cy="${pt.y}" r="4" fill="var(--accent)" stroke="#fff" stroke-width="1.2" />`
+        );
+      }
+      if (exitDates.has(date)) {
+        markersForDay.push(
+          `<rect x="${pt.x - 4}" y="${pt.y - 4}" width="8" height="8" fill="var(--warn)" stroke="#fff" stroke-width="1.2" />`
+        );
+      }
+      return markersForDay.join("");
+    })
+    .join("");
+
+  elements.strategyPriceChart.innerHTML = `
+    <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-label="回測價格走勢">
+      <g class="chart-grid">${gridLines.join("")}</g>
+      <g class="chart-axis">${axisLabels.join("")}${xLabels.join("")}</g>
+      <path class="chart-area" d="${areaPath}"></path>
+      <path class="chart-line" d="${linePath}"></path>
+      ${markers}
+    </svg>
+  `;
+};
+
 const renderStrategyBacktestSummary = (rec) => {
   if (!elements.strategyBacktestSummary) return;
   if (!rec) {
     renderEmptyState(elements.strategyBacktestSummary, "尚未執行回測");
     renderStrategyBacktestTrades([]);
     renderEquityChart([]);
+    renderPriceChart([]);
     renderStrategyBacktestHistory([]);
     return;
   }
@@ -1647,6 +1727,7 @@ const renderStrategyBacktestSummary = (rec) => {
   `;
   renderStrategyBacktestTrades(result.trades || []);
   renderEquityChart(result.equity_curve || [], result.trades || []);
+  loadBacktestPriceChart(params, result.trades || []);
   state.lastStrategyBacktest = rec;
 };
 
@@ -1673,6 +1754,23 @@ const runStrategyBacktest = async () => {
   } catch (err) {
     setMessage(elements.strategyBacktestMessage, `回測失敗：${err.message}`, "error");
     renderStrategyBacktestSummary(null);
+  }
+};
+
+const loadBacktestPriceChart = async (params, trades) => {
+  if (!elements.strategyPriceChart) return;
+  const symbol = params?.strategy?.base_symbol || "BTCUSDT";
+  const start = fmtDate(params.start_date);
+  const end = fmtDate(params.end_date);
+  try {
+    renderEmptyState(elements.strategyPriceChart, "載入走勢中...");
+    const res = await api(
+      `/api/analysis/history?symbol=${symbol}&start_date=${start}&end_date=${end}&only_success=true`
+    );
+    const items = res.items || [];
+    renderPriceChart(items, trades);
+  } catch (err) {
+    renderEmptyState(elements.strategyPriceChart, `走勢載入失敗：${err.message}`);
   }
 };
 

@@ -11,6 +11,7 @@ const state = {
   strategyBacktests: [],
   strategyBacktestsAll: [],
   strategyBacktestPage: { page: 1, size: 10 },
+  strategyTab: "list",
   lastStrategyBacktest: null,
   lastRunTrades: [],
   reports: [],
@@ -107,6 +108,8 @@ const elements = {
   sellConditions: document.getElementById("sellConditions"),
   addBuyCondition: document.getElementById("addBuyCondition"),
   addSellCondition: document.getElementById("addSellCondition"),
+  strategyTabButtons: Array.from(document.querySelectorAll("[data-strategy-tab]")),
+  strategyPanes: Array.from(document.querySelectorAll("[data-strategy-pane]")),
   orderSizeMode: document.getElementById("orderSizeMode"),
   orderSizeValue: document.getElementById("orderSizeValue"),
   priceMode: document.getElementById("priceMode"),
@@ -1411,6 +1414,16 @@ const loadStrategies = async () => {
   logActivity("查詢策略列表", `筆數 ${fmtInt(state.strategies.length)}`);
   touchUpdatedAt();
   setStatus("策略列表已更新", "good");
+};
+
+const showStrategyTab = (tab) => {
+  state.strategyTab = tab;
+  elements.strategyTabButtons.forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.strategyTab === tab);
+  });
+  elements.strategyPanes.forEach((pane) => {
+    pane.classList.toggle("hidden", pane.dataset.strategyPane !== tab);
+  });
 };
 
 const resetStrategyForm = () => {
@@ -2990,6 +3003,12 @@ if (elements.strategyForm) {
       setStatus(`載入策略失敗：${err.message}`, "warn");
     }
   });
+}
+if (elements.strategyTabButtons.length) {
+  elements.strategyTabButtons.forEach((btn) => {
+    btn.addEventListener("click", () => showStrategyTab(btn.dataset.strategyTab));
+  });
+  showStrategyTab("list");
 }
 
 if (elements.tradeForm) {

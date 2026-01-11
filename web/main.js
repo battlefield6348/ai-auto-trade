@@ -1340,6 +1340,7 @@ const renderStrategyTable = (items = []) => {
         <button class="ghost btn-sm" data-action="activate" data-env="test" data-id="${fmtText(s.id)}">啟用 test</button>
         <button class="ghost btn-sm" data-action="activate" data-env="prod" data-id="${fmtText(s.id)}">啟用 prod</button>
         <button class="ghost btn-sm" data-action="deactivate" data-id="${fmtText(s.id)}">停用</button>
+        <button class="ghost btn-sm" data-action="edit" data-id="${fmtText(s.id)}">編輯</button>
         <button class="danger ghost btn-sm" data-action="delete" data-id="${fmtText(s.id)}">刪除</button>
       </div>
     `,
@@ -1410,6 +1411,45 @@ const loadStrategies = async () => {
   logActivity("查詢策略列表", `筆數 ${fmtInt(state.strategies.length)}`);
   touchUpdatedAt();
   setStatus("策略列表已更新", "good");
+};
+
+const resetStrategyForm = () => {
+  state.editingStrategyId = null;
+  if (elements.createStrategyForm) {
+    elements.createStrategyForm.reset();
+    loadStrategyTemplate();
+  }
+  if (elements.createStrategyMessage) elements.createStrategyMessage.textContent = "";
+};
+
+const loadStrategyToForm = async (id) => {
+  try {
+    requireLogin();
+    const res = await api(`/api/admin/strategies/${id}`);
+    const s = res.strategy;
+    state.editingStrategyId = s.id;
+    if (elements.createStrategyName) elements.createStrategyName.value = s.name || "";
+    if (elements.createStrategySymbol) elements.createStrategySymbol.value = s.base_symbol || "BTCUSDT";
+    if (elements.createStrategyTimeframe) elements.createStrategyTimeframe.value = s.timeframe || "1d";
+    if (elements.createStrategyEnv) elements.createStrategyEnv.value = s.env || "both";
+    if (elements.buyLogic) elements.buyLogic.value = s.buy_conditions?.logic || "AND";
+    if (elements.sellLogic) elements.sellLogic.value = s.sell_conditions?.logic || "AND";
+    resetConditionRows(elements.buyConditions, s.buy_conditions?.conditions || []);
+    resetConditionRows(elements.sellConditions, s.sell_conditions?.conditions || []);
+    if (elements.orderSizeMode) elements.orderSizeMode.value = s.risk_settings?.order_size_mode || "fixed_usdt";
+    if (elements.orderSizeValue) elements.orderSizeValue.value = s.risk_settings?.order_size_value || 1000;
+    if (elements.priceMode) elements.priceMode.value = s.risk_settings?.price_mode || "next_open";
+    if (elements.feesPct) elements.feesPct.value = (s.risk_settings?.fees_pct ?? 0) * 100;
+    if (elements.slippagePct) elements.slippagePct.value = (s.risk_settings?.slippage_pct ?? 0) * 100;
+    if (elements.stopLossPct) elements.stopLossPct.value = s.risk_settings?.stop_loss_pct ? s.risk_settings.stop_loss_pct * 100 : "";
+    if (elements.takeProfitPct) elements.takeProfitPct.value = s.risk_settings?.take_profit_pct ? s.risk_settings.take_profit_pct * 100 : "";
+    if (elements.coolDownDays) elements.coolDownDays.value = s.risk_settings?.cool_down_days ?? 1;
+    if (elements.minHoldDays) elements.minHoldDays.value = s.risk_settings?.min_hold_days ?? 0;
+    if (elements.maxPositions) elements.maxPositions.value = s.risk_settings?.max_positions ?? 1;
+    updateStrategyPreview();
+  } catch (err) {
+    setMessage(elements.createStrategyMessage, `載入策略失敗：${err.message}`, "error");
+  }
 };
 
 const syncStrategyOptions = () => {
@@ -2548,13 +2588,23 @@ const createStrategy = async () => {
   const payload = res.value;
   try {
     requireLogin();
-    await api("/api/admin/strategies", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-    setMessage(elements.createStrategyMessage, "策略建立成功", "good");
-    logActivity("建立策略", `名稱 ${payload.name} · env ${payload.env}`);
+    if (state.editingStrategyId) {
+      await api(`/api/admin/strategies/${state.editingStrategyId}`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      });
+      setMessage(elements.createStrategyMessage, "策略已更新", "good");
+      logActivity("更新策略", `ID ${state.editingStrategyId} · 名稱 ${payload.name}`);
+    } else {
+      await api("/api/admin/strategies", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      setMessage(elements.createStrategyMessage, "策略建立成功", "good");
+      logActivity("建立策略", `名稱 ${payload.name} · env ${payload.env}`);
+    }
     await loadStrategies();
+    resetStrategyForm();
   } catch (err) {
     setMessage(elements.createStrategyMessage, `建立失敗：${err.message}`, "error");
   }
@@ -2608,6 +2658,9 @@ const bindStrategyActions = () => {
           await deactivateStrategy(id);
         } else if (action === "run") {
           await runStrategyOnce(id, env);
+        } else if (action === "edit") {
+          await loadStrategyToForm(id);
+          setStatus(`已載入策略 ${id}，可直接修改`, "info");
         } else if (action === "delete") {
           if (!confirm("確定刪除策略？相關回測、交易與報告也會被移除。")) {
             setStatus("已取消刪除", "warn");

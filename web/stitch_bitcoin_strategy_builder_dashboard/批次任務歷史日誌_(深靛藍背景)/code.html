@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="zh-Hant"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>批次任務歷史日誌 - CryptoTrade Pro</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Noto+Sans+TC:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#0ddff2",
+                        "primary-dim": "#08919e",
+                        "background-dark": "#0A0E1A",
+                        "panel-dark": "#111625",
+                        "border-dark": "#1E293B",
+                        "input-bg": "#161b2e",
+                        "highlight-red": "rgba(239, 68, 68, 0.1)",
+                        "highlight-red-border": "rgba(239, 68, 68, 0.2)",
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "Noto Sans TC", "sans-serif"],
+                        "mono": ["Space Grotesk", "monospace"], // Using Space Grotesk for mono-like numbers
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: "Space Grotesk", "Noto Sans TC", sans-serif;
+        }
+        /* Custom scrollbar for webkit */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0A0E1A; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1E293B; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #2D3B55; 
+        }
+        .neon-glow {
+            box-shadow: 0 0 10px rgba(13, 223, 242, 0.15);
+        }
+    </style>
+</head>
+<body>
+<div class="relative flex h-screen w-full flex-col bg-background-dark text-white overflow-hidden">
+<!-- Top Navbar -->
+<header class="flex flex-none items-center justify-between whitespace-nowrap border-b border-border-dark bg-background-dark/95 backdrop-blur px-6 py-3 z-20">
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-3 text-white">
+<div class="size-8 text-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-3xl">currency_bitcoin</span>
+</div>
+<h2 class="text-white text-xl font-bold leading-tight tracking-tight">CryptoTrade Pro</h2>
+</div>
+<nav class="hidden md:flex items-center gap-6">
+<a class="text-slate-400 hover:text-primary transition-colors text-sm font-medium leading-normal" href="#">儀表板</a>
+<a class="text-slate-400 hover:text-primary transition-colors text-sm font-medium leading-normal" href="#">交易</a>
+<a class="text-primary text-sm font-medium leading-normal neon-glow" href="#">系統監控</a>
+<a class="text-slate-400 hover:text-primary transition-colors text-sm font-medium leading-normal" href="#">設置</a>
+</nav>
+</div>
+<div class="flex flex-1 justify-end gap-6 items-center">
+<div class="hidden lg:flex w-full max-w-xs items-center rounded-lg bg-input-bg border border-border-dark focus-within:border-primary/50 transition-colors h-9">
+<div class="text-slate-400 flex items-center justify-center pl-3">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</div>
+<input class="w-full bg-transparent border-none text-white placeholder:text-slate-500 text-sm focus:ring-0 px-3" placeholder="Search logs, tasks..."/>
+</div>
+<div class="flex gap-2">
+<button class="relative flex items-center justify-center rounded-lg size-9 hover:bg-white/5 transition-colors text-slate-300 hover:text-white">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+<span class="absolute top-2 right-2 size-2 rounded-full bg-red-500 border border-background-dark"></span>
+</button>
+<button class="flex items-center justify-center rounded-lg size-9 hover:bg-white/5 transition-colors text-slate-300 hover:text-white">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+</button>
+</div>
+<div class="h-9 w-9 rounded-full bg-cover bg-center border border-border-dark" data-alt="User avatar profile picture" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCdVZQOvGNZOW-Xk-nTMuMLg_nsc2B0XyAKBweojKJPF_gVVQ3ppRDvWJIoU8RrHhZF6SEXmMAc4ncLq9wj177lkbhT861fD8ONnySl9KPMTfImmfpUbsppcIEkqj_ypXZK754nuijYxu3anX4VUrdK4Z45GD2yJ5RrhmLhrj7SdzYfAo6FIF5hy0JsiuJyt0HsNkKxezDNcU-xXBNravW7uBpRj05NSyFr4kc0VX-l40wOSTlJAidMlijDPPG7yucfprgOuh7oQ4E");'></div>
+</div>
+</header>
+<!-- Main Content Layout -->
+<div class="flex flex-1 overflow-hidden">
+<!-- Sidebar Filter Panel -->
+<aside class="w-72 flex-none flex flex-col border-r border-border-dark bg-panel-dark overflow-y-auto">
+<div class="p-5 flex flex-col gap-6">
+<div>
+<h1 class="text-white text-lg font-bold flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">filter_list</span>
+                            篩選器
+                        </h1>
+<p class="text-slate-500 text-xs mt-1">自訂查詢條件以過濾日誌</p>
+</div>
+<!-- Date Range Filter -->
+<div class="flex flex-col gap-3">
+<label class="text-slate-300 text-sm font-medium">日期範圍</label>
+<div class="flex flex-col gap-2">
+<div class="relative group">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-[18px]">calendar_today</span>
+<input class="w-full bg-input-bg border border-border-dark rounded-lg py-2 pl-10 pr-3 text-sm text-white placeholder-slate-600 focus:border-primary focus:ring-1 focus:ring-primary transition-all cursor-pointer hover:border-slate-600" placeholder="開始日期" type="text" value="2023-10-25 00:00"/>
+</div>
+<div class="relative group">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-[18px]">event</span>
+<input class="w-full bg-input-bg border border-border-dark rounded-lg py-2 pl-10 pr-3 text-sm text-white placeholder-slate-600 focus:border-primary focus:ring-1 focus:ring-primary transition-all cursor-pointer hover:border-slate-600" placeholder="結束日期" type="text" value="2023-10-27 23:59"/>
+</div>
+</div>
+</div>
+<div class="h-px bg-border-dark w-full"></div>
+<!-- Task Type Filter -->
+<div class="flex flex-col gap-3">
+<label class="text-slate-300 text-sm font-medium">任務類型</label>
+<div class="relative">
+<select class="w-full appearance-none bg-input-bg border border-border-dark rounded-lg py-2 pl-3 pr-10 text-sm text-white focus:border-primary focus:ring-1 focus:ring-primary transition-all">
+<option value="all">所有類型</option>
+<option value="ingestion">資料攝取 (Ingestion)</option>
+<option value="analysis">市場分析 (Analysis)</option>
+<option value="archival">歸檔 (Archival)</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none">expand_more</span>
+</div>
+</div>
+<!-- Status Filter -->
+<div class="flex flex-col gap-3">
+<label class="text-slate-300 text-sm font-medium">執行狀態</label>
+<div class="flex flex-col gap-2">
+<label class="flex items-center gap-3 cursor-pointer group">
+<input checked="" class="form-checkbox rounded bg-input-bg border-slate-600 text-primary focus:ring-0 focus:ring-offset-0 h-4 w-4" type="checkbox"/>
+<span class="text-slate-400 text-sm group-hover:text-white transition-colors">成功 (Success)</span>
+</label>
+<label class="flex items-center gap-3 cursor-pointer group">
+<input checked="" class="form-checkbox rounded bg-input-bg border-slate-600 text-primary focus:ring-0 focus:ring-offset-0 h-4 w-4" type="checkbox"/>
+<span class="text-slate-400 text-sm group-hover:text-white transition-colors">失敗 (Failure)</span>
+</label>
+<label class="flex items-center gap-3 cursor-pointer group">
+<input checked="" class="form-checkbox rounded bg-input-bg border-slate-600 text-primary focus:ring-0 focus:ring-offset-0 h-4 w-4" type="checkbox"/>
+<span class="text-slate-400 text-sm group-hover:text-white transition-colors">重試中 (Retrying)</span>
+</label>
+</div>
+</div>
+<div class="mt-auto pt-6">
+<button class="w-full bg-primary hover:bg-cyan-300 text-background-dark font-bold py-2.5 px-4 rounded-lg transition-colors flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[20px]">check</span>
+                            套用篩選
+                        </button>
+</div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col overflow-hidden relative">
+<!-- Page Header -->
+<div class="flex-none p-6 pb-2">
+<div class="flex flex-wrap gap-2 mb-2 items-center text-xs">
+<a class="text-slate-500 hover:text-primary transition-colors" href="#">首頁</a>
+<span class="text-slate-600">/</span>
+<a class="text-slate-500 hover:text-primary transition-colors" href="#">系統監控</a>
+<span class="text-slate-600">/</span>
+<span class="text-primary font-medium">歷史日誌</span>
+</div>
+<div class="flex justify-between items-end">
+<div>
+<h1 class="text-white text-3xl font-bold tracking-tight mb-1">批次任務歷史日誌</h1>
+<p class="text-slate-400 text-sm">查看最近 50 次批次處理任務的執行狀況與詳細日誌。</p>
+</div>
+<div class="flex gap-3">
+<button class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border-dark hover:bg-white/5 text-slate-300 text-sm transition-colors">
+<span class="material-symbols-outlined text-[18px]">download</span>
+                                匯出 CSV
+                            </button>
+<button class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border-dark hover:bg-white/5 text-slate-300 text-sm transition-colors">
+<span class="material-symbols-outlined text-[18px]">refresh</span>
+                                刷新
+                            </button>
+</div>
+</div>
+</div>
+<!-- Data Table Container -->
+<div class="flex-1 overflow-auto px-6 py-4">
+<div class="border border-border-dark rounded-xl bg-panel-dark/50 overflow-hidden shadow-2xl">
+<table class="w-full text-left border-collapse">
+<thead class="bg-panel-dark sticky top-0 z-10 shadow-sm">
+<tr>
+<th class="px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-border-dark">任務類型</th>
+<th class="px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-border-dark">資料來源</th>
+<th class="px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-border-dark">開始時間</th>
+<th class="px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-border-dark">結束時間</th>
+<th class="px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-border-dark">狀態</th>
+<th class="px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-border-dark">成功 / 失敗</th>
+<th class="px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-border-dark text-right">操作</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-border-dark text-sm">
+<!-- Row 1: Success Analysis -->
+<tr class="group hover:bg-white/[0.02] transition-colors">
+<td class="px-5 py-3.5">
+<div class="flex items-center gap-3">
+<div class="bg-blue-500/10 p-1.5 rounded text-blue-400">
+<span class="material-symbols-outlined text-[20px]">analytics</span>
+</div>
+<div>
+<div class="font-medium text-white">市場分析</div>
+<div class="text-xs text-slate-500">Analysis_BTC_15m</div>
+</div>
+</div>
+</td>
+<td class="px-5 py-3.5">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                                            Synthetic
+                                        </span>
+</td>
+<td class="px-5 py-3.5 font-mono text-slate-300">2023-10-27 14:00:01</td>
+<td class="px-5 py-3.5 font-mono text-slate-300">2023-10-27 14:05:22</td>
+<td class="px-5 py-3.5">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+<span class="size-1.5 rounded-full bg-primary animate-pulse"></span>
+                                            Success
+                                        </span>
+</td>
+<td class="px-5 py-3.5 font-mono text-slate-300">
+<span class="text-emerald-400">1,500</span> / <span class="text-slate-500">0</span>
+</td>
+<td class="px-5 py-3.5 text-right">
+<button class="text-primary hover:text-cyan-300 font-medium text-xs flex items-center gap-1 justify-end ml-auto group-hover:translate-x-1 transition-transform">
+                                            查看日誌 <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+</td>
+</tr>
+<!-- Row 2: Failed Ingestion -->
+<tr class="group bg-highlight-red/30 hover:bg-highlight-red/50 transition-colors border-l-2 border-l-red-500">
+<td class="px-5 py-3.5">
+<div class="flex items-center gap-3">
+<div class="bg-red-500/10 p-1.5 rounded text-red-400">
+<span class="material-symbols-outlined text-[20px]">database</span>
+</div>
+<div>
+<div class="font-medium text-white">資料攝取</div>
+<div class="text-xs text-red-300/70">Ingest_USDT_Tick</div>
+</div>
+</div>
+</td>
+<td class="px-5 py-3.5">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-500/10 text-indigo-300 border border-indigo-500/30">
+                                            Actual
+                                        </span>
+</td>
+<td class="px-5 py-3.5 font-mono text-slate-200">2023-10-27 13:45:10</td>
+<td class="px-5 py-3.5 font-mono text-slate-200">2023-10-27 13:45:15</td>
+<td class="px-5 py-3.5">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">
+<span class="material-symbols-outlined text-[14px]">error</span>
+                                            Failure
+                                        </span>
+</td>
+<td class="px-5 py-3.5 font-mono text-slate-200">
+<span class="text-emerald-400">120</span> / <span class="text-red-400 font-bold">45</span>
+</td>
+<td class="px-5 py-3.5 text-right">
+<button class="text-red-400 hover:text-red-300 font-medium text-xs flex items-center gap-1 justify-end ml-auto group-hover:translate-x-1 transition-transform">
+                                            錯誤詳情 <span class="material-symbols-outlined text-[16px]">warning</span>
+</button>
+</td>
+</tr>
+<!-- Row 3: Retrying Analysis -->
+<tr class="group hover:bg-white/[0.02] transition-colors">
+<td class="px-5 py-3.5">
+<div class="flex items-center gap-3">
+<div class="bg-amber-500/10 p-1.5 rounded text-amber-400">
+<span class="material-symbols-outlined text-[20px]">candlestick_chart</span>
+</div>
+<div>
+<div class="font-medium text-white">策略回測</div>
+<div class="text-xs text-slate-500">Backtest_MACD_V2</div>
+</div>
+</div>
+</td>
+<td class="px-5 py-3.5">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                                            Synthetic
+                                        </span>
+</td>
+<td class="px-5 py-3.5 font-mono text-slate-300">2023-10-27 13:30:00</td>
+<td class="px-5 py-3.5 font-mono text-slate-300">--</td>
+<td class="px-5 py-3.5">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+<span class="material-symbols-outlined text-[14px] animate-spin">refresh</span>
+                                            Retrying
+                                        </span>
+</td>
+<td class="px-5 py-3.5 font-mono text-slate-300">
+<span class="text-slate-500">--</span> / <span class="text-amber-400">1</span>
+</td>
+<td class="px-5 py-3.5 text-right">
+<button class="text-primary hover:text-cyan-300 font-medium text-xs flex items-center gap-1 justify-end ml-auto group-hover:translate-x-1 transition-transform">
+                                            即時監控 <span class="material-symbols-outlined text-[16px]">visibility</span>
+</button>
+</td>
+</tr>
+<!-- Row 4: Success Ingestion -->
+<tr class="group hover:bg-white/[0.02] transition-colors">
+<td class="px-5 py-3.5">
+<div class="flex items-center gap-3">
+<div class="bg-purple-500/10 p-1.5 rounded text-purple-400">
+<span class="material-symbols-outlined text-[20px]">cloud_sync</span>
+</div>
+<div>
+<div class="font-medium text-white">鏈上同步</div>
+<div class="text-xs text-slate-500">Sync_Node_04</div>
+</div>
+</div>
+</td>
+<td class="px-5 py-3.5">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-500/10 text-indigo-300 border border-indigo-500/30">
+                                            Actual
+                                        </span>
+</td>
+<td class="px-5 py-3.5 font-mono text-slate-300">2023-10-27 13:15:00</td>
+<td class="px-5 py-3.5 font-mono text-slate-300">2023-10-27 13:18:45</td>
+<td class="px-5 py-3.5">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+<span class="size-1.5 rounded-full bg-primary"></span>
+                                            Success
+                                        </span>
+</td>
+<td class="px-5 py-3.5 font-mono text-slate-300">
+<span class="text-emerald-400">54,230</span> / <span class="text-slate-500">0</span>
+</td>
+<td class="px-5 py-3.5 text-right">
+<button class="text-primary hover:text-cyan-300 font-medium text-xs flex items-center gap-1 justify-end ml-auto group-hover:translate-x-1 transition-transform">
+                                            查看日誌 <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+</td>
+</tr>
+<!-- More Rows (simulated) -->
+<tr class="group hover:bg-white/[0.02] transition-colors">
+<td class="px-5 py-3.5">
+<div class="flex items-center gap-3">
+<div class="bg-blue-500/10 p-1.5 rounded text-blue-400">
+<span class="material-symbols-outlined text-[20px]">analytics</span>
+</div>
+<div>
+<div class="font-medium text-white">市場分析</div>
+<div class="text-xs text-slate-500">Analysis_ETH_Hourly</div>
+</div>
+</div>
+</td>
+<td class="px-5 py-3.5">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                                            Synthetic
+                                        </span>
+</td>
+<td class="px-5 py-3.5 font-mono text-slate-300">2023-10-27 13:00:00</td>
+<td class="px-5 py-3.5 font-mono text-slate-300">2023-10-27 13:02:10</td>
+<td class="px-5 py-3.5">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+<span class="size-1.5 rounded-full bg-primary"></span>
+                                            Success
+                                        </span>
+</td>
+<td class="px-5 py-3.5 font-mono text-slate-300">
+<span class="text-emerald-400">800</span> / <span class="text-slate-500">0</span>
+</td>
+<td class="px-5 py-3.5 text-right">
+<button class="text-primary hover:text-cyan-300 font-medium text-xs flex items-center gap-1 justify-end ml-auto group-hover:translate-x-1 transition-transform">
+                                            查看日誌 <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+</td>
+</tr>
+<tr class="group hover:bg-white/[0.02] transition-colors">
+<td class="px-5 py-3.5">
+<div class="flex items-center gap-3">
+<div class="bg-red-500/10 p-1.5 rounded text-red-400">
+<span class="material-symbols-outlined text-[20px]">database</span>
+</div>
+<div>
+<div class="font-medium text-white">資料攝取</div>
+<div class="text-xs text-slate-500">Ingest_Binance_WS</div>
+</div>
+</div>
+</td>
+<td class="px-5 py-3.5">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-500/10 text-indigo-300 border border-indigo-500/30">
+                                            Actual
+                                        </span>
+</td>
+<td class="px-5 py-3.5 font-mono text-slate-300">2023-10-27 12:45:00</td>
+<td class="px-5 py-3.5 font-mono text-slate-300">2023-10-27 12:46:12</td>
+<td class="px-5 py-3.5">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+<span class="size-1.5 rounded-full bg-primary"></span>
+                                            Success
+                                        </span>
+</td>
+<td class="px-5 py-3.5 font-mono text-slate-300">
+<span class="text-emerald-400">2,450</span> / <span class="text-slate-500">0</span>
+</td>
+<td class="px-5 py-3.5 text-right">
+<button class="text-primary hover:text-cyan-300 font-medium text-xs flex items-center gap-1 justify-end ml-auto group-hover:translate-x-1 transition-transform">
+                                            查看日誌 <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination -->
+<div class="flex items-center justify-between mt-4 text-sm text-slate-400">
+<div>
+                            顯示 1 到 6 筆，共 50 筆
+                        </div>
+<div class="flex items-center gap-2">
+<button class="p-2 rounded-lg bg-panel-dark border border-border-dark hover:bg-white/5 transition-colors disabled:opacity-50">
+<span class="material-symbols-outlined text-[18px]">chevron_left</span>
+</button>
+<div class="flex items-center gap-1">
+<button class="px-3 py-1 rounded bg-primary text-background-dark font-bold">1</button>
+<button class="px-3 py-1 rounded hover:bg-white/5 transition-colors">2</button>
+<button class="px-3 py-1 rounded hover:bg-white/5 transition-colors">3</button>
+<span class="px-2">...</span>
+<button class="px-3 py-1 rounded hover:bg-white/5 transition-colors">9</button>
+</div>
+<button class="p-2 rounded-lg bg-panel-dark border border-border-dark hover:bg-white/5 transition-colors">
+<span class="material-symbols-outlined text-[18px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+</div>
+</div>
+</body></html>

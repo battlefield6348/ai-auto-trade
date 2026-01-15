@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="zh-Hant"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>系統配置與一致性參數 - AlphaTrade Core</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1111d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#0A0E1A", /* Deep Indigo override */
+                        "surface-dark": "#13182b",
+                        "surface-border": "#283046",
+                        "text-secondary": "#94a3b8",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "Noto Sans", "sans-serif"],
+                        "mono": ["JetBrains Mono", "monospace"],
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        /* Custom scrollbar for webkit */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0A0E1A; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #283046; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3b4661; 
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark min-h-screen flex flex-col font-display text-white selection:bg-primary/30">
+<!-- Top Navigation -->
+<header class="sticky top-0 z-50 flex items-center justify-between whitespace-nowrap border-b border-surface-border bg-background-dark/95 backdrop-blur px-6 py-4 lg:px-12">
+<div class="flex items-center gap-4 text-white">
+<div class="flex items-center justify-center size-8 bg-primary/20 rounded-lg text-primary">
+<span class="material-symbols-outlined">candlestick_chart</span>
+</div>
+<h2 class="text-white text-lg font-bold leading-tight tracking-tight">AlphaTrade Core</h2>
+</div>
+<nav class="hidden md:flex flex-1 justify-end gap-8 items-center">
+<div class="flex items-center gap-6">
+<a class="text-text-secondary hover:text-white transition-colors text-sm font-medium flex items-center gap-2" href="#">
+<span class="material-symbols-outlined text-[20px]">dashboard</span> 儀表板
+                </a>
+<a class="text-text-secondary hover:text-white transition-colors text-sm font-medium flex items-center gap-2" href="#">
+<span class="material-symbols-outlined text-[20px]">history</span> 策略回測
+                </a>
+<a class="text-text-secondary hover:text-white transition-colors text-sm font-medium flex items-center gap-2" href="#">
+<span class="material-symbols-outlined text-[20px]">monitoring</span> 實盤監控
+                </a>
+<a class="text-white text-sm font-medium flex items-center gap-2 relative after:absolute after:-bottom-5 after:left-0 after:h-0.5 after:w-full after:bg-primary after:content-['']" href="#">
+<span class="material-symbols-outlined text-[20px] fill-1">settings</span> 系統配置
+                </a>
+<a class="text-text-secondary hover:text-white transition-colors text-sm font-medium flex items-center gap-2" href="#">
+<span class="material-symbols-outlined text-[20px]">fact_check</span> 審計日誌
+                </a>
+</div>
+<div class="h-6 w-px bg-surface-border mx-2"></div>
+<button class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-9 ring-2 ring-surface-border" data-alt="User profile avatar showing abstract geometric pattern" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBywAML-xAMNMiyFR50Xb2bXceCvAOuKDQVZzUG3KWIMr9vrNplSarGeEJhuJYuw-5F3x6j73bDN8jwpNMQxvW6INtYuOr0X2ZjKNTSopm-ZttU1xVzyOBEnVMM9u-za_7pBXqccZUTuQLweC6ue2v7x-8T_4Ug02o66arouhNMbM8PhJDNVawbySAa1gTk3RgsvYt25NepAoha4J0Krm_Fl-bscZ0ynAAKjMd9WJ5o9QV8OUcfrNgFU4JhU3eIHNX3qXWhFl-1T_w");'>
+</button>
+</nav>
+</header>
+<!-- Main Layout -->
+<main class="flex-1 w-full max-w-[1280px] mx-auto px-6 py-8 lg:px-12 flex flex-col gap-8">
+<!-- Page Heading & Status Bar -->
+<div class="flex flex-col gap-6">
+<div class="flex flex-wrap justify-between items-end gap-4 border-b border-surface-border pb-6">
+<div class="flex min-w-72 flex-col gap-2">
+<h1 class="text-white text-3xl font-black leading-tight tracking-[-0.02em]">系統配置與一致性參數</h1>
+<p class="text-text-secondary text-base font-normal">管理影響回測與實盤執行的核心 config.yaml 參數，確保交易邏輯版本嚴格一致。</p>
+</div>
+<div class="flex gap-3">
+<button class="group flex cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-lg h-10 px-4 bg-surface-border hover:bg-surface-border/80 text-white text-sm font-bold transition-all">
+<span class="material-symbols-outlined text-[18px]">restore</span>
+<span>版本回滾</span>
+</button>
+<button class="group flex cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-lg h-10 px-4 bg-primary hover:bg-primary/90 text-white text-sm font-bold transition-all shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined text-[18px]">sync_alt</span>
+<span>執行一致性檢查</span>
+</button>
+</div>
+</div>
+<!-- Status Indicators -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+<div class="bg-surface-dark border border-surface-border rounded-xl p-4 flex items-center justify-between shadow-sm">
+<div>
+<p class="text-text-secondary text-xs font-medium uppercase tracking-wider mb-1">當前邏輯版本</p>
+<p class="text-white text-lg font-mono font-semibold">v3.0.1-stable</p>
+</div>
+<div class="size-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+<span class="material-symbols-outlined">verified</span>
+</div>
+</div>
+<div class="bg-surface-dark border border-surface-border rounded-xl p-4 flex items-center justify-between shadow-sm">
+<div>
+<p class="text-text-secondary text-xs font-medium uppercase tracking-wider mb-1">Git Commit Hash</p>
+<div class="flex items-center gap-2">
+<span class="text-white text-lg font-mono font-semibold">#a1b2c3d</span>
+<span class="material-symbols-outlined text-xs text-text-secondary">content_copy</span>
+</div>
+</div>
+<div class="size-10 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500">
+<span class="material-symbols-outlined">commit</span>
+</div>
+</div>
+<div class="bg-surface-dark border border-surface-border rounded-xl p-4 flex items-center justify-between shadow-sm">
+<div>
+<p class="text-text-secondary text-xs font-medium uppercase tracking-wider mb-1">同步狀態</p>
+<p class="text-emerald-400 text-lg font-bold">✅ 已同步 (Live == Backtest)</p>
+</div>
+<div class="size-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+<span class="material-symbols-outlined">sync</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Configuration Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+<!-- Left Column: Market & Execution -->
+<div class="lg:col-span-7 flex flex-col gap-8">
+<!-- Fees & Slippage Card -->
+<section class="flex flex-col gap-4 bg-surface-dark border border-surface-border rounded-xl p-6 shadow-sm">
+<div class="flex items-center justify-between border-b border-surface-border pb-4 mb-2">
+<div class="flex items-center gap-2 text-white">
+<span class="material-symbols-outlined text-primary">currency_exchange</span>
+<h3 class="text-lg font-bold">市場動力學參數 (Market Dynamics)</h3>
+</div>
+<span class="text-xs bg-surface-border px-2 py-1 rounded text-text-secondary">read-only</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<label class="flex flex-col gap-2 group">
+<span class="text-text-secondary text-sm font-medium flex justify-between">
+                                Maker 手續費 (%) <span class="material-symbols-outlined text-[16px] text-text-secondary/50">lock</span>
+</span>
+<div class="relative">
+<input class="w-full bg-background-dark border border-surface-border rounded-lg px-4 py-3 text-white font-mono focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed" disabled="" type="text" value="0.0200"/>
+</div>
+</label>
+<label class="flex flex-col gap-2 group">
+<span class="text-text-secondary text-sm font-medium flex justify-between">
+                                Taker 手續費 (%) <span class="material-symbols-outlined text-[16px] text-text-secondary/50">lock</span>
+</span>
+<div class="relative">
+<input class="w-full bg-background-dark border border-surface-border rounded-lg px-4 py-3 text-white font-mono focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed" disabled="" type="text" value="0.0400"/>
+</div>
+</label>
+<label class="flex flex-col gap-2 md:col-span-2">
+<span class="text-text-secondary text-sm font-medium">滑點模型 (Slippage Model)</span>
+<div class="relative">
+<select class="w-full bg-background-dark border border-surface-border rounded-lg px-4 py-3 text-white appearance-none focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all cursor-pointer">
+<option value="fixed">固定比例 (Fixed Percentage 0.05%)</option>
+<option value="dynamic">動態波動率 (Dynamic Volatility Based)</option>
+</select>
+<div class="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-text-secondary">
+<span class="material-symbols-outlined">expand_more</span>
+</div>
+</div>
+</label>
+</div>
+</section>
+<!-- Execution Settings Card -->
+<section class="flex flex-col gap-4 bg-surface-dark border border-surface-border rounded-xl p-6 shadow-sm">
+<div class="flex items-center justify-between border-b border-surface-border pb-4 mb-2">
+<div class="flex items-center gap-2 text-white">
+<span class="material-symbols-outlined text-primary">tune</span>
+<h3 class="text-lg font-bold">執行配置 (Execution Settings)</h3>
+</div>
+<button class="text-xs text-primary hover:text-white transition-colors font-medium">解鎖編輯</button>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<label class="flex flex-col gap-2">
+<span class="text-text-secondary text-sm font-medium">槓桿倍數 (Leverage)</span>
+<div class="flex items-center bg-background-dark border border-surface-border rounded-lg px-4 focus-within:border-primary focus-within:ring-1 focus-within:ring-primary transition-all">
+<span class="text-text-secondary font-mono text-sm">x</span>
+<input class="w-full bg-transparent border-none py-3 text-white font-mono focus:ring-0 outline-none" type="number" value="5"/>
+</div>
+</label>
+<label class="flex flex-col gap-2">
+<span class="text-text-secondary text-sm font-medium">最大持倉 (Max Pos Size)</span>
+<div class="flex items-center bg-background-dark border border-surface-border rounded-lg px-4 focus-within:border-primary focus-within:ring-1 focus-within:ring-primary transition-all">
+<input class="w-full bg-transparent border-none py-3 text-white font-mono focus:ring-0 outline-none" type="number" value="2.0"/>
+<span class="text-text-secondary font-mono text-xs">BTC</span>
+</div>
+</label>
+<label class="flex flex-col gap-2 md:col-span-2">
+<span class="text-text-secondary text-sm font-medium">訂單類型 (Order Type Priority)</span>
+<div class="flex gap-4 pt-2">
+<div class="flex items-center gap-2">
+<input checked="" class="bg-background-dark border-surface-border text-primary focus:ring-0" name="orderType" type="radio"/>
+<span class="text-white text-sm">Post-Only Limit</span>
+</div>
+<div class="flex items-center gap-2">
+<input class="bg-background-dark border-surface-border text-primary focus:ring-0" name="orderType" type="radio"/>
+<span class="text-white text-sm">Market (IOC)</span>
+</div>
+</div>
+</label>
+</div>
+</section>
+</div>
+<!-- Right Column: Data & Notifications -->
+<div class="lg:col-span-5 flex flex-col gap-8">
+<!-- Data Handling -->
+<section class="flex flex-col gap-4 bg-surface-dark border border-surface-border rounded-xl p-6 shadow-sm">
+<div class="flex items-center justify-between border-b border-surface-border pb-4 mb-2">
+<div class="flex items-center gap-2 text-white">
+<span class="material-symbols-outlined text-primary">database</span>
+<h3 class="text-lg font-bold">數據源與採樣 (Data Source)</h3>
+</div>
+</div>
+<div class="flex flex-col gap-4">
+<label class="flex flex-col gap-2">
+<span class="text-text-secondary text-sm font-medium">價格採樣 (Price Sampling)</span>
+<div class="relative">
+<select class="w-full bg-background-dark border border-surface-border rounded-lg px-4 py-3 text-white appearance-none focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all cursor-pointer">
+<option value="ohlcv">OHLCV (Daily Close)</option>
+<option value="tick">Tick Data (High Precision)</option>
+</select>
+<div class="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-text-secondary">
+<span class="material-symbols-outlined">expand_more</span>
+</div>
+</div>
+</label>
+<label class="flex flex-col gap-2">
+<span class="text-text-secondary text-sm font-medium">主時間週期 (Primary Timeframe)</span>
+<div class="flex gap-2">
+<button class="flex-1 py-2 rounded-md bg-background-dark border border-surface-border text-text-secondary text-sm hover:text-white hover:border-primary/50 transition-all">1H</button>
+<button class="flex-1 py-2 rounded-md bg-primary text-white text-sm font-bold shadow-lg shadow-primary/20 ring-1 ring-primary">4H</button>
+<button class="flex-1 py-2 rounded-md bg-background-dark border border-surface-border text-text-secondary text-sm hover:text-white hover:border-primary/50 transition-all">1D</button>
+</div>
+</label>
+</div>
+</section>
+<!-- Notification Templates -->
+<section class="flex flex-col gap-4 bg-surface-dark border border-surface-border rounded-xl p-6 shadow-sm flex-1">
+<div class="flex items-center justify-between border-b border-surface-border pb-4 mb-2">
+<div class="flex items-center gap-2 text-white">
+<span class="material-symbols-outlined text-primary">notifications</span>
+<h3 class="text-lg font-bold">通知模版 (Telegram)</h3>
+</div>
+<button class="text-xs flex items-center gap-1 text-primary hover:text-white transition-colors">
+<span class="material-symbols-outlined text-[14px]">send</span> 測試發送
+                        </button>
+</div>
+<div class="flex flex-col gap-3 h-full">
+<span class="text-text-secondary text-sm font-medium">開倉訊號 (Signal Entry)</span>
+<div class="relative w-full h-full min-h-[160px] bg-background-dark rounded-lg border border-surface-border p-4 font-mono text-sm text-gray-300 overflow-hidden">
+<textarea class="w-full h-full bg-transparent border-none resize-none focus:ring-0 text-sm p-0 leading-relaxed text-blue-100" spellcheck="false">🚀 SIGNAL ALERT: {{side}}
+Symbol: #{{symbol}}
+Entry Price: ${{entry_price}}
+Size: {{position_size}} BTC
+---
+Strategy: {{strategy_name}}
+Time: {{timestamp}}</textarea>
+<div class="absolute bottom-2 right-2 text-[10px] text-text-secondary opacity-50">Jinja2 Template</div>
+</div>
+</div>
+</section>
+</div>
+<!-- Full Width: Audit Log -->
+<div class="lg:col-span-12">
+<section class="flex flex-col bg-surface-dark border border-surface-border rounded-xl shadow-sm overflow-hidden">
+<div class="flex items-center justify-between px-6 py-5 border-b border-surface-border">
+<div class="flex items-center gap-2 text-white">
+<span class="material-symbols-outlined text-primary">history_edu</span>
+<h3 class="text-lg font-bold">配置變更審計 (Configuration Audit Log)</h3>
+</div>
+<div class="flex gap-2">
+<input class="bg-background-dark border border-surface-border rounded-lg px-3 py-1.5 text-sm text-white focus:border-primary focus:ring-0 outline-none w-48 placeholder:text-text-secondary/50" placeholder="Search parameters..." type="text"/>
+<button class="p-1.5 rounded-lg border border-surface-border hover:bg-surface-border text-text-secondary hover:text-white transition-colors">
+<span class="material-symbols-outlined text-[18px]">filter_list</span>
+</button>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-background-dark/50 border-b border-surface-border text-xs uppercase text-text-secondary font-medium tracking-wider">
+<th class="px-6 py-4">時間 (Time)</th>
+<th class="px-6 py-4">操作人 (User)</th>
+<th class="px-6 py-4">變更項目 (Parameter)</th>
+<th class="px-6 py-4">原值 (Old)</th>
+<th class="px-6 py-4">新值 (New)</th>
+<th class="px-6 py-4 text-right">操作</th>
+</tr>
+</thead>
+<tbody class="text-sm divide-y divide-surface-border">
+<tr class="group hover:bg-background-dark/30 transition-colors">
+<td class="px-6 py-4 text-text-secondary font-mono">2023-10-24 14:30:05</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<div class="size-6 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-[10px] font-bold">AL</div>
+<span class="text-white">Alex Chen</span>
+</div>
+</td>
+<td class="px-6 py-4 text-white font-medium">execution.max_leverage</td>
+<td class="px-6 py-4 text-rose-400 font-mono">10x</td>
+<td class="px-6 py-4 text-emerald-400 font-mono">5x</td>
+<td class="px-6 py-4 text-right">
+<button class="text-text-secondary hover:text-white"><span class="material-symbols-outlined text-[18px]">visibility</span></button>
+</td>
+</tr>
+<tr class="group hover:bg-background-dark/30 transition-colors">
+<td class="px-6 py-4 text-text-secondary font-mono">2023-10-23 09:15:22</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<div class="size-6 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center text-[10px] font-bold">SY</div>
+<span class="text-white">System Auto</span>
+</div>
+</td>
+<td class="px-6 py-4 text-white font-medium">market.volatility_index</td>
+<td class="px-6 py-4 text-text-secondary font-mono">0.045</td>
+<td class="px-6 py-4 text-white font-mono">0.048</td>
+<td class="px-6 py-4 text-right">
+<button class="text-text-secondary hover:text-white"><span class="material-symbols-outlined text-[18px]">visibility</span></button>
+</td>
+</tr>
+<tr class="group hover:bg-background-dark/30 transition-colors">
+<td class="px-6 py-4 text-text-secondary font-mono">2023-10-22 18:45:00</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<div class="size-6 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-[10px] font-bold">AL</div>
+<span class="text-white">Alex Chen</span>
+</div>
+</td>
+<td class="px-6 py-4 text-white font-medium">notifications.telegram_id</td>
+<td class="px-6 py-4 text-text-secondary font-mono">********</td>
+<td class="px-6 py-4 text-white font-mono">********</td>
+<td class="px-6 py-4 text-right">
+<button class="text-text-secondary hover:text-white"><span class="material-symbols-outlined text-[18px]">visibility</span></button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="px-6 py-3 border-t border-surface-border bg-background-dark/30 flex justify-between items-center">
+<span class="text-xs text-text-secondary">Showing 1-3 of 128 logs</span>
+<div class="flex gap-2">
+<button class="px-3 py-1 rounded border border-surface-border text-xs text-text-secondary hover:text-white hover:border-text-secondary disabled:opacity-50" disabled="">Previous</button>
+<button class="px-3 py-1 rounded border border-surface-border text-xs text-text-secondary hover:text-white hover:border-text-secondary">Next</button>
+</div>
+</div>
+</section>
+</div>
+</div>
+</main>
+</body></html>

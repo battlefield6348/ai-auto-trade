@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"net/http"
+	"sync"
 	"time"
 
 	"ai-auto-trade/internal/application/analysis"
@@ -39,6 +40,10 @@ type Server struct {
 	autoInterval  time.Duration
 	backfillStart string
 	tradingSvc    *trading.Service
+	jobMu         sync.Mutex
+	jobHistory    []jobRun
+	lastAutoRun   time.Time
+	dataSource    string
 }
 
 // NewServer 建立 API 伺服器，預設使用記憶體資料存儲；若 db 未來可用，再注入對應 repository。
@@ -82,6 +87,11 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 		tgClient = notify.NewTelegramClient(cfg.Notifier.Telegram.Token, cfg.Notifier.Telegram.ChatID)
 	}
 
+	source := "binance"
+	if cfg.Ingestion.UseSynthetic {
+		source = "synthetic"
+	}
+
 	s := &Server{
 		mux:           http.NewServeMux(),
 		store:         store,
@@ -101,6 +111,7 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 		autoInterval:  cfg.Ingestion.AutoInterval,
 		backfillStart: cfg.Ingestion.BackfillStartDate,
 		tradingSvc:    tradingSvc,
+		dataSource:    source,
 	}
 	if db != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), seedTimeout)
@@ -152,9 +163,14 @@ func (s *Server) registerRoutes() {
 	s.mux.Handle("/api/auth/login", s.wrapPost(s.handleLogin))
 	s.mux.Handle("/api/auth/refresh", s.wrapPost(s.handleRefresh))
 	s.mux.Handle("/api/auth/logout", s.wrapPost(s.handleLogout))
+	s.mux.Handle("/api/admin/ingestion/daily", s.requireAuth(auth.PermIngestionTriggerDaily, s.wrapPost(s.handleIngestionDaily)))
 	s.mux.Handle("/api/admin/ingestion/backfill", s.requireAuth(auth.PermIngestionTriggerBackfill, s.wrapPost(s.handleIngestionBackfill)))
+	s.mux.Handle("/api/admin/analysis/daily", s.requireAuth(auth.PermAnalysisTriggerDaily, s.wrapPost(s.handleAnalysisDaily)))
+	s.mux.Handle("/api/analysis/daily", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleAnalysisQuery)))
 	s.mux.Handle("/api/analysis/history", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleAnalysisHistory)))
 	s.mux.Handle("/api/analysis/summary", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleAnalysisSummary)))
+	s.mux.Handle("/api/admin/jobs/status", s.requireAuth(auth.PermSystemHealth, s.wrapGet(s.handleJobsStatus)))
+	s.mux.Handle("/api/admin/jobs/history", s.requireAuth(auth.PermSystemHealth, s.wrapGet(s.handleJobsHistory)))
 	// 策略與交易
 	s.mux.Handle("/api/admin/strategies", s.requireAuth(auth.PermStrategy, s.wrapMethods(map[string]http.HandlerFunc{
 		http.MethodGet:  s.handleListStrategies,

@@ -1,456 +1,267 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html class="dark" lang="zh-Hant">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BTC/USDT 操作台｜AI Auto Trade</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>自動化管線與批次管理控制台</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            primary: "#0ddff2",
+            "primary-dark": "#0abdcf",
+            secondary: "#7c3aed",
+            "background-dark": "#0A0E1A",
+            "surface-dark": "#161b2e",
+            "surface-border": "#232d4b",
+            success: "#10b981",
+            warning: "#f59e0b",
+            danger: "#ef4444",
+          },
+          fontFamily: {
+            display: ["Space Grotesk", "sans-serif"],
+            body: ["Noto Sans TC", "sans-serif"],
+            mono: ["ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "monospace"],
+          },
+          boxShadow: {
+            neon: "0 0 10px rgba(13, 223, 242, 0.3), 0 0 20px rgba(13, 223, 242, 0.1)",
+            "neon-hover": "0 0 20px rgba(13, 223, 242, 0.6), 0 0 40px rgba(13, 223, 242, 0.2)",
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    body { font-family: "Space Grotesk", "Noto Sans TC", sans-serif; }
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+  </style>
 </head>
-<body>
-  <section id="loginPage" class="auth-page">
-    <div class="auth-shell">
-      <div class="auth-hero">
-        <div class="brand-mark">BTC</div>
+<body class="bg-background-dark text-white min-h-screen flex flex-col antialiased selection:bg-primary selection:text-background-dark">
+  <header class="sticky top-0 z-50 border-b border-surface-border bg-background-dark/80 backdrop-blur-md">
+    <div class="px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-4">
+        <div class="size-8 text-primary flex items-center justify-center rounded bg-primary/10">
+          <span class="material-symbols-outlined">hub</span>
+        </div>
         <div>
-          <h1>BTC/USDT 操作台</h1>
-          <p class="subtitle">登入後即可操作擷取、分析與強勢篩選。</p>
-          <div class="meta-row">
-            <span class="status-pill">安全連線 · HTTPS</span>
-            <span class="status-pill">資料不外流</span>
-          </div>
+          <h1 class="text-xl font-bold tracking-tight text-white uppercase font-display">自動化管線控制台 <span class="text-primary text-sm normal-case ml-2 border border-primary/30 px-2 rounded-full">v2.4</span></h1>
+          <p class="text-xs text-slate-400 font-mono tracking-wider">SYSTEM_ID: AUTO-BTC-BATCH-OPS</p>
         </div>
       </div>
-      <div class="auth-card">
-        <div class="panel-head">
+      <div class="flex items-center gap-4">
+        <div class="hidden md:flex flex-col items-end mr-4 border-r border-surface-border pr-4">
+          <span id="clock" class="text-lg font-bold font-mono leading-none text-primary">--:--:--</span>
+          <span class="text-xs text-slate-400 font-mono">Taipei (UTC+8)</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span id="loginStatus" class="text-xs text-slate-400">未登入</span>
+          <button id="loginBtn" class="px-3 py-1.5 rounded bg-primary/20 text-primary text-xs border border-primary/40 hover:bg-primary/30">登入</button>
+          <button id="logoutBtn" class="px-3 py-1.5 rounded bg-surface-border text-slate-300 text-xs border border-surface-border hover:border-primary/50 hidden">登出</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 p-6 md:p-8 max-w-[1600px] mx-auto w-full flex flex-col gap-6">
+    <div id="alert" class="hidden rounded border border-primary/30 bg-primary/10 text-primary px-4 py-3 text-sm"></div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div class="bg-surface-dark border border-surface-border rounded-lg p-5 flex flex-col relative overflow-hidden">
+        <div class="absolute top-0 right-0 p-3 opacity-10">
+          <span class="material-symbols-outlined text-4xl text-primary">schedule</span>
+        </div>
+        <h3 class="text-slate-400 text-sm font-medium mb-1">排程狀態 (Schedule Status)</h3>
+        <div class="mt-2">
+          <div class="text-sm text-slate-400 mb-1">Next Run</div>
+          <div class="text-2xl font-bold font-mono tracking-tight text-white flex items-center gap-2">
+            <span id="nextRun">--:--</span> <span class="text-xs font-sans text-primary px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20">Taipei</span>
+          </div>
+        </div>
+        <div class="mt-4 pt-3 border-t border-surface-border/50">
+          <div class="flex justify-between items-center text-xs">
+            <span class="text-slate-500">Retry Strategy:</span>
+            <span id="retryStrategy" class="font-mono text-slate-300">--</span>
+          </div>
+          <div class="text-[10px] text-right text-primary mt-1" id="nextRunHuman"></div>
+        </div>
+      </div>
+
+      <div class="lg:col-span-2 bg-surface-dark border border-surface-border rounded-lg p-5 flex flex-col relative overflow-hidden">
+        <div class="flex justify-between items-start mb-4">
+          <h3 class="text-slate-400 text-sm font-medium">最近任務指標 (Latest Task Metrics)</h3>
+          <span id="latestBadge" class="px-2 py-0.5 rounded text-xs bg-slate-500/10 text-slate-300 border border-slate-500/20 flex items-center gap-1">--</span>
+        </div>
+        <div class="grid grid-cols-3 gap-4 font-mono text-sm">
           <div>
-            <h2>登入</h2>
-            <p>使用預設帳號 admin / analyst / user，密碼皆為 password123。</p>
+            <p class="text-slate-500 text-xs">Start / End</p>
+            <p class="text-white mt-1" id="lastStart">--</p>
+            <p class="text-slate-400" id="lastEnd">--</p>
           </div>
-        </div>
-        <form id="loginForm" class="form">
-          <div class="field-grid">
-            <label>帳號 Email <input type="email" id="email" value="admin@example.com" required></label>
-            <label>密碼 <input type="password" id="password" value="password123" required></label>
+          <div>
+            <p class="text-slate-500 text-xs">Duration</p>
+            <p class="text-primary mt-1 font-bold" id="lastDuration">--</p>
           </div>
-          <div class="actions">
-            <button type="submit" class="primary">登入</button>
-            <div class="chip-row">
-              <button type="button" class="chip" data-email="admin@example.com">admin@example.com</button>
-              <button type="button" class="chip" data-email="analyst@example.com">analyst@example.com</button>
-              <button type="button" class="chip" data-email="user@example.com">user@example.com</button>
+          <div>
+            <p class="text-slate-500 text-xs">Success / Fail</p>
+            <div class="flex items-baseline gap-2 mt-1">
+              <span class="text-success font-bold" id="lastSucc">--</span>
+              <span class="text-slate-600">/</span>
+              <span class="text-danger font-bold" id="lastFail">--</span>
             </div>
           </div>
-        </form>
-        <div id="loginMessage" class="message"></div>
+        </div>
+        <div class="mt-auto pt-3 border-t border-surface-border/50 flex items-start gap-2">
+          <span class="material-symbols-outlined text-danger text-sm mt-0.5">error</span>
+          <p class="text-xs text-danger/80 truncate" id="lastError">--</p>
+        </div>
+      </div>
+
+      <div class="bg-surface-dark border border-surface-border rounded-lg p-5 flex flex-col relative overflow-hidden">
+        <div class="absolute top-0 right-0 p-3 opacity-10">
+          <span class="material-symbols-outlined text-4xl text-primary">settings_applications</span>
+        </div>
+        <h3 class="text-slate-400 text-sm font-medium mb-3">資料配置 (Data Config)</h3>
+        <div class="space-y-4">
+          <div class="flex justify-between items-center">
+            <span class="text-sm text-slate-300">Synthetic Mode</span>
+            <div id="syntheticBadge" class="flex items-center gap-2 px-2 py-1 rounded bg-surface-border/50 border border-surface-border text-xs text-slate-400 font-mono">--</div>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-sm text-slate-300">Auto-Interval</span>
+            <span id="autoInterval" class="text-xs font-mono text-primary border border-primary/30 px-2 py-0.5 rounded bg-primary/5">--</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-sm text-slate-300">Data Source</span>
+            <span id="dataSource" class="text-xs font-mono text-white">--</span>
+          </div>
+        </div>
       </div>
     </div>
-  </section>
 
-  <div id="appShell" class="hidden">
-    <header class="topbar">
-      <div class="brand">
-        <div class="brand-mark">BTC</div>
-        <div>
-          <h1>BTC/USDT 操作台</h1>
-          <p class="subtitle">AI Auto Trade MVP / 端到端流程</p>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="lg:col-span-2 bg-surface-dark border border-surface-border rounded-xl p-6 flex flex-col">
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-lg font-bold text-white flex items-center gap-2">
+            <span class="material-symbols-outlined text-primary">build_circle</span>
+            手動操作面板 (Manual Operations)
+          </h2>
         </div>
-      </div>
-      <div class="status-stack">
-        <div id="status" class="status-pill">未登入</div>
-        <div id="healthStatus" class="status-pill subtle">系統檢查：--</div>
-      </div>
-    </header>
-
-    <div class="app-body">
-      <aside class="sidebar">
-        <div class="nav-head">功能導航</div>
-        <nav class="nav-list">
-          <button class="nav-link" data-section-target="overview">概覽</button>
-          <button class="nav-link" data-section-target="strategy">策略 / 回測</button>
-          <button class="nav-link" data-section-target="trade">交易</button>
-          <button class="nav-link" data-section-target="report">報告</button>
-          <button class="nav-link" data-section-target="position">持倉</button>
-          <button class="nav-link" data-section-target="logs">日誌</button>
-          <button class="nav-link" data-section-target="activity">操作紀錄</button>
-        </nav>
-      </aside>
-
-      <main class="layout content">
-        <section class="panel hero span-12" data-section="overview">
-          <div class="hero-copy">
-            <h2>市場快照與作業狀態</h2>
-            <p>集中顯示近期的擷取、分析與強勢篩選資訊，搭配走勢摘要快速判斷方向。</p>
-            <div class="meta-row">
-              <div id="overviewTime" class="meta-item">最後更新：--</div>
-              <div id="overviewMode" class="meta-item">資料來源：--</div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="bg-background-dark/50 rounded-lg p-4 border border-surface-border">
+            <div class="flex justify-between items-start mb-3">
+              <h4 class="text-sm font-bold text-white flex items-center gap-2">
+                <span class="material-symbols-outlined text-sm text-slate-400">calendar_month</span> 單日擷取+分析
+              </h4>
             </div>
-            <div class="quick-nav">
-              <div class="quick-nav-title">快速導覽</div>
-              <div class="quick-nav-actions">
-                <button type="button" class="chip ghost" data-section-target="overview">走勢與條件回測</button>
-                <button type="button" class="chip ghost" data-section-target="strategy">策略建立與試跑</button>
-                <button type="button" class="chip ghost" data-section-target="report">報告與回測紀錄</button>
-                <button type="button" class="chip ghost" data-section-target="trade">交易與持倉</button>
-              </div>
+            <div class="flex gap-2 mb-3">
+              <input id="rerunDate" class="bg-surface-dark border border-surface-border rounded text-xs text-slate-300 px-2 py-1.5 w-full focus:border-primary focus:ring-0" type="date" />
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <button id="rerunBtn" class="w-full py-1.5 rounded bg-surface-border hover:bg-primary/20 hover:text-primary text-xs text-slate-300 transition-colors border border-transparent hover:border-primary/50">擷取並分析</button>
+              <button id="analysisOnlyBtn" class="w-full py-1.5 rounded bg-surface-border hover:bg-secondary/20 hover:text-secondary text-xs text-slate-300 transition-colors border border-transparent hover:border-secondary/50">僅分析</button>
             </div>
           </div>
-        </section>
-
-    <section class="panel span-12 workspace-panel" id="chartPanel" data-section="overview">
-      <div class="workspace-grid">
-        <div class="workspace-main">
-          <div class="panel-head">
-            <div>
-              <h2>走勢＋條件回測工作區</h2>
-              <p>左側調整日期與條件，右側同步檢視摘要與狀態。</p>
+          <div class="bg-background-dark/50 rounded-lg p-4 border border-surface-border">
+            <h4 class="text-sm font-bold text-white flex items-center gap-2 mb-3">
+              <span class="material-symbols-outlined text-sm text-slate-400">candlestick_chart</span> 日期區間回補
+            </h4>
+            <div class="grid grid-cols-2 gap-2 mb-3">
+              <input id="rangeStart" class="bg-surface-dark border border-surface-border rounded text-xs text-slate-300 px-2 py-1.5 w-full focus:border-primary focus:ring-0" type="date" />
+              <input id="rangeEnd" class="bg-surface-dark border border-surface-border rounded text-xs text-slate-300 px-2 py-1.5 w-full focus:border-primary focus:ring-0" type="date" />
             </div>
-          </div>
-          <form id="chartForm" class="form inline">
-            <label>起始日期 <input type="date" id="chartStart" required></label>
-            <label>結束日期 <input type="date" id="chartEnd" required></label>
-            <button type="submit" class="primary">載入走勢</button>
-            <button type="button" id="resetZoomBtn" class="ghost btn-sm hidden">重置範圍</button>
-          </form>
-          <div id="chartMeta" class="meta-row"></div>
-          <div class="chart-wrap">
-            <div id="chartCanvas" class="chart-canvas"></div>
-            <div id="chartTooltip" class="chart-tooltip"></div>
+            <button id="rangeBtn" class="w-full py-1.5 rounded bg-surface-border hover:bg-primary/20 hover:text-primary text-xs text-slate-300 transition-colors border border-transparent hover:border-primary/50">回補並分析</button>
           </div>
         </div>
-        <aside class="workspace-side">
-          <div class="side-card">
-            <div class="panel-head">
-              <div>
-                <h3>走勢摘要與建議</h3>
-                <p>最新趨勢、量能與分數摘要。</p>
-              </div>
-              <button id="summaryBtn" class="ghost btn-sm">更新摘要</button>
-            </div>
-            <div id="summaryView" class="summary-view">
-              <div class="empty-state">尚未取得摘要，點選右上按鈕即可更新。</div>
-            </div>
-          </div>
-          <details class="side-card compact-status">
-            <summary>顯示系統狀態卡片</summary>
-            <div class="kpi-grid">
-              <article class="kpi" id="kpiHealth">
-                <div class="kpi-title">系統狀態</div>
-                <div class="kpi-value">--</div>
-                <div class="kpi-note">等待健康檢查</div>
-              </article>
-              <article class="kpi" id="kpiIngestion">
-                <div class="kpi-title">日 K 擷取</div>
-                <div class="kpi-value">尚未執行</div>
-                <div class="kpi-note">交易日 --</div>
-              </article>
-              <article class="kpi" id="kpiAnalysis">
-                <div class="kpi-title">日批次分析</div>
-                <div class="kpi-value">尚未執行</div>
-                <div class="kpi-note">交易日 --</div>
-              </article>
-              <article class="kpi" id="kpiSummary">
-                <div class="kpi-title">趨勢摘要</div>
-                <div class="kpi-value">等待更新</div>
-                <div class="kpi-note">--</div>
-              </article>
-              <article class="kpi" id="kpiScreener">
-                <div class="kpi-title">強勢交易對</div>
-                <div class="kpi-value">尚未查詢</div>
-                <div class="kpi-note">--</div>
-              </article>
-            </div>
-          </details>
-        </aside>
+        <div id="opResult" class="mt-4 text-xs text-slate-300 border border-surface-border rounded-lg p-3 bg-background-dark/60">尚未執行</div>
       </div>
-    </section>
 
-    <section class="panel span-12 workspace-panel" id="strategyConsole" data-section="strategy">
-      <div class="panel-head">
-        <div>
-          <h2>策略控制台</h2>
-          <p>左側管理策略列表與回測，右側建立/調整策略；底部收合交易、報告、日誌。</p>
+      <div class="lg:col-span-1 bg-surface-dark border border-surface-border rounded-xl p-6 flex flex-col">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-bold text-white flex items-center gap-2">
+            <span class="material-symbols-outlined text-[#24A1DE]">send</span>
+            Telegram Notifier
+          </h2>
+        </div>
+        <div class="flex-1 flex flex-col gap-3 text-sm text-slate-300">
+          <div>最近推播：<span id="tgLast">--</span></div>
+          <div>狀態：<span class="text-success">啟用</span></div>
+          <div>Webhook 不另顯示，請直接透過 config.yaml 管控。</div>
         </div>
       </div>
-      <div class="workspace-grid">
-        <div class="workspace-main">
-          <div class="sub-tabs">
-            <button type="button" class="ghost btn-sm active" data-strategy-tab="list">策略列表</button>
-            <button type="button" class="ghost btn-sm" data-strategy-tab="backtest">回測與結果</button>
-            <button type="button" class="ghost btn-sm" data-strategy-tab="history">歷史紀錄</button>
-          </div>
-
-          <div class="strategy-pane" data-strategy-pane="list">
-            <div class="subsection-title">策略列表與試跑</div>
-            <form id="strategyForm" class="form inline">
-              <label>狀態
-                <select id="strategyStatus">
-                  <option value="">全部</option>
-                  <option value="active">active</option>
-                  <option value="draft">draft</option>
-                  <option value="archived">archived</option>
-                </select>
-              </label>
-              <label>環境
-                <select id="strategyEnv">
-                  <option value="">全部</option>
-                  <option value="test">test</option>
-                  <option value="prod">prod</option>
-                </select>
-              </label>
-              <label>名稱關鍵字 <input type="text" id="strategyName" placeholder="例如 momentum"></label>
-              <button type="submit" class="primary">載入策略</button>
-            </form>
-            <div id="strategyMeta" class="meta-row"></div>
-            <div id="strategyTable" class="table"></div>
-            <div class="subsection-title">試跑結果</div>
-            <div id="strategyRunResult" class="table"></div>
-          </div>
-
-          <div class="strategy-pane hidden" data-strategy-pane="backtest">
-            <div class="subsection-title">策略回測（區間買賣）</div>
-            <form id="strategyBacktestForm" class="form inline">
-              <div class="field-grid">
-                <label>選擇策略
-                  <select id="strategyBacktestSelect">
-                    <option value="">請先載入策略列表</option>
-                  </select>
-                </label>
-                <label>或輸入策略 ID <input type="text" id="strategyBacktestId" placeholder="直接貼策略 ID"></label>
-                <label>起始日 <input type="date" id="strategyBtStart" required></label>
-                <label>結束日 <input type="date" id="strategyBtEnd" required></label>
-                <label>初始資金 (USDT) <input type="number" id="strategyBtEquity" value="10000" step="100"></label>
-                <label>成交價模式
-                  <select id="strategyBtPriceMode">
-                    <option value="next_open">次日開盤</option>
-                    <option value="next_close">次日收盤</option>
-                    <option value="current_close">當日收盤</option>
-                  </select>
-                </label>
-                <label>手續費 (%) <input type="number" id="strategyBtFees" value="0.1" step="0.01"></label>
-                <label>滑價 (%) <input type="number" id="strategyBtSlippage" value="0.1" step="0.01"></label>
-                <label>停損 (%) <input type="number" id="strategyBtStop" placeholder="可留空" step="0.1"></label>
-                <label>停利 (%) <input type="number" id="strategyBtTake" placeholder="可留空" step="0.1"></label>
-                <label>單日最大虧損 (%) <input type="number" id="strategyBtDailyLoss" placeholder="可留空" step="0.1"></label>
-                <label>冷卻天數 <input type="number" id="strategyBtCoolDown" value="1" min="0" step="1"></label>
-                <label>最少持有天數 <input type="number" id="strategyBtMinHold" value="1" min="0" step="1"></label>
-                <label>最多同時持倉 <input type="number" id="strategyBtMaxPos" value="1" min="1" step="1"></label>
-              </div>
-              <div class="actions">
-                <button type="button" class="ghost btn-sm" id="strategyBacktestReload">重新載入策略列表</button>
-                <button type="submit" class="primary">執行回測</button>
-              </div>
-              <div id="strategyBacktestMessage" class="message"></div>
-            </form>
-            <div id="strategyBacktestSummary" class="result-panel"></div>
-            <div id="strategyBacktestTrades" class="table"></div>
-            <div class="subsection-title">淨值曲線（回測）</div>
-            <div class="chart-wrap">
-              <div id="strategyEquityChart" class="chart-canvas small"></div>
-            </div>
-            <div class="subsection-title">價格走勢與進出點</div>
-            <div class="chart-wrap">
-              <div id="strategyPriceChart" class="chart-canvas small"></div>
-            </div>
-          </div>
-
-          <div class="strategy-pane hidden" data-strategy-pane="history">
-            <div class="subsection-title">歷史回測紀錄</div>
-            <form id="strategyBacktestFilterForm" class="form inline">
-              <label>開始日 <input type="date" id="strategyBtHistStart"></label>
-              <label>結束日 <input type="date" id="strategyBtHistEnd"></label>
-              <label>版次 <input type="number" id="strategyBtHistVersion" min="1" placeholder="可留空"></label>
-              <label>每頁筆數 <input type="number" id="strategyBtHistPageSize" value="10" min="1" max="200"></label>
-              <button type="submit" class="ghost btn-sm">套用篩選</button>
-            </form>
-            <div id="strategyBacktestHistory" class="table"></div>
-            <div class="pagination">
-              <button type="button" class="ghost btn-sm" id="strategyBtHistPrev">上一頁</button>
-              <span id="strategyBtHistPageInfo"></span>
-              <button type="button" class="ghost btn-sm" id="strategyBtHistNext">下一頁</button>
-              <div class="spacer"></div>
-              <button type="button" class="ghost btn-sm" id="exportBtTrades">匯出交易 CSV</button>
-              <button type="button" class="ghost btn-sm" id="exportBtEquity">匯出淨值 CSV</button>
-              <button type="button" class="ghost btn-sm" id="strategyBtGoReports">查看報告</button>
-            </div>
-          </div>
-        </div>
-
-        <aside class="workspace-side">
-          <div class="side-card">
-            <div class="panel-head">
-              <div>
-                <h3>建立 / 編輯策略</h3>
-                <p>精簡欄位，右側即可完成建立。</p>
-              </div>
-            </div>
-            <form id="createStrategyForm" class="form">
-              <div class="field-grid">
-                <label>名稱 <input type="text" id="createStrategyName" placeholder="例如：突破策略" required></label>
-                <label>交易對 <input type="text" id="createStrategySymbol" value="BTCUSDT"></label>
-                <label>週期 <input type="text" id="createStrategyTimeframe" value="1d"></label>
-                <label>環境
-                  <select id="createStrategyEnv">
-                    <option value="test">test</option>
-                    <option value="prod">prod</option>
-                    <option value="both">both</option>
-                  </select>
-                </label>
-              </div>
-
-              <details open class="compact-card">
-                <summary>買入條件</summary>
-                <p class="note">目前策略僅支援單一買入條件，點「新增條件」會覆蓋上一個設定。</p>
-                <div class="inline">
-                  <label>邏輯
-                    <select id="buyLogic">
-                      <option value="AND">AND</option>
-                      <option value="OR">OR</option>
-                    </select>
-                  </label>
-                  <button type="button" class="ghost btn-sm" id="addBuyCondition">新增條件</button>
-                </div>
-                <div id="buyConditions" class="condition-list"></div>
-              </details>
-
-              <details open class="compact-card">
-                <summary>賣出條件</summary>
-                <p class="note">賣出同樣僅一條條件，新增時會覆蓋前一個設定。</p>
-                <div class="inline">
-                  <label>邏輯
-                    <select id="sellLogic">
-                      <option value="AND">AND</option>
-                      <option value="OR">OR</option>
-                    </select>
-                  </label>
-                  <button type="button" class="ghost btn-sm" id="addSellCondition">新增條件</button>
-                </div>
-                <div id="sellConditions" class="condition-list"></div>
-              </details>
-
-              <details open class="compact-card">
-                <summary>資金與風控</summary>
-                <div class="field-grid">
-                  <label>下單模式
-                    <select id="orderSizeMode">
-                      <option value="fixed_usdt">固定金額 (USDT)</option>
-                      <option value="percent_of_equity">資金比例 (0-1)</option>
-                    </select>
-                  </label>
-                  <label>下單金額/比例 <input type="number" id="orderSizeValue" value="1000" step="0.01"></label>
-                  <label>成交價模式
-                    <select id="priceMode">
-                      <option value="next_open">次日開盤</option>
-                      <option value="next_close">次日收盤</option>
-                      <option value="current_close">當日收盤</option>
-                    </select>
-                  </label>
-                  <label>手續費 (%) <input type="number" id="feesPct" value="0.1" step="0.01"></label>
-                  <label>滑價 (%) <input type="number" id="slippagePct" value="0.1" step="0.01"></label>
-                  <label>停損 (%) <input type="number" id="stopLossPct" value="3" step="0.1"></label>
-                  <label>停利 (%) <input type="number" id="takeProfitPct" value="6" step="0.1"></label>
-                  <label>冷卻天數 <input type="number" id="coolDownDays" value="1" min="0" step="1"></label>
-                  <label>最少持有天數 <input type="number" id="minHoldDays" value="1" min="0" step="1"></label>
-                  <label>最多同時持倉 <input type="number" id="maxPositions" value="1" min="1" step="1"></label>
-                </div>
-              </details>
-
-              <label>送出預覽（唯讀）
-                <textarea id="createStrategyPreview" rows="6" spellcheck="false" readonly></textarea>
-              </label>
-              <div class="actions">
-                <button type="button" class="ghost btn-sm" id="loadStrategyTemplate">載入範例</button>
-                <button type="submit" class="primary">建立策略</button>
-              </div>
-              <div id="createStrategyMessage" class="message"></div>
-            </form>
-          </div>
-
-          <details class="side-card" id="tradePanel" data-section="trade">
-            <summary>交易紀錄</summary>
-            <p>查詢指定策略的紙本/正式交易紀錄。</p>
-            <form id="tradeForm" class="form inline">
-              <label>策略 ID <input type="text" id="tradeStrategyId" placeholder="可留空查全部"></label>
-              <label>環境
-                <select id="tradeEnv">
-                  <option value="">全部</option>
-                  <option value="test">test</option>
-                  <option value="prod">prod</option>
-                </select>
-              </label>
-              <label>開始日 <input type="date" id="tradeStart"></label>
-              <label>結束日 <input type="date" id="tradeEnd"></label>
-              <button type="submit" class="primary">查詢交易</button>
-            </form>
-            <div id="tradeMeta" class="meta-row"></div>
-            <div id="tradeTable" class="table"></div>
-          </details>
-
-          <details class="side-card" id="reportPanel" data-section="report">
-            <summary>報告列表</summary>
-            <p>輸入策略 ID 取得已保存的回測/交易報告。</p>
-            <form id="reportForm" class="form inline">
-              <label>策略 ID <input type="text" id="reportStrategyId" required></label>
-              <button type="submit" class="primary">查詢報告</button>
-            </form>
-            <div id="reportMeta" class="meta-row"></div>
-            <div id="reportTable" class="table"></div>
-            <div class="subsection-title">報告詳情</div>
-            <div id="reportDetail" class="result-panel"></div>
-          </details>
-
-          <details class="side-card" id="positionPanel" data-section="position">
-            <summary>持倉列表</summary>
-            <p>查看目前未平倉部位（紙本/正式）。</p>
-            <form id="positionForm" class="form inline">
-              <label>環境
-                <select id="positionEnv">
-                  <option value="">全部</option>
-                  <option value="test">test</option>
-                  <option value="prod">prod</option>
-                </select>
-              </label>
-              <button type="submit" class="primary">查詢持倉</button>
-            </form>
-            <div id="positionMeta" class="meta-row"></div>
-            <div id="positionTable" class="table"></div>
-          </details>
-
-          <details class="side-card" id="logPanel" data-section="logs">
-            <summary>策略日誌</summary>
-            <p>查看策略執行訊息，可依環境與筆數過濾。</p>
-            <form id="logForm" class="form inline">
-              <label>策略 ID <input type="text" id="logStrategyId" required></label>
-              <label>環境
-                <select id="logEnv">
-                  <option value="">全部</option>
-                  <option value="test">test</option>
-                  <option value="prod">prod</option>
-                </select>
-              </label>
-              <label>筆數 <input type="number" id="logLimit" value="50" min="1" max="200"></label>
-              <button type="submit" class="primary">查詢日誌</button>
-            </form>
-            <div id="logTable" class="table"></div>
-          </details>
-        </aside>
-      </div>
-    </section>
-
-    <section class="panel" id="activityPanel" data-section="activity">
-      <div class="panel-head">
-        <div>
-          <h2>操作紀錄</h2>
-          <p>保留最近的操作記錄，方便追蹤流程。</p>
-        </div>
-      </div>
-      <ul id="activityList" class="activity-list"></ul>
-    </section>
-      </main>
     </div>
 
-  <script src="main.js"></script>
+    <div class="bg-surface-dark border border-surface-border rounded-xl p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-sm text-slate-400 font-medium">近期執行歷史 (Job History)</h3>
+        <span class="text-xs text-slate-500">最新在前</span>
+      </div>
+      <div id="historyList" class="space-y-3 text-sm"></div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="bg-surface-dark border border-surface-border rounded-xl p-6 flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm text-slate-400 font-medium">走勢摘要 (Analysis Summary)</h3>
+          <button id="refreshSummary" class="text-xs px-2 py-1 rounded bg-primary/20 text-primary border border-primary/40 hover:bg-primary/30">重整</button>
+        </div>
+        <div class="text-xs text-slate-400">角色：<span id="roleLabel" class="text-white">--</span></div>
+        <div class="text-xs text-slate-400">日期：<span id="summaryDate" class="text-white">--</span></div>
+        <div class="text-xs text-slate-400">交易對：<span id="summaryPair" class="text-white">--</span></div>
+        <div class="flex items-center gap-2">
+          <span id="summaryTrend" class="text-sm font-bold text-primary">--</span>
+          <span id="summaryAdvice" class="text-xs text-slate-300"></span>
+        </div>
+        <div class="grid grid-cols-2 gap-3 text-sm text-slate-300 font-mono">
+          <div>收盤：<span id="summaryPrice" class="text-white">--</span></div>
+          <div>日漲跌：<span id="summaryChange" class="text-white">--</span></div>
+          <div>近5日：<span id="summaryReturn5" class="text-white">--</span></div>
+          <div>量能倍數：<span id="summaryVolume" class="text-white">--</span></div>
+          <div>分數：<span id="summaryScore" class="text-white">--</span></div>
+        </div>
+      </div>
+      <div class="lg:col-span-2 bg-surface-dark border border-surface-border rounded-xl p-6">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-3">
+            <h3 class="text-sm text-slate-400 font-medium">近期分析 (最新在前)</h3>
+            <input id="symbolInput" class="bg-surface-border border border-surface-border rounded text-xs text-slate-200 px-2 py-1 focus:border-primary focus:ring-0 w-28" value="BTCUSDT" />
+          </div>
+          <div class="flex gap-2">
+            <button id="refreshHistory" class="text-xs px-2 py-1 rounded bg-primary/20 text-primary border border-primary/40 hover:bg-primary/30">重整</button>
+          </div>
+        </div>
+        <div class="mb-4">
+          <canvas id="analysisChart" height="120"></canvas>
+        </div>
+        <div id="analysisList" class="grid md:grid-cols-2 gap-3 text-sm"></div>
+      </div>
+    </div>
+  </main>
+
+  <dialog id="loginModal" class="bg-surface-dark text-white rounded-lg border border-surface-border shadow-neon p-6 w-[420px] max-w-full">
+    <h3 class="text-lg font-bold mb-3">登入</h3>
+    <form id="loginForm" class="space-y-3">
+      <div>
+        <label class="text-xs text-slate-400">Email</label>
+        <input id="loginEmail" type="email" class="w-full bg-background-dark border border-surface-border rounded px-3 py-2 text-sm text-white focus:border-primary focus:ring-0" value="admin@example.com" required />
+      </div>
+      <div>
+        <label class="text-xs text-slate-400">Password</label>
+        <input id="loginPassword" type="password" class="w-full bg-background-dark border border-surface-border rounded px-3 py-2 text-sm text-white focus:border-primary focus:ring-0" value="password123" required />
+      </div>
+      <div class="flex justify-end gap-2 mt-4">
+        <button type="button" id="closeLogin" class="px-3 py-1.5 rounded bg-surface-border text-slate-300 text-xs border border-surface-border hover:border-primary/50">取消</button>
+        <button type="submit" class="px-3 py-1.5 rounded bg-primary/80 text-background-dark text-xs font-semibold shadow-neon hover:bg-primary">登入</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="./dashboard.js"></script>
 </body>
 </html>

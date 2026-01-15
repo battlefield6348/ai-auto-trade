@@ -20,6 +20,7 @@
 - 對外溝通使用繁體中文（台灣用語），時間以台北時區（UTC+8）描述。
 - 指令/文件範例以台灣開發者習慣撰寫（例如「幾點」、「排程」、「檔名」用語）。
 - 程式碼註解優先使用繁體中文（台灣用語），且保持精簡。
+- API 層優先使用 Gin 框架開發；程式碼可讀性與清楚的控制流程優先於效能微調。
 
 ## 功能現況（摘要）
 - 自動管線：`ingestion.auto_interval` 會定期跑日 K 擷取與分析。
@@ -32,6 +33,8 @@
 - 手動擷取：`POST /api/admin/ingestion/daily`
 - 手動分析：`POST /api/admin/analysis/daily`
 - 走勢摘要：`GET /api/analysis/summary`
+- 排程狀態：`GET /api/admin/jobs/status`
+- 排程歷史：`GET /api/admin/jobs/history`
 
 ## 交付規範
 - 變更需更新 `README.md`（若涉及使用方式或設定）。

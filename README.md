@@ -52,6 +52,8 @@
     -H "Content-Type: application/json" \
     -d '{"start_date":"2025-01-01","end_date":"2025-03-01","run_analysis":true}'
   ```
+- 單日手動作業：`POST /api/admin/ingestion/daily`（擷取單日，body: `trade_date`, 可帶 `run_analysis`），`POST /api/admin/analysis/daily`（只跑分析，需日 K 已存在）。
+- 排程狀態/歷史：`GET /api/admin/jobs/status` 回傳下一次排程時間、最近一次執行結果、資料來源（Binance 或 Synthetic）；`GET /api/admin/jobs/history?limit=20` 回傳近期執行紀錄（含觸發者）。
 - 走勢圖資料：可呼叫 `GET /api/analysis/history?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD` 取得區間內分析序列（供前端走勢圖使用）。
 - 加權條件回測：`POST /api/analysis/backtest`，輸入權重與門檻（score、日漲跌加分、量能加分、總分門檻，及回測天數），回傳命中日期與後續報酬，用於前端條件回測。
 - 策略/回測/交易（需 `strategy` 權限，建議先套用 `db/migrations/0004_trading_strategies.sql`）：  

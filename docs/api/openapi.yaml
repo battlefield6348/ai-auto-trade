@@ -81,6 +81,43 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LogoutResponse'
+  /api/admin/ingestion/daily:
+    post:
+      tags: [Ingestion]
+      summary: 手動擷取單一交易日的日 K，可選擇同步分析
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngestionDailyRequest'
+      responses:
+        "200":
+          description: 執行結果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestionDailyResponse'
+        "400":
+          description: 參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: 未登入或 token 失效
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "403":
+          description: 權限不足（需 admin 或 analyst，且具 ingestion.trigger_daily）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/admin/ingestion/backfill:
     post:
       tags: [Ingestion]
@@ -114,6 +151,107 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         "403":
           description: 權限不足（需 admin 或 analyst，且具 ingestion.trigger_backfill）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/admin/analysis/daily:
+    post:
+      tags: [Analysis]
+      summary: 手動觸發單日分析（需資料已擷取）
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalysisDailyRequest'
+      responses:
+        "200":
+          description: 執行成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisDailyResponse'
+        "400":
+          description: 參數錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: 未登入或 token 失效
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "403":
+          description: 權限不足（需 admin 或 analyst，且具 analysis.trigger_daily）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: 指定日期尚未有擷取資料
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/admin/jobs/status:
+    get:
+      tags: [System]
+      summary: 取得批次管線的當前狀態與最近一次執行結果
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 狀態資訊
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobStatusResponse'
+        "401":
+          description: 未登入或 token 失效
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "403":
+          description: 權限不足（需 system.health.view）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/admin/jobs/history:
+    get:
+      tags: [System]
+      summary: 查詢近期批次管線執行紀錄
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: 歷史紀錄
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobHistoryResponse'
+        "401":
+          description: 未登入或 token 失效
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "403":
+          description: 權限不足（需 system.health.view）
           content:
             application/json:
               schema:
@@ -891,6 +1029,172 @@ components:
         success:
           type: boolean
           example: true
+    IngestionDailyRequest:
+      type: object
+      properties:
+        trade_date:
+          type: string
+          format: date
+          example: "2025-01-05"
+        run_analysis:
+          type: boolean
+          description: 是否在擷取後同步進行分析
+          example: true
+      required: [trade_date]
+    IngestionDailyResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        trade_date:
+          type: string
+          format: date
+        duration_seconds:
+          type: integer
+          example: 12
+        ingestion:
+          type: object
+          properties:
+            success:
+              type: boolean
+            error:
+              type: string
+              nullable: true
+        analysis:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+            success:
+              type: boolean
+            total:
+              type: integer
+              example: 1
+            success_count:
+              type: integer
+              example: 1
+            failure_count:
+              type: integer
+              example: 0
+            error:
+              type: string
+              nullable: true
+    AnalysisDailyRequest:
+      type: object
+      properties:
+        trade_date:
+          type: string
+          format: date
+          example: "2025-01-05"
+      required: [trade_date]
+    AnalysisDailyResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        trade_date:
+          type: string
+          format: date
+        total:
+          type: integer
+          example: 1
+        success_count:
+          type: integer
+          example: 1
+        failure_count:
+          type: integer
+          example: 0
+        duration_seconds:
+          type: integer
+          example: 2
+    JobRun:
+      type: object
+      properties:
+        kind:
+          type: string
+          example: auto
+        triggered_by:
+          type: string
+          description: 觸發者 user_id，系統自動則為 system
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+        duration_seconds:
+          type: integer
+        data_source:
+          type: string
+          example: binance
+        ingestion:
+          type: object
+          properties:
+            success:
+              type: boolean
+            error:
+              type: string
+              nullable: true
+        analysis:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+            success:
+              type: boolean
+            total:
+              type: integer
+            success_count:
+              type: integer
+            failure_count:
+              type: integer
+            error:
+              type: string
+              nullable: true
+        failures:
+          type: array
+          items:
+            $ref: '#/components/schemas/BackfillFailure'
+    JobStatusResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        next_run:
+          type: string
+          format: date-time
+          nullable: true
+        retry_strategy:
+          type: array
+          items:
+            type: string
+          example: ["20:00", "20:30"]
+        timezone:
+          type: string
+          example: Asia/Taipei
+        use_synthetic:
+          type: boolean
+        auto_interval_seconds:
+          type: integer
+        last_run:
+          $ref: '#/components/schemas/JobRun'
+          nullable: true
+    JobHistoryResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        total:
+          type: integer
+          example: 3
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/JobRun'
     BackfillRequest:
       type: object
       properties:

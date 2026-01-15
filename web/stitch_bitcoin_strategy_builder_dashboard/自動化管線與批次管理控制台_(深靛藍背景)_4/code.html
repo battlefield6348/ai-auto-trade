@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html class="dark" lang="zh-Hant"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>自動化管線與批次管理控制台 (進階版)</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Noto+Sans+TC:wght@300;400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#0ddff2",
+                        "primary-dark": "#0abdcf",
+                        "secondary": "#7c3aed",
+                        "background-dark": "#0A0E1A",
+                        "surface-dark": "#161b2e",
+                        "surface-border": "#232d4b",
+                        "success": "#10b981",
+                        "warning": "#f59e0b",
+                        "danger": "#ef4444",
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "sans-serif"],
+                        "body": ["Noto Sans TC", "sans-serif"],
+                        "mono": ["ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "monospace"],
+                    },
+                    boxShadow: {
+                        "neon": "0 0 10px rgba(13, 223, 242, 0.3), 0 0 20px rgba(13, 223, 242, 0.1)",
+                        "neon-hover": "0 0 20px rgba(13, 223, 242, 0.6), 0 0 40px rgba(13, 223, 242, 0.2)",
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: "Space Grotesk", "Noto Sans TC", sans-serif;
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+        .terminal-text {
+            text-shadow: 0 0 5px rgba(13, 223, 242, 0.5);
+        }
+    </style>
+</head>
+<body class="bg-background-dark text-white min-h-screen flex flex-col antialiased selection:bg-primary selection:text-background-dark">
+<header class="sticky top-0 z-50 border-b border-surface-border bg-background-dark/80 backdrop-blur-md">
+<div class="px-6 py-4 flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="size-8 text-primary flex items-center justify-center rounded bg-primary/10">
+<span class="material-symbols-outlined">hub</span>
+</div>
+<div>
+<h1 class="text-xl font-bold tracking-tight text-white uppercase font-display">自動化管線控制台 <span class="text-primary text-sm normal-case ml-2 border border-primary/30 px-2 rounded-full">v2.4 PRO</span></h1>
+<p class="text-xs text-slate-400 font-mono tracking-wider">SYSTEM_ID: AUTO-BTC-BATCH-OPS</p>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="hidden md:flex flex-col items-end mr-4 border-r border-surface-border pr-6">
+<span class="text-lg font-bold font-mono leading-none text-primary">19:15:42</span>
+<span class="text-xs text-slate-400 font-mono">Taipei (UTC+8)</span>
+</div>
+<div class="flex gap-3">
+<button class="relative p-2 rounded-lg hover:bg-surface-dark text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-2 right-2 size-2 bg-primary rounded-full animate-pulse"></span>
+</button>
+<div class="size-10 rounded-full bg-cover bg-center border border-surface-border" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuB4kEIUMaiandadrn4M32xxxEXFkTG5p7axfx_Y6h-z0RqLByd3Z3Mh3Ze9kHx8Nez0TMqm3k0cPT-9IaqlocYtTydxRwXAFlxsZonOq3VaJ5VXIceSxWs6nRIezB0LBSa0urW_neJXq-0ov14-FtTrfQXEWiC6A533PZwH1ZLyKyJw2ao9L5BiRqeMQV4ZIqr67fNBBV7nd5ZPFU6gpUybb7EFI-piSpUJ-pQz-rzCc4EykD6d3g-EyzwX5tPgbh9wdYLmzt3XQTk");'></div>
+</div>
+</div>
+</div>
+</header>
+<main class="flex-1 p-6 md:p-8 max-w-[1600px] mx-auto w-full flex flex-col gap-6">
+<div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+<div class="bg-surface-dark border border-surface-border rounded-lg p-5 flex flex-col relative overflow-hidden group hover:border-primary/50 transition-colors">
+<div class="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-4xl text-primary">schedule</span>
+</div>
+<h3 class="text-slate-400 text-sm font-medium mb-1">排程狀態 (Schedule Status)</h3>
+<div class="mt-2">
+<div class="text-sm text-slate-400 mb-1">Next Run</div>
+<div class="text-2xl font-bold font-mono tracking-tight text-white flex items-center gap-2">
+                    19:30:00 <span class="text-xs font-sans text-primary px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20">Taipei</span>
+</div>
+</div>
+<div class="mt-4 pt-3 border-t border-surface-border/50">
+<div class="flex justify-between items-center text-xs">
+<span class="text-slate-500">Retry Strategy:</span>
+<span class="font-mono text-slate-300">20:00, 20:30</span>
+</div>
+<div class="w-full bg-surface-border/50 h-1 mt-2 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[75%]"></div>
+</div>
+<div class="text-[10px] text-right text-primary mt-1">15m remaining</div>
+</div>
+</div>
+<div class="lg:col-span-2 bg-surface-dark border border-surface-border rounded-lg p-5 flex flex-col relative overflow-hidden group hover:border-primary/50 transition-colors">
+<div class="flex justify-between items-start mb-4">
+<h3 class="text-slate-400 text-sm font-medium">最近任務指標 (Latest Task Metrics)</h3>
+<span class="px-2 py-0.5 rounded text-xs bg-red-500/10 text-red-400 border border-red-500/20 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">warning</span> Partial Error
+                </span>
+</div>
+<div class="grid grid-cols-3 gap-4 font-mono text-sm">
+<div>
+<p class="text-slate-500 text-xs">Start / End</p>
+<p class="text-white mt-1">15:30:00</p>
+<p class="text-slate-400">15:32:45</p>
+</div>
+<div>
+<p class="text-slate-500 text-xs">Duration</p>
+<p class="text-primary mt-1 font-bold">2m 45s</p>
+</div>
+<div>
+<p class="text-slate-500 text-xs">Success / Fail</p>
+<div class="flex items-baseline gap-2 mt-1">
+<span class="text-success font-bold">142</span>
+<span class="text-slate-600">/</span>
+<span class="text-danger font-bold">3</span>
+</div>
+</div>
+</div>
+<div class="mt-auto pt-3 border-t border-surface-border/50 flex items-start gap-2">
+<span class="material-symbols-outlined text-danger text-sm mt-0.5">error</span>
+<p class="text-xs text-danger/80 truncate">Error: Input missing for pair ETH/BTC at timestamp 15:31:00. Skipping batch.</p>
+</div>
+</div>
+<div class="bg-surface-dark border border-surface-border rounded-lg p-5 flex flex-col relative overflow-hidden group hover:border-primary/50 transition-colors">
+<div class="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-4xl text-primary">settings_applications</span>
+</div>
+<h3 class="text-slate-400 text-sm font-medium mb-3">資料配置 (Data Config)</h3>
+<div class="space-y-4">
+<div class="flex justify-between items-center">
+<span class="text-sm text-slate-300">Synthetic Mode</span>
+<div class="flex items-center gap-2 px-2 py-1 rounded bg-surface-border/50 border border-surface-border">
+<div class="size-2 rounded-full bg-slate-500"></div>
+<span class="text-xs text-slate-400 font-mono">INACTIVE</span>
+</div>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-sm text-slate-300">Auto-Interval</span>
+<span class="text-xs font-mono text-primary border border-primary/30 px-2 py-0.5 rounded bg-primary/5">DAILY (1D)</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-sm text-slate-300">Data Source</span>
+<span class="text-xs font-mono text-white">Binance_Spot</span>
+</div>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<div class="lg:col-span-2 bg-surface-dark border border-surface-border rounded-xl p-6 flex flex-col">
+<div class="flex items-center justify-between mb-6">
+<h2 class="text-lg font-bold text-white flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">build_circle</span>
+                    手動操作面板 (Manual Operations)
+                </h2>
+<div class="flex gap-2">
+<span class="text-xs px-2 py-1 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20 font-mono">ROLE: ANALYST</span>
+<span class="text-xs px-2 py-1 rounded bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 font-mono">ADMIN</span>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<div class="bg-background-dark/50 rounded-lg p-4 border border-surface-border">
+<div class="flex justify-between items-start mb-3">
+<h4 class="text-sm font-bold text-white flex items-center gap-2">
+<span class="material-symbols-outlined text-sm text-slate-400">calendar_month</span> Date-based Rerun
+                        </h4>
+<div class="flex items-center gap-2">
+<label class="text-[10px] text-slate-500 uppercase font-bold">Overwrite</label>
+<button aria-checked="true" class="relative inline-flex h-4 w-8 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-primary" role="switch" type="button">
+<span aria-hidden="true" class="translate-x-4 pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"></span>
+</button>
+</div>
+</div>
+<div class="flex gap-2 mb-3">
+<input class="bg-surface-dark border border-surface-border rounded text-xs text-slate-300 px-2 py-1.5 w-full focus:border-primary focus:ring-0" type="date" value="2023-10-24"/>
+</div>
+<button class="w-full py-1.5 rounded bg-surface-border hover:bg-primary/20 hover:text-primary text-xs text-slate-300 transition-colors border border-transparent hover:border-primary/50">
+                        Execute Rerun
+                    </button>
+</div>
+<div class="bg-background-dark/50 rounded-lg p-4 border border-surface-border">
+<h4 class="text-sm font-bold text-white flex items-center gap-2 mb-3">
+<span class="material-symbols-outlined text-sm text-slate-400">candlestick_chart</span> Pair x Date Range
+                    </h4>
+<div class="grid grid-cols-2 gap-2 mb-3">
+<input class="col-span-2 bg-surface-dark border border-surface-border rounded text-xs text-slate-300 px-2 py-1.5 focus:border-primary focus:ring-0" placeholder="Pair (e.g. BTCUSDT)" type="text"/>
+<input class="bg-surface-dark border border-surface-border rounded text-xs text-slate-300 px-2 py-1.5 w-full focus:border-primary focus:ring-0" type="date"/>
+<input class="bg-surface-dark border border-surface-border rounded text-xs text-slate-300 px-2 py-1.5 w-full focus:border-primary focus:ring-0" type="date"/>
+</div>
+<button class="w-full py-1.5 rounded bg-surface-border hover:bg-primary/20 hover:text-primary text-xs text-slate-300 transition-colors border border-transparent hover:border-primary/50">
+                        Batch Analyze
+                    </button>
+</div>
+</div>
+</div>
+<div class="lg:col-span-1 bg-surface-dark border border-surface-border rounded-xl p-6 flex flex-col">
+<div class="flex items-center justify-between mb-4">
+<h2 class="text-lg font-bold text-white flex items-center gap-2">
+<span class="material-symbols-outlined text-[#24A1DE]">send</span>
+                    Telegram Notifier
+                </h2>
+<div class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-success/20">
+<span class="translate-x-4 pointer-events-none inline-block h-4 w-4 transform rounded-full bg-success shadow ring-0 transition duration-200 ease-in-out"></span>
+</div>
+</div>
+<div class="flex-1 flex flex-col gap-4">
+<div class="p-3 bg-background-dark/80 border border-surface-border rounded-lg">
+<div class="flex justify-between items-center mb-2">
+<span class="text-xs text-slate-400">Last Push Summary</span>
+<span class="text-[10px] text-slate-500">10m ago</span>
+</div>
+<p class="text-xs text-slate-300 leading-relaxed border-l-2 border-primary pl-2">
+                        [ALERT] BTC price deviation &gt; 2%. Volatility spike detected.
+                    </p>
+</div>
+<div class="mt-auto">
+<button class="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-primary/30 text-primary hover:bg-primary/10 transition-all text-sm font-medium">
+<span class="material-symbols-outlined text-sm">science</span>
+                        Send Test Message
+                    </button>
+</div>
+</div>
+</div>
+</div>
+<section class="w-full">
+<div class="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
+<h3 class="text-xl font-bold text-white flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">table_chart</span>
+                強勢分析列表 (Analysis Table)
+            </h3>
+<div class="flex gap-2">
+<select class="bg-surface-dark border border-surface-border text-xs text-slate-300 rounded px-3 py-1.5 focus:border-primary focus:ring-0">
+<option>Score &gt; 80</option>
+<option>Score &gt; 90</option>
+<option>All Pairs</option>
+</select>
+<div class="relative">
+<span class="absolute inset-y-0 left-2 flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-slate-500 text-sm">search</span>
+</span>
+<input class="pl-8 bg-surface-dark border border-surface-border text-xs text-slate-300 rounded px-3 py-1.5 focus:border-primary focus:ring-0 w-48" placeholder="Search Ticker..." type="text"/>
+</div>
+</div>
+</div>
+<div class="overflow-x-auto rounded-xl border border-surface-border bg-surface-dark">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-background-dark/50 text-slate-400 text-xs uppercase font-medium border-b border-surface-border">
+<th class="px-6 py-4 font-mono">Ticker</th>
+<th class="px-6 py-4 font-mono">Tags (特徵標籤)</th>
+<th class="px-6 py-4 font-mono">Price</th>
+<th class="px-6 py-4 font-mono">Score</th>
+<th class="px-6 py-4 font-mono text-right">Action</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-border text-sm">
+<tr class="hover:bg-primary/5 transition-colors group">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center font-bold text-xs">BTC</div>
+<div>
+<div class="font-bold text-white">BTC/USDT</div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex gap-2 flex-wrap">
+<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-green-500/10 text-green-400 border border-green-500/20">Volume Spike</span>
+<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">Long-term Trend</span>
+</div>
+</td>
+<td class="px-6 py-4 font-mono text-slate-200">$34,250.00</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<span class="text-primary font-bold font-mono">92</span>
+<div class="w-16 h-1.5 rounded-full bg-surface-border overflow-hidden">
+<div class="h-full bg-primary w-[92%]"></div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-slate-400 hover:text-white transition-colors">
+<span class="material-symbols-outlined text-lg">more_horiz</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-primary/5 transition-colors group">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center font-bold text-xs">SOL</div>
+<div>
+<div class="font-bold text-white">SOL/USDT</div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex gap-2 flex-wrap">
+<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-pink-500/10 text-pink-400 border border-pink-500/20">Short-term Strength</span>
+</div>
+</td>
+<td class="px-6 py-4 font-mono text-slate-200">$32.15</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<span class="text-primary font-bold font-mono">88</span>
+<div class="w-16 h-1.5 rounded-full bg-surface-border overflow-hidden">
+<div class="h-full bg-primary w-[88%]"></div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-slate-400 hover:text-white transition-colors">
+<span class="material-symbols-outlined text-lg">more_horiz</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-primary/5 transition-colors group">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center font-bold text-xs">ETH</div>
+<div>
+<div class="font-bold text-white">ETH/USDT</div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex gap-2 flex-wrap">
+<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-500/10 text-slate-400 border border-slate-500/20">Consolidation</span>
+</div>
+</td>
+<td class="px-6 py-4 font-mono text-slate-200">$1,780.40</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<span class="text-slate-400 font-bold font-mono">65</span>
+<div class="w-16 h-1.5 rounded-full bg-surface-border overflow-hidden">
+<div class="h-full bg-slate-500 w-[65%]"></div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-slate-400 hover:text-white transition-colors">
+<span class="material-symbols-outlined text-lg">more_horiz</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</main>
+
+</body></html>

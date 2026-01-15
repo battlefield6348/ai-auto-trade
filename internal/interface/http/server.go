@@ -112,6 +112,23 @@ type backfillFailure struct {
 	Reason    string `json:"reason"`
 }
 
+type jobRun struct {
+	Kind          string
+	TriggeredBy   string
+	Start         time.Time
+	End           time.Time
+	IngestionOK   bool
+	IngestionErr  string
+	AnalysisOn    bool
+	AnalysisOK    bool
+	AnalysisTotal int
+	AnalysisSucc  int
+	AnalysisFail  int
+	AnalysisErr   string
+	Failures      []backfillFailure
+	DataSource    string
+}
+
 // --- Handlers ---
 
 func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
@@ -281,6 +298,19 @@ func (s *Server) handleIngestionBackfill(w http.ResponseWriter, r *http.Request)
 	}
 
 	log.Printf("ingestion backfill done days=%d ingestion_success=%d analysis_success=%d failures=%d duration=%s", totalDays, ingestionSuccessDays, analysisSuccessDays, len(failures), time.Since(start))
+	s.recordJob(jobRun{
+		Kind:          "backfill",
+		TriggeredBy:   currentUserID(r),
+		Start:         start,
+		End:           time.Now(),
+		IngestionOK:   len(failures) == 0,
+		AnalysisOn:    runAnalysis,
+		AnalysisOK:    runAnalysis && len(failures) == 0,
+		AnalysisTotal: totalDays,
+		AnalysisSucc:  analysisSuccessDays,
+		AnalysisFail:  totalDays - analysisSuccessDays,
+		Failures:      failures,
+	})
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"success":                true,
 		"start_date":             startDate.Format("2006-01-02"),
@@ -291,6 +321,77 @@ func (s *Server) handleIngestionBackfill(w http.ResponseWriter, r *http.Request)
 		"failure_days":           len(failures),
 		"analysis_enabled":       runAnalysis,
 		"failures":               failures,
+	})
+}
+
+func (s *Server) handleIngestionDaily(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		TradeDate   string `json:"trade_date"`
+		RunAnalysis *bool  `json:"run_analysis"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+		return
+	}
+	if body.TradeDate == "" {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "trade_date required")
+		return
+	}
+	tradeDate, err := time.Parse("2006-01-02", body.TradeDate)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid trade_date")
+		return
+	}
+	runAnalysis := true
+	if body.RunAnalysis != nil {
+		runAnalysis = *body.RunAnalysis
+	}
+
+	start := time.Now()
+	var ingestionErr error
+	if s.useSynthetic {
+		ingestionErr = s.generateDailyPrices(r.Context(), tradeDate)
+	} else {
+		ingestionErr = s.generateDailyPricesStrict(r.Context(), tradeDate)
+	}
+
+	var stats analysisRunSummary
+	var analysisErr error
+	if ingestionErr == nil && runAnalysis {
+		stats, analysisErr = s.runAnalysisForDate(r.Context(), tradeDate)
+	}
+
+	s.recordJob(jobRun{
+		Kind:          "ingestion_daily",
+		TriggeredBy:   currentUserID(r),
+		Start:         start,
+		End:           time.Now(),
+		IngestionOK:   ingestionErr == nil,
+		IngestionErr:  errorText(ingestionErr),
+		AnalysisOn:    runAnalysis,
+		AnalysisOK:    runAnalysis && analysisErr == nil,
+		AnalysisTotal: stats.total,
+		AnalysisSucc:  stats.success,
+		AnalysisFail:  stats.failure,
+		AnalysisErr:   errorText(analysisErr),
+	})
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success":          ingestionErr == nil && (!runAnalysis || analysisErr == nil),
+		"trade_date":       tradeDate.Format("2006-01-02"),
+		"duration_seconds": int(time.Since(start).Seconds()),
+		"ingestion": map[string]interface{}{
+			"success": ingestionErr == nil,
+			"error":   errorString(ingestionErr),
+		},
+		"analysis": map[string]interface{}{
+			"enabled":       runAnalysis,
+			"success":       analysisErr == nil && runAnalysis,
+			"total":         stats.total,
+			"success_count": stats.success,
+			"failure_count": stats.failure,
+			"error":         errorString(analysisErr),
+		},
 	})
 }
 
@@ -319,6 +420,60 @@ func (s *Server) runAnalysisForDate(ctx context.Context, tradeDate time.Time) (a
 	}
 	stats.failure = stats.total - stats.success
 	return stats, nil
+}
+
+func (s *Server) handleAnalysisDaily(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		TradeDate string `json:"trade_date"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+		return
+	}
+	if body.TradeDate == "" {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "trade_date required")
+		return
+	}
+	tradeDate, err := time.Parse("2006-01-02", body.TradeDate)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid trade_date")
+		return
+	}
+
+	start := time.Now()
+	stats, runErr := s.runAnalysisForDate(r.Context(), tradeDate)
+	if errors.Is(runErr, errNoPrices) {
+		writeError(w, http.StatusNotFound, errCodeAnalysisNotReady, "ingestion data not ready for trade_date")
+		return
+	}
+	if runErr != nil {
+		log.Printf("analysis daily failed date=%s: %v", tradeDate.Format("2006-01-02"), runErr)
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "analysis failed")
+		return
+	}
+
+	s.recordJob(jobRun{
+		Kind:          "analysis_daily",
+		TriggeredBy:   currentUserID(r),
+		Start:         start,
+		End:           time.Now(),
+		IngestionOK:   true,
+		AnalysisOn:    true,
+		AnalysisOK:    runErr == nil,
+		AnalysisTotal: stats.total,
+		AnalysisSucc:  stats.success,
+		AnalysisFail:  stats.failure,
+		AnalysisErr:   errorText(runErr),
+	})
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success":          true,
+		"trade_date":       tradeDate.Format("2006-01-02"),
+		"total":            stats.total,
+		"success_count":    stats.success,
+		"failure_count":    stats.failure,
+		"duration_seconds": int(time.Since(start).Seconds()),
+	})
 }
 
 func (s *Server) handleAnalysisQuery(w http.ResponseWriter, r *http.Request) {
@@ -552,6 +707,71 @@ func (s *Server) handleAnalysisSummary(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleStrongStocks(w http.ResponseWriter, r *http.Request) {
 	// 已移除強勢篩選功能。
+}
+
+func (s *Server) handleJobsStatus(w http.ResponseWriter, r *http.Request) {
+	loc := taipeiLocation()
+	s.jobMu.Lock()
+	var last *jobRun
+	if n := len(s.jobHistory); n > 0 {
+		copy := s.jobHistory[n-1]
+		last = &copy
+	}
+	base := s.lastAutoRun
+	if base.IsZero() {
+		base = time.Now()
+	}
+	nextRun := ""
+	if s.autoInterval > 0 {
+		nextRun = base.Add(s.autoInterval).In(loc).Format(time.RFC3339)
+	}
+	s.jobMu.Unlock()
+
+	resp := map[string]interface{}{
+		"success":               true,
+		"next_run":              nextRun,
+		"retry_strategy":        []string{"20:00", "20:30"},
+		"timezone":              "Asia/Taipei",
+		"use_synthetic":         s.useSynthetic,
+		"auto_interval_seconds": int(s.autoInterval.Seconds()),
+		"data_source":           s.dataSource,
+	}
+	if last != nil {
+		resp["last_run"] = jobRunToMap(*last, loc)
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) handleJobsHistory(w http.ResponseWriter, r *http.Request) {
+	limit := parseIntDefault(r.URL.Query().Get("limit"), 20)
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	loc := taipeiLocation()
+
+	s.jobMu.Lock()
+	n := len(s.jobHistory)
+	start := 0
+	if n > limit {
+		start = n - limit
+	}
+	history := make([]jobRun, n-start)
+	copy(history, s.jobHistory[start:])
+	s.jobMu.Unlock()
+
+	items := make([]map[string]interface{}, 0, len(history))
+	for i := len(history) - 1; i >= 0; i-- {
+		items = append(items, jobRunToMap(history[i], loc))
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"total":   len(items),
+		"items":   items,
+	})
 }
 
 // --- Strategies / Backtest / Trades ---
@@ -1146,25 +1366,50 @@ func (s *Server) startConfigBackfill() {
 
 func (s *Server) runPipelineOnce() {
 	tradeDate := time.Now().UTC().Truncate(24 * time.Hour)
+	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	log.Printf("auto pipeline start trade_date=%s", tradeDate.Format("2006-01-02"))
+	ingestionOK := true
+	ingestionErr := ""
+	dataSource := s.dataSource
 	if err := s.generateDailyPrices(ctx, tradeDate); err != nil {
+		ingestionErr = err.Error()
 		log.Printf("auto ingestion error: %v; fallback synthetic", err)
 		if fbErr := s.generateSyntheticBTC(ctx, tradeDate); fbErr != nil {
 			log.Printf("auto ingestion fallback failed: %v", fbErr)
-			return
+			ingestionOK = false
+		} else {
+			dataSource = "synthetic (fallback)"
 		}
 	}
 
 	prices, err := s.dataRepo.PricesByDate(ctx, tradeDate)
 	if err != nil {
 		log.Printf("auto analysis: read prices failed: %v", err)
+		s.recordJob(jobRun{
+			Kind:         "auto",
+			Start:        start,
+			End:          time.Now(),
+			IngestionOK:  ingestionOK,
+			IngestionErr: ingestionErr,
+			AnalysisOn:   true,
+			AnalysisErr:  err.Error(),
+		})
 		return
 	}
 	if len(prices) == 0 {
 		log.Printf("auto analysis: no prices for trade_date=%s", tradeDate.Format("2006-01-02"))
+		s.recordJob(jobRun{
+			Kind:         "auto",
+			Start:        start,
+			End:          time.Now(),
+			IngestionOK:  ingestionOK,
+			IngestionErr: ingestionErr,
+			AnalysisOn:   true,
+			AnalysisErr:  "no prices for trade_date",
+		})
 		return
 	}
 
@@ -1182,6 +1427,20 @@ func (s *Server) runPipelineOnce() {
 		}
 		success++
 	}
+	s.recordJob(jobRun{
+		Kind:          "auto",
+		TriggeredBy:   "system",
+		Start:         start,
+		End:           time.Now(),
+		IngestionOK:   ingestionOK,
+		IngestionErr:  ingestionErr,
+		AnalysisOn:    true,
+		AnalysisOK:    success == len(prices),
+		AnalysisTotal: len(prices),
+		AnalysisSucc:  success,
+		AnalysisFail:  len(prices) - success,
+		DataSource:    dataSource,
+	})
 	log.Printf("auto pipeline done trade_date=%s success=%d total=%d", tradeDate.Format("2006-01-02"), success, len(prices))
 }
 
@@ -1217,6 +1476,77 @@ func (s *Server) setRefreshCookie(w http.ResponseWriter, r *http.Request, token 
 		SameSite: sameSite,
 		Secure:   useHTTPS,
 	})
+}
+
+func errorString(err error) interface{} {
+	if err == nil {
+		return nil
+	}
+	return err.Error()
+}
+
+func errorText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}
+
+func optionalString(s string) interface{} {
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
+func taipeiLocation() *time.Location {
+	loc, err := time.LoadLocation("Asia/Taipei")
+	if err != nil {
+		return time.FixedZone("Asia/Taipei", 8*3600)
+	}
+	return loc
+}
+
+func jobRunToMap(j jobRun, loc *time.Location) map[string]interface{} {
+	start := j.Start.In(loc)
+	end := j.End.In(loc)
+	duration := int(end.Sub(start).Seconds())
+	return map[string]interface{}{
+		"kind":             j.Kind,
+		"triggered_by":     optionalString(j.TriggeredBy),
+		"start":            start.Format(time.RFC3339),
+		"end":              end.Format(time.RFC3339),
+		"duration_seconds": duration,
+		"data_source":      optionalString(j.DataSource),
+		"ingestion": map[string]interface{}{
+			"success": j.IngestionOK,
+			"error":   optionalString(j.IngestionErr),
+		},
+		"analysis": map[string]interface{}{
+			"enabled":       j.AnalysisOn,
+			"success":       j.AnalysisOK,
+			"total":         j.AnalysisTotal,
+			"success_count": j.AnalysisSucc,
+			"failure_count": j.AnalysisFail,
+			"error":         optionalString(j.AnalysisErr),
+		},
+		"failures": j.Failures,
+	}
+}
+
+func (s *Server) recordJob(j jobRun) {
+	s.jobMu.Lock()
+	defer s.jobMu.Unlock()
+	if j.DataSource == "" {
+		j.DataSource = s.dataSource
+	}
+	s.jobHistory = append(s.jobHistory, j)
+	if len(s.jobHistory) > 50 {
+		s.jobHistory = s.jobHistory[len(s.jobHistory)-50:]
+	}
+	if j.Kind == "auto" {
+		s.lastAutoRun = j.End
+	}
 }
 
 func clientIP(r *http.Request) string {
@@ -1261,6 +1591,7 @@ func (s *Server) requireAuth(perm auth.Permission, next http.Handler) http.Handl
 			writeError(w, http.StatusForbidden, errCodeForbidden, "forbidden")
 			return
 		}
+		w.Header().Set("X-User-Role", string(user.Role))
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKeyUserID{}, user.ID)))
 	})
 }

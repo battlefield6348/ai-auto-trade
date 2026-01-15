@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="zh-TW"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>系統登入 - BTC/USDT 自動化交易系統</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Noto+Sans+TC:wght@300;400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#0ddff2",
+                        "background-light": "#f5f8f8",
+                        "background-dark": "#0A0E1A",
+                        "indigo-deep": "#0A0E1A",
+                        "surface-glass": "rgba(16, 33, 35, 0.6)",
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "Noto Sans TC", "sans-serif"],
+                        "body": ["Space Grotesk", "Noto Sans TC", "sans-serif"],
+                    },
+                    backgroundImage: {
+                        'circuit-pattern': "url(\"data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM12 86c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm28-65c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm23-11c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-6 60c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm29 22c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zM32 63c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm57-13c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-9-21c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM60 91c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM35 41c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 60c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%230ddff2' fill-opacity='0.03' fill-rule='evenodd'/%3E%3C/svg%3E\")",
+                    },
+                    boxShadow: {
+                        'neon': '0 0 5px theme("colors.primary"), 0 0 20px theme("colors.primary")',
+                        'neon-sm': '0 0 2px theme("colors.primary"), 0 0 10px rgba(13, 223, 242, 0.5)',
+                        'glass': '0 4px 30px rgba(0, 0, 0, 0.1)',
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .glass-card {
+            background: rgba(16, 33, 35, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(13, 223, 242, 0.1);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+        }
+        
+        .text-glow {
+            text-shadow: 0 0 10px rgba(13, 223, 242, 0.5);
+        }
+
+        .input-gradient {
+            background: linear-gradient(90deg, rgba(13, 223, 242, 0.05) 0%, rgba(10, 14, 26, 0) 100%);
+        }
+    </style>
+</head>
+<body class="relative flex h-full min-h-screen w-full flex-col bg-background-dark text-white font-display overflow-x-hidden antialiased selection:bg-primary selection:text-background-dark">
+<!-- Background Elements -->
+<div class="fixed inset-0 z-0 bg-circuit-pattern pointer-events-none"></div>
+<!-- Abstract ambient glow -->
+<div class="fixed top-[-10%] left-[20%] w-[500px] h-[500px] bg-primary/10 rounded-full blur-[120px] pointer-events-none" data-alt="Soft cyan ambient glow light effect"></div>
+<div class="fixed bottom-[-10%] right-[10%] w-[400px] h-[400px] bg-[#3b82f6]/10 rounded-full blur-[100px] pointer-events-none" data-alt="Soft blue ambient glow light effect"></div>
+<div class="layout-container relative z-10 flex h-full grow flex-col items-center justify-center py-10 px-4">
+<div class="layout-content-container flex flex-col w-full max-w-[480px]">
+<!-- Header Section -->
+<div class="flex flex-col items-center gap-2 mb-8 text-center">
+<div class="p-3 rounded-full bg-primary/10 border border-primary/20 mb-4 shadow-neon-sm">
+<span class="material-symbols-outlined text-4xl text-primary">currency_bitcoin</span>
+</div>
+<h1 class="text-white text-3xl md:text-4xl font-black leading-tight tracking-tight text-glow">
+                    BTC/USDT <br/>
+<span class="text-2xl md:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">Automated System</span>
+</h1>
+<p class="text-primary/80 text-base font-normal tracking-wider mt-1">系統登入</p>
+</div>
+<!-- Login Card -->
+<div class="glass-card rounded-2xl p-6 md:p-10 w-full transition-all duration-300 hover:border-primary/30">
+<form class="flex flex-col gap-6" onsubmit="event.preventDefault();">
+<!-- Email Field -->
+<label class="flex flex-col gap-2 group">
+<div class="flex items-center gap-2 text-gray-300 text-sm font-medium">
+<span class="material-symbols-outlined text-lg text-primary/70">mail</span>
+                            電子郵件
+                        </div>
+<div class="relative">
+<input class="form-input flex w-full rounded-lg text-white border border-[#316368]/50 bg-[#0A0E1A]/60 focus:bg-[#0A0E1A] h-12 px-4 text-base font-normal leading-normal placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all duration-300 shadow-inner" placeholder="admin@example.com" type="email"/>
+<div class="absolute inset-0 rounded-lg pointer-events-none border border-transparent group-hover:border-primary/20 transition-colors"></div>
+</div>
+</label>
+<!-- Password Field -->
+<label class="flex flex-col gap-2 group">
+<div class="flex items-center justify-between text-gray-300 text-sm font-medium">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-lg text-primary/70">lock</span>
+                                密碼
+                            </div>
+<a class="text-xs text-primary/60 hover:text-primary transition-colors" href="#">忘記密碼?</a>
+</div>
+<div class="relative">
+<input class="form-input flex w-full rounded-lg text-white border border-[#316368]/50 bg-[#0A0E1A]/60 focus:bg-[#0A0E1A] h-12 px-4 text-base font-normal leading-normal placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all duration-300 shadow-inner tracking-widest" placeholder="••••••••" type="password"/>
+<div class="absolute inset-0 rounded-lg pointer-events-none border border-transparent group-hover:border-primary/20 transition-colors"></div>
+</div>
+</label>
+<!-- Login Button -->
+<button class="relative mt-2 flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-12 bg-primary text-background-dark text-base font-bold tracking-wide transition-all duration-300 hover:shadow-neon hover:scale-[1.01] active:scale-[0.99] group">
+<div class="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+<span class="relative z-10 flex items-center gap-2">
+                            立即登入
+                            <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</span>
+</button>
+</form>
+<!-- Footer Meta -->
+<div class="mt-8 pt-6 border-t border-white/10 text-center">
+<p class="text-gray-400 text-xs font-light tracking-wide flex items-center justify-center gap-2 opacity-70">
+<span class="material-symbols-outlined text-sm">info</span>
+                        預設角色: 管理員, 分析師, 一般用戶
+                    </p>
+</div>
+</div>
+<!-- Bottom Copyright -->
+<div class="mt-8 text-center">
+<p class="text-[10px] text-gray-600 uppercase tracking-[0.2em]">BTC/USDT Automated Trading System v2.4.0</p>
+</div>
+</div>
+</div>
+</body></html>

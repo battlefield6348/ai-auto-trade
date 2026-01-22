@@ -6,6 +6,7 @@ const state = {
   role: "",
   pollId: null,
   polling: false,
+  busy: {},
 };
 
 const el = (id) => document.getElementById(id);
@@ -41,12 +42,14 @@ async function api(path, { method = "GET", body, requireAuth = true } = {}) {
     headers["Content-Type"] = "application/json";
     payload = JSON.stringify(body);
   }
+  console.log(`[API] ${method} ${path}`, body || "");
   const res = await fetch(path, { method, headers, body: payload });
   if (res.status === 401) {
     logout(true);
     throw new Error("需要登入或權限不足");
   }
   const data = await res.json().catch(() => ({}));
+  console.log(`[API] Response ${path}:`, data);
   if (!res.ok || data.success === false) {
     const msg = data?.message || data?.error || data?.reason || res.statusText;
     throw new Error(msg);
@@ -111,20 +114,47 @@ function applyJobHistory(list) {
     container.innerHTML = '<p class="text-slate-500 text-sm">暫無歷史紀錄</p>';
     return;
   }
-  list.forEach((item) => {
+  const maxDuration = Math.max(...list.map((i) => i.duration_seconds || 0), 1);
+  list.forEach((item, idx) => {
     const div = document.createElement("div");
-    const badge = item.analysis?.success ? "text-success" : "text-danger";
+    const ok = (item.ingestion?.success ?? true) && (!item.analysis?.enabled || item.analysis?.success);
+    const badge = ok ? "text-success" : "text-danger";
+    const duration = item.duration_seconds || 0;
+    const barWidth = Math.max(5, Math.min(100, Math.round((duration / maxDuration) * 100)));
     div.className = "border border-surface-border rounded-lg p-3 bg-background-dark/50";
     div.innerHTML = `
       <div class="flex justify-between text-xs text-slate-400">
         <span>${item.kind.toUpperCase()} · 觸發者：${item.triggered_by || "--"}</span>
         <span>${formatTime(item.start)}</span>
       </div>
-      <div class="text-sm text-white mt-1">耗時 ${formatDuration(item.duration_seconds || 0)}</div>
-      <div class="text-xs ${badge}">分析成功：${item.analysis?.success ? "是" : "否"} · Ingestion：${item.ingestion?.success ? "是" : "否"}</div>
-      <div class="text-xs text-slate-400">來源：${item.data_source || "--"}</div>
+      <div class="text-sm text-white mt-1">耗時 ${formatDuration(duration)}</div>
+      <div class="w-full bg-surface-border/50 h-1 mt-1 rounded-full overflow-hidden"><div class="bg-primary h-full" style="width:${barWidth}%"></div></div>
+      <div class="text-xs ${badge} mt-1">分析成功：${item.analysis?.success ? "是" : "否"} · Ingestion：${item.ingestion?.success ? "是" : "否"} · 來源：${item.data_source || "--"}</div>
+      <button class="text-[11px] text-primary mt-2 hover:underline" data-detail-btn="${idx}">檢視詳細</button>
+      <div class="hidden mt-2 text-xs text-slate-300 space-y-1" data-detail="${idx}">
+        <div>Ingestion 錯誤：${item.ingestion?.error || "無"}</div>
+        <div>Analysis 錯誤：${item.analysis?.error || "無"}</div>
+        <div>失敗筆數：${item.failures?.length || 0}</div>
+        ${item.failures && item.failures.length
+        ? `<ul class="list-disc list-inside text-danger">${item.failures
+          .slice(0, 5)
+          .map((f) => `<li>${f.trade_date || ""} ${f.stage || ""} ${f.reason || ""}</li>`)
+          .join("")}</ul>`
+        : ""
+      }
+      </div>
     `;
     container.appendChild(div);
+  });
+
+  container.querySelectorAll("[data-detail-btn]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = btn.getAttribute("data-detail-btn");
+      const panel = container.querySelector(`[data-detail='${idx}']`);
+      if (!panel) return;
+      panel.classList.toggle("hidden");
+      btn.textContent = panel.classList.contains("hidden") ? "檢視詳細" : "收合";
+    });
   });
 }
 
@@ -156,6 +186,7 @@ function renderOpResult(tag, payload) {
 
 async function loadStatusAndHistory() {
   try {
+    console.log("[Dashboard] Loading status and history...");
     const status = await api("/api/admin/jobs/status");
     applyStatus(status);
     const hist = await api("/api/admin/jobs/history?limit=10");
@@ -168,6 +199,7 @@ async function loadStatusAndHistory() {
 
 async function loadSummary() {
   try {
+    console.log("[Dashboard] Loading summary...");
     const res = await api("/api/analysis/summary");
     el("summaryDate").textContent = res.trade_date || "--";
     el("summaryPair").textContent = res.trading_pair || "--";
@@ -186,6 +218,7 @@ async function loadSummary() {
 
 async function loadAnalysisHistory() {
   try {
+    console.log("[Dashboard] Loading analysis history...");
     const hist = await api(`/api/analysis/history?symbol=${encodeURIComponent(state.symbol)}&limit=30`);
     const items = hist.items || [];
     const box = el("analysisList");
@@ -246,6 +279,7 @@ function renderChart(items) {
 }
 
 async function login(email, password) {
+  console.log(`[Auth] Logging in as ${email}...`);
   const data = await api("/api/auth/login", { method: "POST", body: { email, password }, requireAuth: false });
   state.token = data.access_token;
   state.lastEmail = email;
@@ -260,6 +294,7 @@ async function login(email, password) {
 }
 
 function logout() {
+  console.log("[Auth] Logging out...");
   state.token = "";
   localStorage.removeItem("aat_token");
   el("loginStatus").textContent = "未登入";
@@ -307,6 +342,7 @@ function setupLoginModal() {
 function setupActions() {
   el("rerunBtn").addEventListener("click", async () => {
     const date = el("rerunDate").value;
+    console.log(`[Action] Rerun ingestion for ${date}`);
     if (!date) return setAlert("請選擇日期", "error");
     setBusy("rerunBtn", true, "擷取並分析");
     try {
@@ -325,6 +361,7 @@ function setupActions() {
 
   el("analysisOnlyBtn").addEventListener("click", async () => {
     const date = el("rerunDate").value;
+    console.log(`[Action] Run analysis only for ${date}`);
     if (!date) return setAlert("請選擇日期", "error");
     setBusy("analysisOnlyBtn", true, "僅分析");
     try {
@@ -344,6 +381,7 @@ function setupActions() {
   el("rangeBtn").addEventListener("click", async () => {
     const start = el("rangeStart").value;
     const end = el("rangeEnd").value;
+    console.log(`[Action] Backfill range ${start} ~ ${end}`);
     if (!start || !end) return setAlert("請選擇起訖日期", "error");
     setBusy("rangeBtn", true, "回補並分析");
     try {

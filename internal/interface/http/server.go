@@ -129,6 +129,66 @@ type jobRun struct {
 	DataSource    string
 }
 
+type analysisBacktestRequest struct {
+	Symbol     string             `json:"symbol"`
+	StartDate  string             `json:"start_date"`
+	EndDate    string             `json:"end_date"`
+	Weights    backtestWeights    `json:"weights"`
+	Thresholds backtestThresholds `json:"thresholds"`
+	Flags      backtestFlags      `json:"flags"`
+	Horizons   []int              `json:"horizons"`
+}
+
+type backtestWeights struct {
+	Score       float64 `json:"score"`
+	ChangeBonus float64 `json:"change_bonus"`
+	VolumeBonus float64 `json:"volume_bonus"`
+	ReturnBonus float64 `json:"return_bonus"`
+	MaBonus     float64 `json:"ma_bonus"`
+}
+
+type backtestThresholds struct {
+	TotalMin       float64 `json:"total_min"`
+	ChangeMin      float64 `json:"change_min"`
+	VolumeRatioMin float64 `json:"volume_ratio_min"`
+	Return5Min     float64 `json:"return5_min"`
+	MaGapMin       float64 `json:"ma_gap_min"`
+}
+
+type backtestFlags struct {
+	UseChange bool `json:"use_change"`
+	UseVolume bool `json:"use_volume"`
+	UseReturn bool `json:"use_return"`
+	UseMa     bool `json:"use_ma"`
+}
+
+type analysisBacktestEvent struct {
+	TradingPair    string             `json:"trading_pair"`
+	TradeDate      string             `json:"trade_date"`
+	ClosePrice     float64            `json:"close_price"`
+	ChangePercent  float64            `json:"change_percent"`
+	Return5d       *float64           `json:"return_5d,omitempty"`
+	MaGap          *float64           `json:"ma_gap,omitempty"`
+	VolumeRatio    *float64           `json:"volume_ratio,omitempty"`
+	Score          float64            `json:"score"`
+	TotalScore     float64            `json:"total_score"`
+	Components     map[string]float64 `json:"components,omitempty"`
+	ForwardReturns map[string]float64 `json:"forward_returns,omitempty"`
+}
+
+type backtestReturnStat struct {
+	AvgReturn float64 `json:"avg_return"`
+	WinRate   float64 `json:"win_rate"`
+}
+
+type parsedBacktestInput struct {
+	req       analysisBacktestRequest
+	symbol    string
+	startDate time.Time
+	endDate   time.Time
+	horizons  []int
+}
+
 // --- Handlers ---
 
 func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
@@ -705,8 +765,291 @@ func (s *Server) handleAnalysisSummary(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleAnalysisBacktest(w http.ResponseWriter, r *http.Request) {
+	var body analysisBacktestRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+		return
+	}
+	input, err := normalizeBacktestRequest(body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, err.Error())
+		return
+	}
+
+	history, err := s.dataRepo.FindHistory(r.Context(), input.symbol, &input.startDate, &input.endDate, 5000, true)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "query history failed")
+		return
+	}
+	sort.Slice(history, func(i, j int) bool {
+		return history[i].TradeDate.Before(history[j].TradeDate)
+	})
+
+	events := make([]analysisBacktestEvent, 0, len(history))
+	retStats := make(map[int][]float64)
+	for idx, res := range history {
+		total, comps := calcBacktestScore(res, input.req)
+		if total < input.req.Thresholds.TotalMin {
+			continue
+		}
+		forward := calcForwardReturns(history, idx, input.horizons)
+		for _, h := range input.horizons {
+			key := fmt.Sprintf("d%d", h)
+			if val, ok := forward[key]; ok {
+				retStats[h] = append(retStats[h], val)
+			}
+		}
+		ev := analysisBacktestEvent{
+			TradingPair:   res.Symbol,
+			TradeDate:     res.TradeDate.Format("2006-01-02"),
+			ClosePrice:    res.Close,
+			ChangePercent: res.ChangeRate,
+			Return5d:      res.Return5,
+			MaGap:         res.Deviation20,
+			VolumeRatio:   res.VolumeMultiple,
+			Score:         res.Score,
+			TotalScore:    total,
+			Components:    comps,
+		}
+		if len(forward) > 0 {
+			ev.ForwardReturns = forward
+		}
+		events = append(events, ev)
+	}
+
+	stats := make(map[string]backtestReturnStat)
+	for h, vals := range retStats {
+		if len(vals) == 0 {
+			continue
+		}
+		sum := 0.0
+		wins := 0
+		for _, v := range vals {
+			sum += v
+			if v > 0 {
+				wins++
+			}
+		}
+		stats[fmt.Sprintf("d%d", h)] = backtestReturnStat{
+			AvgReturn: sum / float64(len(vals)),
+			WinRate:   float64(wins) / float64(len(vals)),
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success":      true,
+		"symbol":       input.symbol,
+		"start_date":   input.startDate.Format("2006-01-02"),
+		"end_date":     input.endDate.Format("2006-01-02"),
+		"total_events": len(events),
+		"config":       input.req,
+		"events":       events,
+		"stats": map[string]interface{}{
+			"returns": stats,
+		},
+	})
+}
+
+func (s *Server) handleGetBacktestPreset(w http.ResponseWriter, r *http.Request) {
+	if s.presetStore == nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "preset store not ready")
+		return
+	}
+	userID := currentUserID(r)
+	raw, err := s.presetStore.Load(r.Context(), userID)
+	if err != nil {
+		if s.presetStore.NotFound(err) {
+			writeJSON(w, http.StatusOK, map[string]interface{}{
+				"success": true,
+				"message": "尚無預設",
+			})
+			return
+		}
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "load preset failed")
+		return
+	}
+	var preset analysisBacktestRequest
+	if err := json.Unmarshal(raw, &preset); err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "invalid preset data")
+		return
+	}
+	if len(preset.Horizons) == 0 {
+		preset.Horizons = []int{3, 5, 10}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"preset":  preset,
+	})
+}
+
+func (s *Server) handleSaveBacktestPreset(w http.ResponseWriter, r *http.Request) {
+	if s.presetStore == nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "preset store not ready")
+		return
+	}
+	var body analysisBacktestRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+		return
+	}
+	input, err := normalizeBacktestRequest(body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, err.Error())
+		return
+	}
+	payload, err := json.Marshal(input.req)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "encode preset failed")
+		return
+	}
+	if err := s.presetStore.Save(r.Context(), currentUserID(r), payload); err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "save preset failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+	})
+}
+
 func (s *Server) handleStrongStocks(w http.ResponseWriter, r *http.Request) {
 	// 已移除強勢篩選功能。
+}
+
+func normalizeBacktestRequest(req analysisBacktestRequest) (parsedBacktestInput, error) {
+	var out parsedBacktestInput
+
+	symbol := strings.ToUpper(strings.TrimSpace(req.Symbol))
+	if symbol == "" {
+		symbol = "BTCUSDT"
+	}
+
+	start, err := time.Parse("2006-01-02", strings.TrimSpace(req.StartDate))
+	if err != nil {
+		return out, fmt.Errorf("invalid start_date")
+	}
+	end, err := time.Parse("2006-01-02", strings.TrimSpace(req.EndDate))
+	if err != nil {
+		return out, fmt.Errorf("invalid end_date")
+	}
+	if end.Before(start) {
+		return out, fmt.Errorf("end_date must be after start_date")
+	}
+
+	horizons := normalizeHorizons(req.Horizons)
+	req.Symbol = symbol
+	req.Horizons = horizons
+	out = parsedBacktestInput{
+		req:       req,
+		symbol:    symbol,
+		startDate: start,
+		endDate:   end,
+		horizons:  horizons,
+	}
+	return out, nil
+}
+
+func normalizeHorizons(values []int) []int {
+	defaults := []int{3, 5, 10}
+	seen := make(map[int]bool)
+	out := make([]int, 0, len(values))
+	for _, v := range values {
+		if v <= 0 || v > 365 {
+			continue
+		}
+		if seen[v] {
+			continue
+		}
+		seen[v] = true
+		out = append(out, v)
+	}
+	if len(out) == 0 {
+		return defaults
+	}
+	sort.Ints(out)
+	return out
+}
+
+func calcBacktestScore(res analysisDomain.DailyAnalysisResult, req analysisBacktestRequest) (float64, map[string]float64) {
+	total := req.Weights.Score * res.Score
+	components := make(map[string]float64)
+	if req.Weights.Score != 0 {
+		components["score"] = req.Weights.Score * res.Score
+	}
+
+	if req.Flags.UseChange && res.ChangeRate >= req.Thresholds.ChangeMin {
+		total += req.Weights.ChangeBonus
+		if req.Weights.ChangeBonus != 0 {
+			components["change"] = req.Weights.ChangeBonus
+		}
+	}
+
+	if req.Flags.UseVolume {
+		vol := 0.0
+		if res.VolumeMultiple != nil {
+			vol = *res.VolumeMultiple
+		}
+		if vol >= req.Thresholds.VolumeRatioMin {
+			total += req.Weights.VolumeBonus
+			if req.Weights.VolumeBonus != 0 {
+				components["volume"] = req.Weights.VolumeBonus
+			}
+		}
+	}
+
+	if req.Flags.UseReturn {
+		ret := 0.0
+		if res.Return5 != nil {
+			ret = *res.Return5
+		}
+		if ret >= req.Thresholds.Return5Min {
+			total += req.Weights.ReturnBonus
+			if req.Weights.ReturnBonus != 0 {
+				components["return"] = req.Weights.ReturnBonus
+			}
+		}
+	}
+
+	if req.Flags.UseMa {
+		gap := 0.0
+		if res.Deviation20 != nil {
+			gap = *res.Deviation20
+		}
+		if gap >= req.Thresholds.MaGapMin {
+			total += req.Weights.MaBonus
+			if req.Weights.MaBonus != 0 {
+				components["ma"] = req.Weights.MaBonus
+			}
+		}
+	}
+
+	return total, components
+}
+
+func calcForwardReturns(history []analysisDomain.DailyAnalysisResult, idx int, horizons []int) map[string]float64 {
+	out := make(map[string]float64)
+	if idx < 0 || idx >= len(history) {
+		return out
+	}
+	base := history[idx]
+	if base.Close <= 0 {
+		return out
+	}
+	for _, h := range horizons {
+		if h <= 0 {
+			continue
+		}
+		target := idx + h
+		if target >= len(history) {
+			continue
+		}
+		next := history[target]
+		if next.Close <= 0 {
+			continue
+		}
+		out[fmt.Sprintf("d%d", h)] = (next.Close / base.Close) - 1
+	}
+	return out
 }
 
 func (s *Server) handleJobsStatus(w http.ResponseWriter, r *http.Request) {

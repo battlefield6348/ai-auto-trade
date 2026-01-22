@@ -152,6 +152,7 @@ const api = async (path, options = {}) => {
   if (options.body && !headers["Content-Type"]) {
     headers["Content-Type"] = "application/json";
   }
+  console.log(`[API] ${options.method || "GET"} ${path}`, options.body ? JSON.parse(options.body) : "");
   const res = await fetch(path, { ...options, headers, credentials: "include" });
   const data = await res.json().catch(() => ({}));
   if (res.status === 401) {
@@ -160,6 +161,7 @@ const api = async (path, options = {}) => {
       return api(path, options);
     }
   }
+  console.log(`[API] Response ${path}:`, data);
   if (!res.ok || data.success === false) {
     const msg = data.error || res.statusText;
     throw new Error(`${res.status} ${data.error_code || ""} ${msg}`.trim());
@@ -256,6 +258,7 @@ const toggleProtectedSections = (isAuth) => {
 
 const showSection = (section) => {
   state.currentSection = section;
+  console.log(`[Nav] Switching to section: ${section}`);
   sections.forEach((el) => {
     const target = el.dataset.section;
     el.classList.toggle("section-hidden", target !== section);
@@ -555,9 +558,8 @@ const renderHistoryChart = (res, backtestEvents = [], options = {}) => {
   const linePath = points
     .map((pt, idx) => `${idx === 0 ? "M" : "L"}${pt.x},${pt.y}`)
     .join(" ");
-  const areaPath = `${linePath} L ${padding.left + plotWidth},${padding.top + plotHeight} L ${
-    padding.left
-  },${padding.top + plotHeight} Z`;
+  const areaPath = `${linePath} L ${padding.left + plotWidth},${padding.top + plotHeight} L ${padding.left
+    },${padding.top + plotHeight} Z`;
 
   const tickCount = 4;
   const gridLines = [];
@@ -589,9 +591,8 @@ const renderHistoryChart = (res, backtestEvents = [], options = {}) => {
       <g class="chart-axis">${axisLabels.join("")}${xLabels.join("")}</g>
       <path class="chart-area" d="${areaPath}"></path>
       <path class="chart-line" d="${linePath}"></path>
-      <line class="chart-focus-line" data-role="focus-line" x1="0" x2="0" y1="${padding.top}" y2="${
-        padding.top + plotHeight
-      }" style="opacity:0"></line>
+      <line class="chart-focus-line" data-role="focus-line" x1="0" x2="0" y1="${padding.top}" y2="${padding.top + plotHeight
+    }" style="opacity:0"></line>
       <circle class="chart-focus-dot" data-role="focus-dot" cx="0" cy="0" r="4" style="opacity:0"></circle>
     </svg>
     <div class="chart-overlay" data-role="overlay"></div>
@@ -626,8 +627,8 @@ const renderHistoryChart = (res, backtestEvents = [], options = {}) => {
         const dateStr = pt.row.trade_date
           ? String(pt.row.trade_date).slice(0, 10)
           : pt.row.date
-          ? String(pt.row.date).slice(0, 10)
-          : "";
+            ? String(pt.row.date).slice(0, 10)
+            : "";
         return eventDates.has(dateStr);
       })
       .map(
@@ -671,14 +672,14 @@ const renderHistoryChart = (res, backtestEvents = [], options = {}) => {
       <div class="tooltip-title">${point.row.trade_date}</div>
       <div class="tooltip-row"><span>收盤價</span><strong>${fmtPrice(point.row.close_price)}</strong></div>
       <div class="tooltip-row"><span>日漲跌</span><strong>${fmtPercent(
-        point.row.change_percent
-      )}</strong></div>
+      point.row.change_percent
+    )}</strong></div>
       <div class="tooltip-row"><span>近 5 日</span><strong>${fmtPercent(
-        point.row.return_5d
-      )}</strong></div>
+      point.row.return_5d
+    )}</strong></div>
       <div class="tooltip-row"><span>量能倍率</span><strong>${fmtRatio(
-        point.row.volume_ratio
-      )}</strong></div>
+      point.row.volume_ratio
+    )}</strong></div>
       <div class="tooltip-row"><span>Score</span><strong>${fmtScore(point.row.score)}</strong></div>
     `;
 
@@ -773,35 +774,34 @@ const renderSummary = (el, res) => {
     metrics.change_percent == null
       ? "—"
       : `<span class="delta ${deltaClass(metrics.change_percent)}">${fmtPercent(
-          metrics.change_percent
-        )}</span>`;
+        metrics.change_percent
+      )}</span>`;
   const returnText =
     metrics.return_5d == null
       ? "—"
       : `<span class="delta ${deltaClass(metrics.return_5d)}">${fmtPercent(
-          metrics.return_5d
-        )}</span>`;
+        metrics.return_5d
+      )}</span>`;
   el.innerHTML = `
     <div class="summary-head">
       <div>
         <div class="summary-title">${fmtText(res.trading_pair)} · ${fmtText(
-          res.trade_date
-        )}</div>
-        <div class="summary-sub">趨勢：<span class="trend ${trendInfo.className}">${
-          trendInfo.label
-        }</span></div>
+    res.trade_date
+  )}</div>
+        <div class="summary-sub">趨勢：<span class="trend ${trendInfo.className}">${trendInfo.label
+    }</span></div>
       </div>
       <div class="badge ${trendInfo.tone}">${trendInfo.label}</div>
     </div>
     <div class="summary-metrics">
       <div class="metric-card"><span>收盤價</span><strong>${fmtPrice(
-        metrics.close_price
-      )}</strong></div>
+      metrics.close_price
+    )}</strong></div>
       <div class="metric-card"><span>日漲跌</span><strong>${changeText}</strong></div>
       <div class="metric-card"><span>近 5 日報酬</span><strong>${returnText}</strong></div>
       <div class="metric-card"><span>量能倍率</span><strong>${fmtRatio(
-        metrics.volume_ratio
-      )}</strong></div>
+      metrics.volume_ratio
+    )}</strong></div>
       <div class="metric-card"><span>Score</span><strong>${fmtScore(metrics.score)}</strong></div>
     </div>
     <div class="summary-signal">
@@ -906,9 +906,8 @@ const buildHighlightCard = (title, items, detailFn) => {
     .map((item) => {
       const name = fmtText(item.trading_pair);
       const detail = detailFn ? detailFn(item) : "";
-      return `<div class="highlight-item"><span class="mono">${name}</span><span>${
-        detail || ""
-      }</span></div>`;
+      return `<div class="highlight-item"><span class="mono">${name}</span><span>${detail || ""
+        }</span></div>`;
     })
     .join("");
   return `<article class="highlight-card"><h4>${title}</h4>${list}</article>`;
@@ -952,8 +951,8 @@ const renderBacktestSummary = (res) => {
     Object.entries(returns).length === 0
       ? `<div class="meta-item">尚無統計</div>`
       : Object.entries(returns)
-          .map(
-            ([key, val]) => `
+        .map(
+          ([key, val]) => `
               <div class="stat-card">
                 <div class="stat-title">${key.toUpperCase()}</div>
                 <div class="stat-value">${fmtPercent(val.avg_return)}</div>
@@ -961,8 +960,8 @@ const renderBacktestSummary = (res) => {
                 <div class="stat-sub">勝率 ${fmtPercent(val.win_rate)}</div>
               </div>
             `
-          )
-          .join("");
+        )
+        .join("");
   elements.backtestSummary.innerHTML = `
     <div class="result-header">
       <div>
@@ -991,15 +990,15 @@ const renderBacktestEvents = (res) => {
         <div class="highlight-item"><span>總分</span><span>${fmtScore(row.total_score)}</span></div>
         <div class="highlight-item"><span>Score</span><span>${fmtScore(row.score)}</span></div>
         <div class="highlight-item"><span>日漲跌</span><span class="delta ${deltaClass(
-          row.change_percent
-        )}">${fmtPercent(row.change_percent)}</span></div>
+        row.change_percent
+      )}">${fmtPercent(row.change_percent)}</span></div>
         <div class="highlight-item"><span>量能倍率</span><span>${fmtRatio(row.volume_ratio)}</span></div>
         <div class="highlight-item"><span>近 5 日</span><span class="delta ${deltaClass(
-          row.return_5d
-        )}">${fmtPercent(row.return_5d)}</span></div>
+        row.return_5d
+      )}">${fmtPercent(row.return_5d)}</span></div>
         <div class="highlight-item"><span>MA20 乖離</span><span class="delta ${deltaClass(
-          row.ma_gap
-        )}">${fmtPercent(row.ma_gap)}</span></div>
+        row.ma_gap
+      )}">${fmtPercent(row.ma_gap)}</span></div>
         <div class="highlight-item"><span>收盤</span><span>${fmtPrice(row.close_price)}</span></div>
         <div class="highlight-item"><span>+3日</span><span>${fmtPercent(row.forward_returns?.d3)}</span></div>
         <div class="highlight-item"><span>+5日</span><span>${fmtPercent(row.forward_returns?.d5)}</span></div>
@@ -1133,13 +1132,13 @@ const renderBacktestConditions = () => {
             </div>
             <div class="optional-fields">
               <label>漲幅門檻(%) <input type="number" step="0.1" id="btChangeMin" value="${current(
-                "btChangeMin",
-                0.5
-              )}"></label>
+          "btChangeMin",
+          0.5
+        )}"></label>
               <label>條件加權 <input type="number" step="0.1" id="btChangeWeight" value="${current(
-                "btChangeWeight",
-                1
-              )}"></label>
+          "btChangeWeight",
+          1
+        )}"></label>
             </div>
           </div>
         `;
@@ -1153,13 +1152,13 @@ const renderBacktestConditions = () => {
             </div>
             <div class="optional-fields">
               <label>量能門檻(倍率) <input type="number" step="0.1" id="btVolMin" value="${current(
-                "btVolMin",
-                1.2
-              )}"></label>
+          "btVolMin",
+          1.2
+        )}"></label>
               <label>條件加權 <input type="number" step="0.1" id="btVolWeight" value="${current(
-                "btVolWeight",
-                1
-              )}"></label>
+          "btVolWeight",
+          1
+        )}"></label>
             </div>
           </div>
         `;
@@ -1173,13 +1172,13 @@ const renderBacktestConditions = () => {
             </div>
             <div class="optional-fields">
               <label>報酬門檻(%) <input type="number" step="0.1" id="btReturnMin" value="${current(
-                "btReturnMin",
-                1.0
-              )}"></label>
+          "btReturnMin",
+          1.0
+        )}"></label>
               <label>條件加權 <input type="number" step="0.1" id="btReturnWeight" value="${current(
-                "btReturnWeight",
-                1
-              )}"></label>
+          "btReturnWeight",
+          1
+        )}"></label>
             </div>
           </div>
         `;
@@ -1193,13 +1192,13 @@ const renderBacktestConditions = () => {
             </div>
             <div class="optional-fields">
               <label>乖離門檻(%) <input type="number" step="0.1" id="btMaGap" value="${current(
-                "btMaGap",
-                1.0
-              )}"></label>
+          "btMaGap",
+          1.0
+        )}"></label>
               <label>條件加權 <input type="number" step="0.1" id="btMaWeight" value="${current(
-                "btMaWeight",
-                1
-              )}"></label>
+          "btMaWeight",
+          1
+        )}"></label>
             </div>
           </div>
         `;
@@ -1288,12 +1287,12 @@ refreshAccessToken().then((ok) => {
     setMessage(elements.loginMessage, "已自動登入，Token 已更新", "good");
     logActivity("自動登入", "沿用前一次的登入狀態");
     showSection("overview");
-    loadChartHistory(true).catch(() => {});
-    loadStrategies().catch(() => {});
-    loadTrades().catch(() => {});
-    loadPositions().catch(() => {});
+    loadChartHistory(true).catch(() => { });
+    loadStrategies().catch(() => { });
+    loadTrades().catch(() => { });
+    loadPositions().catch(() => { });
     if (elements.reportStrategyId?.value) {
-      loadReports().catch(() => {});
+      loadReports().catch(() => { });
     }
   } else {
     setStatus("未登入", "warn");
@@ -1398,6 +1397,7 @@ const renderRunTrades = (trades = [], env = "") => {
 const loadStrategies = async () => {
   if (!elements.strategyForm) return;
   renderEmptyState(elements.strategyTable, "載入策略中...");
+  console.log("[Strategy] Loading strategies...");
   const status = elements.strategyStatus?.value || "";
   const env = elements.strategyEnv?.value || "";
   const name = (elements.strategyName?.value || "").trim();
@@ -1592,9 +1592,8 @@ const renderEquityChart = (equity = [], trades = []) => {
     return { x, y, date: p.date, equity: p.equity };
   });
   const linePath = points.map((pt, idx) => `${idx === 0 ? "M" : "L"}${pt.x},${pt.y}`).join(" ");
-  const areaPath = `${linePath} L ${padding.left + plotWidth},${padding.top + plotHeight} L ${
-    padding.left
-  },${padding.top + plotHeight} Z`;
+  const areaPath = `${linePath} L ${padding.left + plotWidth},${padding.top + plotHeight} L ${padding.left
+    },${padding.top + plotHeight} Z`;
 
   const gridLines = [];
   const axisLabels = [];
@@ -1663,9 +1662,8 @@ const renderPriceChart = (prices = [], trades = []) => {
     return { x, y, date: p.trade_date, close: p.close_price };
   });
   const linePath = points.map((pt, idx) => `${idx === 0 ? "M" : "L"}${pt.x},${pt.y}`).join(" ");
-  const areaPath = `${linePath} L ${padding.left + plotWidth},${padding.top + plotHeight} L ${
-    padding.left
-  },${padding.top + plotHeight} Z`;
+  const areaPath = `${linePath} L ${padding.left + plotWidth},${padding.top + plotHeight} L ${padding.left
+    },${padding.top + plotHeight} Z`;
 
   const gridLines = [];
   const axisLabels = [];
@@ -1743,26 +1741,26 @@ const renderStrategyBacktestSummary = (rec) => {
     <div class="meta-row">${metaItems.map((m) => `<div class="meta-item">${m}</div>`).join("")}</div>
     <div class="kpi-grid">
       <div class="kpi-card"><div class="kpi-title">總報酬</div><div class="kpi-value">${fmtPercent(
-        stats.total_return
-      )}</div></div>
+    stats.total_return
+  )}</div></div>
       <div class="kpi-card"><div class="kpi-title">最大回撤</div><div class="kpi-value warn">${fmtPercent(
-        stats.max_drawdown
-      )}</div></div>
+    stats.max_drawdown
+  )}</div></div>
       <div class="kpi-card"><div class="kpi-title">勝率</div><div class="kpi-value">${fmtPercent(
-        stats.win_rate
-      )}</div></div>
+    stats.win_rate
+  )}</div></div>
       <div class="kpi-card"><div class="kpi-title">筆數</div><div class="kpi-value">${fmtInt(
-        stats.trade_count
-      )}</div></div>
+    stats.trade_count
+  )}</div></div>
       <div class="kpi-card"><div class="kpi-title">平均獲利</div><div class="kpi-value">${fmtPercent(
-        stats.avg_gain
-      )}</div></div>
+    stats.avg_gain
+  )}</div></div>
       <div class="kpi-card"><div class="kpi-title">平均虧損</div><div class="kpi-value warn">${fmtPercent(
-        stats.avg_loss ? -Math.abs(stats.avg_loss) : stats.avg_loss
-      )}</div></div>
+    stats.avg_loss ? -Math.abs(stats.avg_loss) : stats.avg_loss
+  )}</div></div>
       <div class="kpi-card"><div class="kpi-title">盈虧比</div><div class="kpi-value">${fmtNumber(
-        stats.profit_factor
-      )}</div></div>
+    stats.profit_factor
+  )}</div></div>
     </div>
   `;
   renderStrategyBacktestTrades(result.trades || []);
@@ -1779,6 +1777,7 @@ const runStrategyBacktest = async () => {
   }
   try {
     requireLogin();
+    console.log("[Backtest] Starting strategy backtest...", res.payload);
     setMessage(elements.strategyBacktestMessage, "回測執行中...", "info");
     const data = await api(`/api/admin/strategies/${res.strategyID}/backtest`, {
       method: "POST",
@@ -2588,6 +2587,7 @@ const createStrategy = async () => {
   const payload = res.value;
   try {
     requireLogin();
+    console.log("[Strategy] Creating/Updating strategy...", payload);
     if (state.editingStrategyId) {
       await api(`/api/admin/strategies/${state.editingStrategyId}`, {
         method: "PUT",
@@ -2611,6 +2611,7 @@ const createStrategy = async () => {
 };
 
 const activateStrategy = async (id, env) => {
+  console.log(`[Strategy] Activating ${id} on ${env}`);
   await api(`/api/admin/strategies/${id}/activate`, {
     method: "POST",
     body: JSON.stringify({ env }),
@@ -2619,6 +2620,7 @@ const activateStrategy = async (id, env) => {
 };
 
 const deactivateStrategy = async (id) => {
+  console.log(`[Strategy] Deactivating ${id}`);
   await api(`/api/admin/strategies/${id}/deactivate`, {
     method: "POST",
   });
@@ -2626,18 +2628,20 @@ const deactivateStrategy = async (id) => {
 };
 
 const deleteStrategy = async (id) => {
+  console.log(`[Strategy] Deleting ${id}`);
   await api(`/api/admin/strategies/${id}`, { method: "DELETE" });
   logActivity("刪除策略", `ID ${id}`);
 };
 
 const runStrategyOnce = async (id, env) => {
+  console.log(`[Strategy] Running once ${id} on ${env}`);
   const qs = env ? `?env=${env}` : "";
   const res = await api(`/api/admin/strategies/${id}/run${qs}`, { method: "POST" });
   const trades = res.trades || [];
   logActivity("策略試跑", `ID ${id} · env ${env} · 筆數 ${fmtInt(trades.length)}`);
   setStatus(`試跑完成：產生 ${fmtInt(trades.length)} 筆交易`, trades.length ? "good" : "warn");
-   state.lastRunTrades = trades;
-   renderRunTrades(trades, env);
+  state.lastRunTrades = trades;
+  renderRunTrades(trades, env);
   return trades;
 };
 
@@ -2750,6 +2754,7 @@ const renderPositionTable = (items = []) => {
 const loadPositions = async () => {
   if (!elements.positionForm) return;
   renderEmptyState(elements.positionTable, "載入持倉中...");
+  console.log("[Position] Loading positions...");
   const env = elements.positionEnv?.value || "";
   const qs = env ? `?env=${env}` : "";
   const res = await api(`/api/admin/positions${qs}`);
@@ -2810,6 +2815,7 @@ const loadReports = async () => {
     return;
   }
   renderEmptyState(elements.reportTable, "載入報告中...");
+  console.log(`[Report] Loading reports for ${strategyId}...`);
   const res = await api(`/api/admin/strategies/${strategyId}/reports`);
   renderReportTable(res.reports || []);
   logActivity("查詢報告", `策略 ${strategyId} · 筆數 ${fmtInt((res.reports || []).length)}`);
@@ -2835,9 +2841,8 @@ const renderReportDetail = (report) => {
       <div class="meta-item">環境：${fmtText(report.env)}</div>
       <div class="meta-item">區間：${fmtText(report.period_start)} ~ ${fmtText(report.period_end)}</div>
       <div class="meta-item">筆數：${fmtInt(tradesCount)}</div>
-      <div class="meta-item">建立時間：${
-        report.created_at ? timeFormat.format(new Date(report.created_at)) : "—"
-      }</div>
+      <div class="meta-item">建立時間：${report.created_at ? timeFormat.format(new Date(report.created_at)) : "—"
+    }</div>
     </div>
     <div class="code-block"><pre>${summaryPretty}</pre></div>
     <div class="code-block"><pre>交易樣本（前三筆）\n${tradesSample}</pre></div>
@@ -2882,6 +2887,7 @@ const loadLogs = async () => {
     return;
   }
   renderEmptyState(elements.logTable, "載入日誌中...");
+  console.log(`[Log] Loading logs for ${strategyId}...`);
   const env = elements.logEnv?.value || "";
   const limit = elements.logLimit?.value || 50;
   const qs = new URLSearchParams();
@@ -2896,6 +2902,7 @@ const loadLogs = async () => {
 const loadTrades = async () => {
   if (!elements.tradeForm) return;
   renderEmptyState(elements.tradeTable, "載入交易中...");
+  console.log("[Trade] Loading trades...");
   const qs = new URLSearchParams();
   const strategyId = (elements.tradeStrategyId?.value || "").trim();
   const env = elements.tradeEnv?.value || "";
@@ -2914,6 +2921,7 @@ const loadTrades = async () => {
 document.getElementById("loginForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   try {
+    console.log("[Auth] Attempting login...");
     const email = document.getElementById("email").value;
     const password = document.getElementById("password").value;
     const res = await api("/api/auth/login", {
@@ -2928,9 +2936,9 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
     logActivity("登入成功", `帳號 ${email}`);
     await loadChartHistory(true);
     fetchCombos();
-    loadStrategies().catch(() => {});
-    loadTrades().catch(() => {});
-    loadPositions().catch(() => {});
+    loadStrategies().catch(() => { });
+    loadTrades().catch(() => { });
+    loadPositions().catch(() => { });
   } catch (err) {
     setMessage(elements.loginMessage, `登入失敗：${err.message}`, "error");
     setStatus("未登入", "warn");
@@ -3224,7 +3232,7 @@ function updateOptionalFields() {
 }
 
 let autoBacktestTimer = null;
-function scheduleAutoBacktest() {}
+function scheduleAutoBacktest() { }
 
 const backtestInputs = [
   "btTotalMin",
@@ -3250,7 +3258,7 @@ if (elements.btSelectedConditions) {
   elements.btSelectedConditions.addEventListener("input", scheduleAutoBacktest);
 }
 
-async function runBacktest() {}
+async function runBacktest() { }
 
 function applyBacktestConfig(cfg) {
   if (!cfg) return;

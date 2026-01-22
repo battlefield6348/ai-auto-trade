@@ -18,6 +18,12 @@ import (
 	"ai-auto-trade/internal/infrastructure/persistence/postgres"
 )
 
+type backtestPresetStore interface {
+	Save(ctx context.Context, userID string, config []byte) error
+	Load(ctx context.Context, userID string) ([]byte, error)
+	NotFound(err error) bool
+}
+
 const seedTimeout = 5 * time.Second
 
 // Server 封裝 HTTP 路由與依賴。
@@ -44,6 +50,7 @@ type Server struct {
 	jobHistory    []jobRun
 	lastAutoRun   time.Time
 	dataSource    string
+	presetStore   backtestPresetStore
 }
 
 // NewServer 建立 API 伺服器，預設使用記憶體資料存儲；若 db 未來可用，再注入對應 repository。
@@ -55,17 +62,20 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 	var authRepo auth.UserRepository
 	var sessionStore authDomain.SessionStore
 	var tradingRepo trading.Repository
+	var presetStore backtestPresetStore
 	if db != nil {
 		dataRepo = postgres.NewRepo(db)
 		repo := postgres.NewAuthRepo(db)
 		authRepo = repo
 		sessionStore = repo
 		tradingRepo = postgres.NewTradingRepo(db)
+		presetStore = postgres.NewBacktestPresetStore(db)
 	} else {
 		dataRepo = memoryRepoAdapter{store: store}
 		authRepo = store
 		sessionStore = store
 		tradingRepo = memory.NewTradingRepo()
+		presetStore = store
 	}
 
 	ttl := cfg.Auth.TokenTTL
@@ -112,6 +122,7 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 		backfillStart: cfg.Ingestion.BackfillStartDate,
 		tradingSvc:    tradingSvc,
 		dataSource:    source,
+		presetStore:   presetStore,
 	}
 	if db != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), seedTimeout)
@@ -169,6 +180,11 @@ func (s *Server) registerRoutes() {
 	s.mux.Handle("/api/analysis/daily", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleAnalysisQuery)))
 	s.mux.Handle("/api/analysis/history", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleAnalysisHistory)))
 	s.mux.Handle("/api/analysis/summary", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleAnalysisSummary)))
+	s.mux.Handle("/api/analysis/backtest", s.requireAuth(auth.PermAnalysisQuery, s.wrapPost(s.handleAnalysisBacktest)))
+	s.mux.Handle("/api/analysis/backtest/preset", s.requireAuth(auth.PermAnalysisQuery, s.wrapMethods(map[string]http.HandlerFunc{
+		http.MethodGet:  s.handleGetBacktestPreset,
+		http.MethodPost: s.handleSaveBacktestPreset,
+	})))
 	s.mux.Handle("/api/admin/jobs/status", s.requireAuth(auth.PermSystemHealth, s.wrapGet(s.handleJobsStatus)))
 	s.mux.Handle("/api/admin/jobs/history", s.requireAuth(auth.PermSystemHealth, s.wrapGet(s.handleJobsHistory)))
 	// 策略與交易

@@ -212,7 +212,7 @@ func (OwnerChecker) IsOwner(ctx context.Context, userID, resourceID string) bool
 }
 
 // BacktestPresetStore impl
-func (s *Store) Save(ctx context.Context, preset []byte, userID string) error {
+func (s *Store) Save(ctx context.Context, userID string, preset []byte) error {
 	_, err := s.SaveNamed(ctx, userID, "default", preset)
 	return err
 }
@@ -284,6 +284,11 @@ func (s *Store) DeletePreset(ctx context.Context, userID, id string) error {
 	}
 	s.backtestPreset[userID] = newList
 	return nil
+}
+
+// NotFound 判斷是否為預設不存在。
+func (s *Store) NotFound(err error) bool {
+	return IsPresetNotFound(err)
 }
 
 // SessionStore impl

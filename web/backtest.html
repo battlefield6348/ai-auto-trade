@@ -1,12 +1,15 @@
 <!DOCTYPE html>
 <html class="dark" lang="zh-Hant">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>回測控制台</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+    rel="stylesheet" />
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script id="tailwind-config">
@@ -33,11 +36,23 @@
     };
   </script>
   <style>
-    body { font-family: "Space Grotesk", "Noto Sans TC", sans-serif; }
-    #btEvents { max-height: 520px; overflow-y: auto; }
-    #btScoreChart, #btReturnChart { width: 100% !important; height: 100% !important; }
+    body {
+      font-family: "Space Grotesk", "Noto Sans TC", sans-serif;
+    }
+
+    #btEvents {
+      max-height: 520px;
+      overflow-y: auto;
+    }
+
+    #btScoreChart,
+    #btReturnChart {
+      width: 100% !important;
+      height: 100% !important;
+    }
   </style>
 </head>
+
 <body class="bg-background-dark text-white min-h-screen flex flex-col">
   <header class="sticky top-0 z-50 border-b border-surface-border bg-background-dark/80 backdrop-blur-md">
     <div class="px-6 py-4 flex items-center justify-between">
@@ -51,10 +66,13 @@
         </div>
       </div>
       <div class="flex items-center gap-3">
-        <a href="/" class="px-3 py-1.5 rounded bg-surface-border text-slate-200 text-xs border border-surface-border hover:border-primary/50">返回管線面板</a>
+        <a href="/"
+          class="px-3 py-1.5 rounded bg-surface-border text-slate-200 text-xs border border-surface-border hover:border-primary/50">返回管線面板</a>
         <span id="loginStatus" class="text-xs text-slate-400">未登入</span>
-        <button id="loginBtn" class="px-3 py-1.5 rounded bg-primary/20 text-primary text-xs border border-primary/40 hover:bg-primary/30">登入</button>
-        <button id="logoutBtn" class="px-3 py-1.5 rounded bg-surface-border text-slate-300 text-xs border border-surface-border hover:border-primary/50 hidden">登出</button>
+        <button id="loginBtn"
+          class="px-3 py-1.5 rounded bg-primary/20 text-primary text-xs border border-primary/40 hover:bg-primary/30">登入</button>
+        <button id="logoutBtn"
+          class="px-3 py-1.5 rounded bg-surface-border text-slate-300 text-xs border border-surface-border hover:border-primary/50 hidden">登出</button>
       </div>
     </div>
   </header>
@@ -66,38 +84,103 @@
       <div class="flex items-center justify-between">
         <h3 class="text-sm text-slate-400 font-medium">條件回測 (Backtest)</h3>
         <div class="flex gap-2 text-xs">
-          <button id="loadPresetBtn" class="px-2 py-1 rounded bg-surface-border text-slate-200 border border-surface-border hover:border-primary/40">載入預設</button>
-          <button id="savePresetBtn" class="px-2 py-1 rounded bg-secondary/20 text-secondary border border-secondary/40 hover:bg-secondary/30">儲存為預設</button>
-          <button id="runBacktestBtn" class="px-2 py-1 rounded bg-primary/20 text-primary border border-primary/40 hover:bg-primary/30">執行回測</button>
+          <button id="loadPresetBtn"
+            class="px-2 py-1 rounded bg-surface-border text-slate-200 border border-surface-border hover:border-primary/40">載入預設</button>
+          <button id="savePresetBtn"
+            class="px-2 py-1 rounded bg-secondary/20 text-secondary border border-secondary/40 hover:bg-secondary/30">儲存為預設</button>
+          <button id="runBacktestBtn"
+            class="px-2 py-1 rounded bg-primary/20 text-primary border border-primary/40 hover:bg-primary/30">執行回測</button>
+          <button id="saveAsStrategyBtn"
+            class="px-2 py-1 rounded bg-green-500/20 text-green-400 border border-green-500/40 hover:bg-green-500/30">另存為新策略</button>
+        </div>
+      </div>
+      <div id="saveAsStrategyForm"
+        class="hidden grid md:grid-cols-3 gap-3 p-3 border border-green-500/30 rounded-lg bg-green-500/5">
+        <label class="space-y-1 text-xs text-slate-300">策略名稱 <input id="newStrategyName"
+            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-green-500 focus:ring-0"
+            placeholder="e.g. 我的趨勢策略" /></label>
+        <label class="space-y-1 text-xs text-slate-300">唯一代碼 (Slug) <input id="newStrategySlug"
+            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-green-500 focus:ring-0"
+            placeholder="e.g. my_trend_v1" /></label>
+        <div class="flex items-end gap-2">
+          <button id="confirmSaveStrategyBtn"
+            class="flex-1 px-3 py-1 rounded bg-green-600 text-white text-xs font-bold hover:bg-green-500">確認儲存</button>
+          <button id="cancelSaveStrategyBtn"
+            class="px-3 py-1 rounded bg-surface-border text-slate-300 text-xs hover:bg-slate-700">取消</button>
         </div>
       </div>
       <div class="grid md:grid-cols-4 gap-3 text-xs text-slate-300">
-        <label class="space-y-1">交易對 <input id="btSymbol" class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0" value="BTCUSDT"/></label>
-        <label class="space-y-1">起始日 <input id="btStart" type="date" class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"/></label>
-        <label class="space-y-1">結束日 <input id="btEnd" type="date" class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"/></label>
-        <label class="space-y-1">總分門檻 <input id="btTotalMin" type="number" step="0.1" class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0" value="60"/></label>
+        <label class="space-y-1">交易對 <input id="btSymbol"
+            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
+            value="BTCUSDT" /></label>
+        <label class="space-y-1">起始日 <input id="btStart" type="date"
+            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0" /></label>
+        <label class="space-y-1">結束日 <input id="btEnd" type="date"
+            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0" /></label>
+        <label class="space-y-1">總分門檻 <input id="btTotalMin" type="number" step="0.1"
+            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
+            value="60" /></label>
       </div>
       <div class="grid md:grid-cols-5 gap-3 text-xs text-slate-300">
-        <label class="space-y-1">Score 權重 <input id="btScoreW" type="number" step="0.1" class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0" value="1"/></label>
-        <label class="space-y-1">日漲跌加分 <input id="btChangeBonus" type="number" step="0.1" class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0" value="10"/></label>
-        <label class="space-y-1">量能加分 <input id="btVolumeBonus" type="number" step="0.1" class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0" value="10"/></label>
-        <label class="space-y-1">近5日加分 <input id="btReturnBonus" type="number" step="0.1" class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0" value="8"/></label>
-        <label class="space-y-1">MA 加分 <input id="btMaBonus" type="number" step="0.1" class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0" value="5"/></label>
+        <label id="wrapper-btChangeBonus" class="space-y-1">日漲跌加分 <input id="btChangeBonus" type="number" step="0.1"
+            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
+            value="10" /></label>
+        <label id="wrapper-btVolumeBonus" class="space-y-1">量能加分 <input id="btVolumeBonus" type="number" step="0.1"
+            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
+            value="10" /></label>
+        <label id="wrapper-btReturnBonus" class="space-y-1">近5日加分 <input id="btReturnBonus" type="number" step="0.1"
+            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
+            value="8" /></label>
+        <label id="wrapper-btMaBonus" class="space-y-1">MA 加分 <input id="btMaBonus" type="number" step="0.1"
+            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
+            value="5" /></label>
       </div>
       <div class="grid md:grid-cols-5 gap-3 text-xs text-slate-300">
-        <label class="space-y-1">日漲跌門檻(%) <input id="btChangeMin" type="number" step="0.001" class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0" value="0.5"/></label>
-        <label class="space-y-1">量能門檻(倍) <input id="btVolMin" type="number" step="0.01" class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0" value="1.2"/></label>
-        <label class="space-y-1">近5日門檻(%) <input id="btRet5Min" type="number" step="0.001" class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0" value="1"/></label>
-        <label class="space-y-1">MA 乖離門檻(%) <input id="btMaGapMin" type="number" step="0.001" class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0" value="1"/></label>
-        <label class="space-y-1">Horizons (逗號分隔) <input id="btHorizons" class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0" value="3,5,10"/></label>
+        <label id="wrapper-btChangeMin" class="space-y-1">日漲跌門檻(%) <input id="btChangeMin" type="number" step="0.001"
+            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
+            value="0.5" /></label>
+        <label id="wrapper-btVolMin" class="space-y-1">量能門檻(倍) <input id="btVolMin" type="number" step="0.01"
+            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
+            value="1.2" /></label>
+        <label id="wrapper-btRet5Min" class="space-y-1">近5日門檻(%) <input id="btRet5Min" type="number" step="0.001"
+            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
+            value="1" /></label>
+        <label id="wrapper-btMaGapMin" class="space-y-1">MA 乖離門檻(%) <input id="btMaGapMin" type="number" step="0.001"
+            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
+            value="1" /></label>
+        <label class="space-y-1">Horizons (逗號分隔) <input id="btHorizons"
+            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
+            value="3,5,10" /></label>
       </div>
       <div class="grid md:grid-cols-4 gap-3 text-xs text-slate-300">
-        <label class="inline-flex items-center gap-2"><input id="btUseChange" type="checkbox" class="rounded border-surface-border text-primary" checked/>啟用日漲跌</label>
-        <label class="inline-flex items-center gap-2"><input id="btUseVolume" type="checkbox" class="rounded border-surface-border text-primary" checked/>啟用量能</label>
-        <label class="inline-flex items-center gap-2"><input id="btUseReturn" type="checkbox" class="rounded border-surface-border text-primary" />啟用近5日</label>
-        <label class="inline-flex items-center gap-2"><input id="btUseMa" type="checkbox" class="rounded border-surface-border text-primary" />啟用 MA 乖離</label>
+        <label class="inline-flex items-center gap-2"><input id="btUseChange" type="checkbox"
+            class="rounded border-surface-border text-primary" checked />啟用日漲跌</label>
+        <label class="inline-flex items-center gap-2"><input id="btUseVolume" type="checkbox"
+            class="rounded border-surface-border text-primary" checked />啟用量能</label>
+        <label class="inline-flex items-center gap-2"><input id="btUseReturn" type="checkbox"
+            class="rounded border-surface-border text-primary" />啟用近5日</label>
+        <label class="inline-flex items-center gap-2"><input id="btUseMa" type="checkbox"
+            class="rounded border-surface-border text-primary" />啟用 MA 乖離</label>
       </div>
-      <div id="btResult" class="text-xs text-slate-300 border border-surface-border rounded-lg p-3 bg-background-dark/60">尚未回測</div>
+
+      <div class="border-t border-surface-border pt-4 mt-2">
+        <h3 class="text-sm text-slate-400 font-medium mb-3">資料庫策略 (SQL Strategies)</h3>
+        <div class="flex items-end gap-3">
+          <label class="space-y-1 flex-1 text-xs text-slate-300">
+            選取已儲存策略
+            <select id="btStrategySlug"
+              class="w-full bg-background-dark border border-surface-border rounded px-2 py-1.5 focus:border-primary focus:ring-0 text-white">
+              <option value="">-- 手動權重模式 --</option>
+            </select>
+          </label>
+          <button id="runDbStrategyBtn"
+            class="px-4 py-1.5 rounded bg-secondary/20 text-secondary border border-secondary/40 hover:bg-secondary/30 text-xs font-medium">
+            執行資料庫策略回測
+          </button>
+        </div>
+      </div>
+      <div id="btResult"
+        class="text-xs text-slate-300 border border-surface-border rounded-lg p-3 bg-background-dark/60">尚未回測</div>
       <div class="grid md:grid-cols-2 gap-4">
         <div class="bg-background-dark/50 border border-surface-border rounded-lg p-3">
           <div class="text-xs text-slate-400 mb-2">總分/收盤趨勢</div>
@@ -116,24 +199,32 @@
     </div>
   </main>
 
-  <dialog id="loginModal" class="bg-surface-dark text-white rounded-lg border border-surface-border shadow-neon p-6 w-[420px] max-w-full">
+  <dialog id="loginModal"
+    class="bg-surface-dark text-white rounded-lg border border-surface-border shadow-neon p-6 w-[420px] max-w-full">
     <h3 class="text-lg font-bold mb-3">登入</h3>
     <form id="loginForm" class="space-y-3">
       <div>
         <label class="text-xs text-slate-400">Email</label>
-        <input id="loginEmail" type="email" class="w-full bg-background-dark border border-surface-border rounded px-3 py-2 text-sm text-white focus:border-primary focus:ring-0" value="admin@example.com" required />
+        <input id="loginEmail" type="email"
+          class="w-full bg-background-dark border border-surface-border rounded px-3 py-2 text-sm text-white focus:border-primary focus:ring-0"
+          value="admin@example.com" required />
       </div>
       <div>
         <label class="text-xs text-slate-400">Password</label>
-        <input id="loginPassword" type="password" class="w-full bg-background-dark border border-surface-border rounded px-3 py-2 text-sm text-white focus:border-primary focus:ring-0" value="password123" required />
+        <input id="loginPassword" type="password"
+          class="w-full bg-background-dark border border-surface-border rounded px-3 py-2 text-sm text-white focus:border-primary focus:ring-0"
+          value="password123" required />
       </div>
       <div class="flex justify-end gap-2 mt-4">
-        <button type="button" id="closeLogin" class="px-3 py-1.5 rounded bg-surface-border text-slate-300 text-xs border border-surface-border hover:border-primary/50">取消</button>
-        <button type="submit" class="px-3 py-1.5 rounded bg-primary/80 text-background-dark text-xs font-semibold shadow-neon hover:bg-primary">登入</button>
+        <button type="button" id="closeLogin"
+          class="px-3 py-1.5 rounded bg-surface-border text-slate-300 text-xs border border-surface-border hover:border-primary/50">取消</button>
+        <button type="submit"
+          class="px-3 py-1.5 rounded bg-primary/80 text-background-dark text-xs font-semibold shadow-neon hover:bg-primary">登入</button>
       </div>
     </form>
   </dialog>
 
   <script type="module" src="./backtest.js"></script>
 </body>
+
 </html>

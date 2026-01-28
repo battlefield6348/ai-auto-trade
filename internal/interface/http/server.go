@@ -15,6 +15,7 @@ import (
 
 	"ai-auto-trade/internal/application/analysis"
 	"ai-auto-trade/internal/application/auth"
+	appStrategy "ai-auto-trade/internal/application/strategy"
 	"ai-auto-trade/internal/application/trading"
 	analysisDomain "ai-auto-trade/internal/domain/analysis"
 	dataDomain "ai-auto-trade/internal/domain/dataingestion"
@@ -848,6 +849,96 @@ func (s *Server) handleAnalysisBacktest(w http.ResponseWriter, r *http.Request) 
 		"stats": map[string]interface{}{
 			"returns": stats,
 		},
+	})
+}
+
+type slugBacktestRequest struct {
+	Slug      string `json:"slug"`
+	Symbol    string `json:"symbol"`
+	StartDate string `json:"start_date"`
+	EndDate   string `json:"end_date"`
+}
+
+func (s *Server) handleSlugBacktest(w http.ResponseWriter, r *http.Request) {
+	var body slugBacktestRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+		return
+	}
+
+	start, err := time.Parse("2006-01-02", body.StartDate)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid start_date")
+		return
+	}
+	end, err := time.Parse("2006-01-02", body.EndDate)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid end_date")
+		return
+	}
+	symbol := strings.ToUpper(body.Symbol)
+	if symbol == "" {
+		symbol = "BTCUSDT"
+	}
+
+	res, err := s.scoringBtUC.Execute(r.Context(), body.Slug, symbol, start, end)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"result":  res,
+	})
+}
+
+func (s *Server) handleListScoringStrategies(w http.ResponseWriter, r *http.Request) {
+	rows, err := s.db.QueryContext(r.Context(), "SELECT name, slug FROM strategies WHERE slug IS NOT NULL")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "failed to query strategies")
+		return
+	}
+	defer rows.Close()
+
+	type item struct {
+		Name string `json:"name"`
+		Slug string `json:"slug"`
+	}
+	var list []item
+	for rows.Next() {
+		var i item
+		if err := rows.Scan(&i.Name, &i.Slug); err != nil {
+			continue
+		}
+		list = append(list, i)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success":    true,
+		"strategies": list,
+	})
+}
+
+func (s *Server) handleSaveScoringStrategy(w http.ResponseWriter, r *http.Request) {
+	var body appStrategy.SaveScoringStrategyInput
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+		return
+	}
+
+	if body.Slug == "" || body.Name == "" {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "name and slug are required")
+		return
+	}
+
+	if err := s.saveScoringBtUC.Execute(r.Context(), body); err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
 	})
 }
 

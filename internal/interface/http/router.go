@@ -9,6 +9,7 @@ import (
 
 	"ai-auto-trade/internal/application/analysis"
 	"ai-auto-trade/internal/application/auth"
+	appStrategy "ai-auto-trade/internal/application/strategy"
 	"ai-auto-trade/internal/application/trading"
 	authDomain "ai-auto-trade/internal/domain/auth"
 	"ai-auto-trade/internal/infra/memory"
@@ -51,6 +52,8 @@ type Server struct {
 	lastAutoRun   time.Time
 	dataSource    string
 	presetStore   backtestPresetStore
+	scoringBtUC   *appStrategy.BacktestUseCase
+	saveScoringBtUC *appStrategy.SaveScoringStrategyUseCase
 }
 
 // NewServer 建立 API 伺服器，預設使用記憶體資料存儲；若 db 未來可用，再注入對應 repository。
@@ -123,6 +126,8 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 		tradingSvc:    tradingSvc,
 		dataSource:    source,
 		presetStore:   presetStore,
+		scoringBtUC:   appStrategy.NewBacktestUseCase(db, dataRepo),
+		saveScoringBtUC: appStrategy.NewSaveScoringStrategyUseCase(db),
 	}
 	if db != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), seedTimeout)
@@ -178,9 +183,12 @@ func (s *Server) registerRoutes() {
 	s.mux.Handle("/api/admin/ingestion/backfill", s.requireAuth(auth.PermIngestionTriggerBackfill, s.wrapPost(s.handleIngestionBackfill)))
 	s.mux.Handle("/api/admin/analysis/daily", s.requireAuth(auth.PermAnalysisTriggerDaily, s.wrapPost(s.handleAnalysisDaily)))
 	s.mux.Handle("/api/analysis/daily", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleAnalysisQuery)))
+	s.mux.Handle("/api/analysis/strategies", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleListScoringStrategies)))
+	s.mux.Handle("/api/analysis/strategies/save-scoring", s.requireAuth(auth.PermAnalysisQuery, s.wrapPost(s.handleSaveScoringStrategy)))
 	s.mux.Handle("/api/analysis/history", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleAnalysisHistory)))
 	s.mux.Handle("/api/analysis/summary", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleAnalysisSummary)))
 	s.mux.Handle("/api/analysis/backtest", s.requireAuth(auth.PermAnalysisQuery, s.wrapPost(s.handleAnalysisBacktest)))
+	s.mux.Handle("/api/analysis/backtest/slug", s.requireAuth(auth.PermAnalysisQuery, s.wrapPost(s.handleSlugBacktest)))
 	s.mux.Handle("/api/analysis/backtest/preset", s.requireAuth(auth.PermAnalysisQuery, s.wrapMethods(map[string]http.HandlerFunc{
 		http.MethodGet:  s.handleGetBacktestPreset,
 		http.MethodPost: s.handleSaveBacktestPreset,

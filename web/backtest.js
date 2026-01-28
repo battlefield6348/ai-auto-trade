@@ -68,7 +68,7 @@ function readForm() {
     start_date: el("btStart").value,
     end_date: el("btEnd").value,
     weights: {
-      score: parse("btScoreW", 1),
+      score: 1,
       change_bonus: parse("btChangeBonus", 10),
       volume_bonus: parse("btVolumeBonus", 10),
       return_bonus: parse("btReturnBonus", 8),
@@ -76,10 +76,10 @@ function readForm() {
     },
     thresholds: {
       total_min: parse("btTotalMin", 60),
-      change_min: parse("btChangeMin", 0.005),
+      change_min: parse("btChangeMin", 0.5) / 100,
       volume_ratio_min: parse("btVolMin", 1.2),
-      return5_min: parse("btRet5Min", 0.01),
-      ma_gap_min: parse("btMaGapMin", 0.01),
+      return5_min: parse("btRet5Min", 1) / 100,
+      ma_gap_min: parse("btMaGapMin", 1) / 100,
     },
     flags: {
       use_change: el("btUseChange").checked,
@@ -91,27 +91,52 @@ function readForm() {
   };
 }
 
+function updateVisibility() {
+  const map = {
+    btUseChange: ["wrapper-btChangeBonus", "wrapper-btChangeMin"],
+    btUseVolume: ["wrapper-btVolumeBonus", "wrapper-btVolMin"],
+    btUseReturn: ["wrapper-btReturnBonus", "wrapper-btRet5Min"],
+    btUseMa: ["wrapper-btMaBonus", "wrapper-btMaGapMin"],
+  };
+
+  Object.entries(map).forEach(([checkId, wrapperIds]) => {
+    const checked = el(checkId).checked;
+    wrapperIds.forEach((id) => {
+      const w = el(id);
+      if (w) {
+        if (checked) w.classList.remove("invisible");
+        else w.classList.add("invisible");
+      }
+    });
+  });
+}
+
 function fillForm(cfg) {
   if (!cfg) return;
   el("btSymbol").value = cfg.symbol || "BTCUSDT";
   el("btStart").value = cfg.start_date || "";
   el("btEnd").value = cfg.end_date || "";
-  el("btScoreW").value = cfg.weights?.score ?? 1;
+
   el("btChangeBonus").value = cfg.weights?.change_bonus ?? 10;
   el("btVolumeBonus").value = cfg.weights?.volume_bonus ?? 10;
   el("btReturnBonus").value = cfg.weights?.return_bonus ?? 8;
   el("btMaBonus").value = cfg.weights?.ma_bonus ?? 5;
   el("btTotalMin").value = cfg.thresholds?.total_min ?? 60;
-  el("btChangeMin").value = cfg.thresholds?.change_min ?? 0.005;
+
+  // Convert decimals back to percentages for UI
+  el("btChangeMin").value = (cfg.thresholds?.change_min ?? 0.005) * 100;
   el("btVolMin").value = cfg.thresholds?.volume_ratio_min ?? 1.2;
-  el("btRet5Min").value = cfg.thresholds?.return5_min ?? 0.01;
-  el("btMaGapMin").value = cfg.thresholds?.ma_gap_min ?? 0.01;
+  el("btRet5Min").value = (cfg.thresholds?.return5_min ?? 0.01) * 100;
+  el("btMaGapMin").value = (cfg.thresholds?.ma_gap_min ?? 0.01) * 100;
+
   el("btUseChange").checked = cfg.flags?.use_change ?? true;
   el("btUseVolume").checked = cfg.flags?.use_volume ?? true;
   el("btUseReturn").checked = cfg.flags?.use_return ?? false;
   el("btUseMa").checked = cfg.flags?.use_ma ?? false;
   el("btHorizons").value = (cfg.horizons || [3, 5, 10]).join(",");
+  updateVisibility();
 }
+
 
 function renderResult(res) {
   const box = el("btResult");
@@ -250,6 +275,121 @@ async function runBacktest() {
   }
 }
 
+async function runDbStrategy() {
+  const slug = el("btStrategySlug").value;
+  if (!slug) return setAlert("請選擇一個策略", "error");
+  const payload = {
+    slug: slug,
+    symbol: (el("btSymbol").value || "BTCUSDT").trim().toUpperCase(),
+    start_date: el("btStart").value,
+    end_date: el("btEnd").value,
+  };
+  if (!payload.start_date || !payload.end_date) return setAlert("請選擇回測起訖日", "error");
+
+  setBusy("runDbStrategyBtn", true, "執行中");
+  try {
+    const res = await api("/api/analysis/backtest/slug", { method: "POST", body: payload });
+    renderResult(res.result);
+    setAlert(`策略 [${slug}] 回測完成`, "success");
+  } catch (err) {
+    setAlert(err.message, "error");
+    renderResult({ error: err.message });
+  } finally {
+    setBusy("runDbStrategyBtn", false, "執行資料庫策略回測");
+  }
+}
+
+async function confirmSaveScoringStrategy() {
+  const name = el("newStrategyName").value.trim();
+  const slug = el("newStrategySlug").value.trim();
+  if (!name || !slug) return setAlert("請輸入名稱與代碼", "error");
+
+  const form = readForm();
+  const rules = [];
+  if (el("btUseChange").checked) {
+    rules.push({
+      condition_name: "日漲跌",
+      type: "PRICE_RETURN",
+      params: {
+        days: 1,
+        min: (parseFloat(el("btChangeMin").value) || 0) / 100
+      },
+      weight: parseFloat(el("btChangeBonus").value) || 0
+    });
+  }
+  if (el("btUseVolume").checked) {
+    rules.push({
+      condition_name: "量能激增",
+      type: "VOLUME_SURGE",
+      params: {
+        min: parseFloat(el("btVolMin").value) || 0
+      },
+      weight: parseFloat(el("btVolumeBonus").value) || 0
+    });
+  }
+  if (el("btUseReturn").checked) {
+    rules.push({
+      condition_name: "近5日報酬",
+      type: "PRICE_RETURN",
+      params: {
+        days: 5,
+        min: (parseFloat(el("btRet5Min").value) || 0) / 100
+      },
+      weight: parseFloat(el("btReturnBonus").value) || 0
+    });
+  }
+  if (el("btUseMa").checked) {
+    rules.push({
+      condition_name: "MA 乖離",
+      type: "MA_DEVIATION",
+      params: {
+        ma: 20,
+        min: (parseFloat(el("btMaGapMin").value) || 0) / 100
+      },
+      weight: parseFloat(el("btMaBonus").value) || 0
+    });
+  }
+
+  const payload = {
+    name: name,
+    slug: slug,
+    threshold: parseFloat(el("btTotalMin").value) || 0,
+    rules: rules
+  };
+
+  setBusy("confirmSaveStrategyBtn", true, "儲存中");
+  try {
+    await api("/api/analysis/strategies/save-scoring", { method: "POST", body: payload });
+    setAlert(`新策略 [${name}] 已成功存入資料庫`, "success");
+    el("saveAsStrategyForm").classList.add("hidden");
+    // Refresh strategy list
+    const select = el("btStrategySlug");
+    while (select.options.length > 1) select.remove(1);
+    await fetchStrategies();
+  } catch (err) {
+    setAlert(err.message, "error");
+  } finally {
+    setBusy("confirmSaveStrategyBtn", false, "確認儲存");
+  }
+}
+
+async function fetchStrategies() {
+  try {
+    const res = await api("/api/analysis/strategies");
+    const select = el("btStrategySlug");
+    if (res.strategies) {
+      res.strategies.forEach(s => {
+        const opt = document.createElement("option");
+        opt.value = s.slug;
+        opt.textContent = `${s.name} (${s.slug})`;
+        select.appendChild(opt);
+      });
+    }
+  } catch (err) {
+    console.error("Failed to fetch strategies:", err);
+  }
+}
+
 async function savePreset() {
   const payload = readForm();
   setBusy("savePresetBtn", true, "儲存中");
@@ -325,14 +465,38 @@ function setupLoginModal() {
   el("logoutBtn").addEventListener("click", () => logout());
 }
 
+
+
 function bootstrap() {
   setupLoginModal();
   el("runBacktestBtn").addEventListener("click", runBacktest);
+  el("runDbStrategyBtn").addEventListener("click", runDbStrategy);
+  el("saveAsStrategyBtn").addEventListener("click", () => el("saveAsStrategyForm").classList.remove("hidden"));
+  el("cancelSaveStrategyBtn").addEventListener("click", () => el("saveAsStrategyForm").classList.add("hidden"));
+  el("confirmSaveStrategyBtn").addEventListener("click", confirmSaveScoringStrategy);
   el("savePresetBtn").addEventListener("click", savePreset);
   el("loadPresetBtn").addEventListener("click", loadPreset);
+
+  fetchStrategies();
+
+  ["btUseChange", "btUseVolume", "btUseReturn", "btUseMa"].forEach((id) => {
+    el(id).addEventListener("change", updateVisibility);
+  });
+  updateVisibility();
+
+  // Set default dates: 2024/1/1 to Today
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  if (!el("btStart").value) el("btStart").value = "2024-01-01";
+  if (!el("btEnd").value) el("btEnd").value = `${y}-${m}-${d}`;
+
   if (state.token) {
     el("loginStatus").textContent = state.lastEmail ? `已登入：${state.lastEmail}` : "已登入";
   }
 }
+
+
 
 bootstrap();

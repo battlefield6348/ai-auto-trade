@@ -1,0 +1,136 @@
+package strategy
+
+import (
+	"ai-auto-trade/internal/domain/analysis"
+	"fmt"
+)
+
+// ConditionEvaluator is a function that takes a condition's raw params and analysis data,
+// and returns a score contribution (usually normalized before weighting).
+type ConditionEvaluator func(params map[string]interface{}, data analysis.DailyAnalysisResult) (float64, error)
+
+// EvaluatorRegistry maps condition types to their respective evaluator functions.
+var EvaluatorRegistry = map[string]ConditionEvaluator{
+	"PRICE_RETURN": evalPriceReturn,
+	"VOLUME_SURGE": evalVolumeSurge,
+	"MA_DEVIATION": evalMADeviation,
+	"RANGE_POS":    evalRangePos,
+}
+
+// evalPriceReturn computes score based on price return over N days.
+// Params: {"days": 5, "min": 0.05}
+func evalPriceReturn(params map[string]interface{}, data analysis.DailyAnalysisResult) (float64, error) {
+	days, _ := params["days"].(float64)
+	threshold, hasThreshold := params["min"].(float64)
+	var val *float64
+	switch int(days) {
+	case 5:
+		val = data.Return5
+	case 20:
+		val = data.Return20
+	case 60:
+		val = data.Return60
+	default:
+		// Fallback to 1-day change if days not specified or invalid
+		v := data.ChangeRate
+		val = &v
+	}
+	if val == nil {
+		return 0, nil
+	}
+	if hasThreshold {
+		if *val >= threshold {
+			return 1.0, nil
+		}
+		return 0, nil
+	}
+	// Legacy continuous scoring
+	return *val * 100, nil
+}
+
+// evalVolumeSurge computes score based on volume relative to average.
+// Params: {"min": 1.5}
+func evalVolumeSurge(params map[string]interface{}, data analysis.DailyAnalysisResult) (float64, error) {
+	if data.VolumeMultiple == nil {
+		return 0, nil
+	}
+	threshold, hasThreshold := params["min"].(float64)
+	if hasThreshold {
+		if *data.VolumeMultiple >= threshold {
+			return 1.0, nil
+		}
+		return 0, nil
+	}
+	// Legacy continuous scoring
+	return (*data.VolumeMultiple - 1.0) * 10, nil
+}
+
+// evalMADeviation computes score based on deviation from moving average.
+// Params: {"ma": 20, "min": 0.02}
+func evalMADeviation(params map[string]interface{}, data analysis.DailyAnalysisResult) (float64, error) {
+	if data.Deviation20 == nil {
+		return 0, nil
+	}
+	threshold, hasThreshold := params["min"].(float64)
+	if hasThreshold {
+		if *data.Deviation20 >= threshold {
+			return 1.0, nil
+		}
+		return 0, nil
+	}
+	// Legacy continuous scoring
+	return *data.Deviation20 * 100, nil
+}
+
+// evalRangePos computes score based on where the price is in its N-day range.
+// Params: {"days": 20, "min": 0.8}
+func evalRangePos(params map[string]interface{}, data analysis.DailyAnalysisResult) (float64, error) {
+	if data.RangePos20 == nil {
+		return 0, nil
+	}
+	threshold, hasThreshold := params["min"].(float64)
+	if hasThreshold {
+		if *data.RangePos20 >= threshold {
+			return 1.0, nil
+		}
+		return 0, nil
+	}
+	// Legacy continuous scoring
+	return (*data.RangePos20 - 0.5) * 10, nil
+}
+
+// CalculateScore executes all rules in a strategy and returns the total score.
+func (s *ScoringStrategy) CalculateScore(data analysis.DailyAnalysisResult) (float64, error) {
+	totalScore := 0.0 // Starting base score (can be adjusted)
+
+	for _, rule := range s.Rules {
+		evaluator, ok := EvaluatorRegistry[rule.Condition.Type]
+		if !ok {
+			// Skip unknown condition types or return error
+			continue
+		}
+
+		params, err := rule.Condition.ParseParams()
+		if err != nil {
+			return 0, fmt.Errorf("failed to parse params for condition %s: %w", rule.Condition.ID, err)
+		}
+
+		contribution, err := evaluator(params, data)
+		if err != nil {
+			return 0, fmt.Errorf("evaluation error for rule %s: %w", rule.Condition.Type, err)
+		}
+
+		totalScore += contribution * rule.Weight
+	}
+
+	return totalScore, nil
+}
+
+// IsTriggered checks if the total score exceeds the strategy's threshold.
+func (s *ScoringStrategy) IsTriggered(data analysis.DailyAnalysisResult) (bool, float64, error) {
+	score, err := s.CalculateScore(data)
+	if err != nil {
+		return false, 0, err
+	}
+	return score >= s.Threshold, score, nil
+}

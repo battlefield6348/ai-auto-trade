@@ -894,7 +894,7 @@ func (s *Server) handleSlugBacktest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleListScoringStrategies(w http.ResponseWriter, r *http.Request) {
-	rows, err := s.db.QueryContext(r.Context(), "SELECT name, slug FROM strategies WHERE slug IS NOT NULL")
+	rows, err := s.db.QueryContext(r.Context(), "SELECT id, name, slug, threshold, updated_at FROM strategies WHERE slug IS NOT NULL ORDER BY updated_at DESC")
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, errCodeInternal, "failed to query strategies")
 		return
@@ -902,13 +902,16 @@ func (s *Server) handleListScoringStrategies(w http.ResponseWriter, r *http.Requ
 	defer rows.Close()
 
 	type item struct {
-		Name string `json:"name"`
-		Slug string `json:"slug"`
+		ID        string    `json:"id"`
+		Name      string    `json:"name"`
+		Slug      string    `json:"slug"`
+		Threshold float64   `json:"threshold"`
+		UpdatedAt time.Time `json:"updated_at"`
 	}
 	var list []item
 	for rows.Next() {
 		var i item
-		if err := rows.Scan(&i.Name, &i.Slug); err != nil {
+		if err := rows.Scan(&i.ID, &i.Name, &i.Slug, &i.Threshold, &i.UpdatedAt); err != nil {
 			continue
 		}
 		list = append(list, i)
@@ -932,6 +935,7 @@ func (s *Server) handleSaveScoringStrategy(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	body.UserID = currentUserID(r)
 	if err := s.saveScoringBtUC.Execute(r.Context(), body); err != nil {
 		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
 		return
@@ -1027,6 +1031,7 @@ func normalizeBacktestRequest(req analysisBacktestRequest) (parsedBacktestInput,
 		return out, fmt.Errorf("end_date must be after start_date")
 	}
 
+	// Thresholds are already normalized to ratios by the frontend.
 	horizons := normalizeHorizons(req.Horizons)
 	req.Symbol = symbol
 	req.Horizons = horizons

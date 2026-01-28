@@ -1,0 +1,130 @@
+const state = {
+    token: localStorage.getItem("aat_token") || "",
+    strategies: [],
+};
+
+const el = (id) => document.getElementById(id);
+
+function setAlert(msg, type = "info") {
+    const box = el("alert");
+    if (!msg) {
+        box.classList.add("hidden");
+        return;
+    }
+    const palette = {
+        info: "border-primary/30 bg-primary/10 text-primary",
+        error: "border-danger/30 bg-danger/10 text-danger",
+        success: "border-success/30 bg-success/10 text-success",
+    };
+    box.className = `rounded border px-4 py-3 text-sm ${palette[type] || palette.info}`;
+    box.textContent = msg;
+    box.classList.remove("hidden");
+    setTimeout(() => box.classList.add("hidden"), 5000);
+}
+
+async function api(path, { method = "GET", body } = {}) {
+    const headers = {};
+    if (state.token) headers["Authorization"] = `Bearer ${state.token}`;
+
+    let payload = body;
+    if (body && typeof body === "object") {
+        headers["Content-Type"] = "application/json";
+        payload = JSON.stringify(body);
+    }
+
+    const res = await fetch(path, { method, headers, body: payload });
+    if (res.status === 401) {
+        window.location.href = "/";
+        return;
+    }
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.success === false) {
+        throw new Error(data.message || data.error || res.statusText);
+    }
+    return data;
+}
+
+async function fetchStrategies() {
+    try {
+        const data = await api("/api/analysis/strategies");
+        state.strategies = data.strategies || [];
+        renderTable();
+    } catch (err) {
+        setAlert(err.message, "error");
+    }
+}
+
+function renderTable() {
+    const tbody = el("strategyTableBody");
+    const empty = el("emptyState");
+    tbody.innerHTML = "";
+
+    if (state.strategies.length === 0) {
+        empty.classList.remove("hidden");
+        return;
+    }
+    empty.classList.add("hidden");
+
+    state.strategies.forEach((s) => {
+        const date = new Date(s.updated_at).toLocaleString();
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-white/5 transition-colors group";
+        tr.innerHTML = `
+      <td class="px-4 py-4 font-medium text-white">${s.name}</td>
+      <td class="px-4 py-4 font-mono text-xs text-slate-400">${s.slug}</td>
+      <td class="px-4 py-4 text-center font-mono text-primary">${s.threshold}</td>
+      <td class="px-4 py-4 text-xs text-slate-500">${date}</td>
+      <td class="px-4 py-4 text-right space-x-2">
+        <button class="edit-btn text-xs px-2 py-1 rounded bg-surface-border text-slate-300 hover:text-white" data-slug="${s.slug}">
+          修改
+        </button>
+        <button class="delete-btn text-xs px-2 py-1 rounded bg-danger/10 text-danger/80 hover:bg-danger/20 hover:text-danger" data-id="${s.id}" data-name="${s.name}">
+          刪除
+        </button>
+      </td>
+    `;
+        tbody.appendChild(tr);
+    });
+
+    // Attach events
+    document.querySelectorAll(".delete-btn").forEach((btn) => {
+        btn.addEventListener("click", () => deleteStrategy(btn.dataset.id, btn.dataset.name));
+    });
+    document.querySelectorAll(".edit-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            // Redirect to backtest with this slug selected
+            window.location.href = `/backtest.html?slug=${btn.dataset.slug}`;
+        });
+    });
+}
+
+async function deleteStrategy(id, name) {
+    if (!confirm(`確定要刪除策略 [${name}] 嗎？此動作不可復原。`)) return;
+
+    try {
+        await api(`/api/admin/strategies/${id}`, { method: "DELETE" });
+        setAlert(`策略 ${name} 已刪除`, "success");
+        fetchStrategies();
+    } catch (err) {
+        setAlert(err.message, "error");
+    }
+}
+
+function bootstrap() {
+    if (!state.token) {
+        window.location.href = "/";
+        return;
+    }
+
+    el("refreshBtn").addEventListener("click", fetchStrategies);
+    el("logoutBtn").classList.remove("hidden");
+    el("logoutBtn").addEventListener("click", () => {
+        localStorage.removeItem("aat_token");
+        window.location.href = "/";
+    });
+
+    fetchStrategies();
+}
+
+bootstrap();

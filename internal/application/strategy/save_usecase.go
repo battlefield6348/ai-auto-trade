@@ -8,6 +8,7 @@ import (
 )
 
 type SaveScoringStrategyInput struct {
+	UserID    string             `json:"user_id"`
 	Name      string             `json:"name"`
 	Slug      string             `json:"slug"`
 	Threshold float64            `json:"threshold"`
@@ -34,11 +35,11 @@ func (u *SaveScoringStrategyUseCase) Execute(ctx context.Context, input SaveScor
 	// 1. Insert or Update Strategy
 	var strategyID string
 	err := u.db.QueryRowContext(ctx, `
-		INSERT INTO strategies (name, slug, threshold, updated_at)
-		VALUES ($1, $2, $3, NOW())
+		INSERT INTO strategies (user_id, name, slug, threshold, updated_at)
+		VALUES ($1, $2, $3, $4, NOW())
 		ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, threshold = EXCLUDED.threshold, updated_at = NOW()
 		RETURNING id
-	`, input.Name, input.Slug, input.Threshold).Scan(&strategyID)
+	`, input.UserID, input.Name, input.Slug, input.Threshold).Scan(&strategyID)
 	if err != nil {
 		return fmt.Errorf("upsert strategy failed: %w", err)
 	}

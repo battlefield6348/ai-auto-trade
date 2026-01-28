@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html class="dark" lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>策略管理 - AI Auto Trade</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+        rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#0ddff2",
+                        secondary: "#7c3aed",
+                        "background-dark": "#0A0E1A",
+                        "surface-dark": "#161b2e",
+                        "surface-border": "#232d4b",
+                        success: "#10b981",
+                        danger: "#ef4444",
+                    },
+                    fontFamily: {
+                        display: ["Space Grotesk", "sans-serif"],
+                        body: ["Noto Sans TC", "sans-serif"],
+                    },
+                },
+            },
+        };
+    </script>
+</head>
+
+<body class="bg-background-dark text-white min-h-screen flex flex-col">
+    <header class="sticky top-0 z-50 border-b border-surface-border bg-background-dark/80 backdrop-blur-md">
+        <div class="px-6 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <div class="size-8 text-primary flex items-center justify-center rounded bg-primary/10">
+                    <span class="material-symbols-outlined">settings_suggest</span>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight text-white uppercase font-display">策略管理</h1>
+                    <p class="text-xs text-slate-400 font-mono tracking-wider">STRATEGY MANAGEMENT</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <a href="/"
+                    class="px-3 py-1.5 rounded bg-surface-border text-slate-200 text-xs hover:border-primary/50 border border-transparent">儀表板</a>
+                <a href="/backtest.html"
+                    class="px-3 py-1.5 rounded bg-surface-border text-slate-200 text-xs hover:border-primary/50 border border-transparent">回測控制台</a>
+                <span id="loginStatus" class="text-xs text-slate-400">未登入</span>
+                <button id="logoutBtn"
+                    class="px-3 py-1.5 rounded bg-surface-border text-slate-300 text-xs hidden border border-transparent hover:border-danger/50">登出</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 p-6 md:p-8 max-w-[1200px] mx-auto w-full flex flex-col gap-6">
+        <div id="alert" class="hidden rounded border px-4 py-3 text-sm"></div>
+
+        <div class="bg-surface-dark border border-surface-border rounded-xl p-6">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-lg font-bold flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary">list</span>
+                    已儲存的評分策略
+                </h2>
+                <button id="refreshBtn" class="p-2 rounded hover:bg-white/5 transition-colors">
+                    <span class="material-symbols-outlined text-slate-400">refresh</span>
+                </button>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead>
+                        <tr class="text-xs text-slate-500 border-b border-surface-border uppercase tracking-wider">
+                            <th class="px-4 py-3 font-medium">名稱</th>
+                            <th class="px-4 py-3 font-medium">代碼 (Slug)</th>
+                            <th class="px-4 py-3 font-medium text-center">門檻總分</th>
+                            <th class="px-4 py-3 font-medium">最後更新</th>
+                            <th class="px-4 py-3 font-medium text-right">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="strategyTableBody" class="divide-y divide-surface-border/50">
+                        <!-- Table rows will be inserted here -->
+                    </tbody>
+                </table>
+            </div>
+            <div id="emptyState" class="hidden py-20 text-center text-slate-500">
+                <span class="material-symbols-outlined text-5xl mb-3 block opacity-20">folder_open</span>
+                目前還沒有任何儲存的策略。
+            </div>
+        </div>
+    </main>
+
+    <script type="module" src="./strategies.js"></script>
+</body>
+
+</html>

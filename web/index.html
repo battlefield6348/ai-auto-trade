@@ -1,12 +1,15 @@
 <!DOCTYPE html>
 <html class="dark" lang="zh-Hant">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>自動化管線與批次管理控制台</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+    rel="stylesheet" />
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script id="tailwind-config">
@@ -39,11 +42,18 @@
     };
   </script>
   <style>
-    body { font-family: "Space Grotesk", "Noto Sans TC", sans-serif; }
-    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    body {
+      font-family: "Space Grotesk", "Noto Sans TC", sans-serif;
+    }
+
+    .scrollbar-hide::-webkit-scrollbar {
+      display: none;
+    }
   </style>
 </head>
-<body class="bg-background-dark text-white min-h-screen flex flex-col antialiased selection:bg-primary selection:text-background-dark">
+
+<body
+  class="bg-background-dark text-white min-h-screen flex flex-col antialiased selection:bg-primary selection:text-background-dark">
   <header class="sticky top-0 z-50 border-b border-surface-border bg-background-dark/80 backdrop-blur-md">
     <div class="px-6 py-4 flex items-center justify-between">
       <div class="flex items-center gap-4">
@@ -51,7 +61,8 @@
           <span class="material-symbols-outlined">hub</span>
         </div>
         <div>
-          <h1 class="text-xl font-bold tracking-tight text-white uppercase font-display">自動化管線控制台 <span class="text-primary text-sm normal-case ml-2 border border-primary/30 px-2 rounded-full">v2.4</span></h1>
+          <h1 class="text-xl font-bold tracking-tight text-white uppercase font-display">自動化管線控制台 <span
+              class="text-primary text-sm normal-case ml-2 border border-primary/30 px-2 rounded-full">v2.4</span></h1>
           <p class="text-xs text-slate-400 font-mono tracking-wider">SYSTEM_ID: AUTO-BTC-BATCH-OPS</p>
         </div>
       </div>
@@ -61,10 +72,15 @@
           <span class="text-xs text-slate-400 font-mono">Taipei (UTC+8)</span>
         </div>
         <div class="flex items-center gap-2">
-          <a href="/backtest.html" class="px-3 py-1.5 rounded bg-surface-border text-slate-200 text-xs border border-surface-border hover:border-primary/50">回測頁</a>
+          <a href="/strategies.html"
+            class="px-3 py-1.5 rounded bg-surface-border text-slate-200 text-xs border border-surface-border hover:border-primary/50">策略管理</a>
+          <a href="/backtest.html"
+            class="px-3 py-1.5 rounded bg-surface-border text-slate-200 text-xs border border-surface-border hover:border-primary/50">回測頁</a>
           <span id="loginStatus" class="text-xs text-slate-400">未登入</span>
-          <button id="loginBtn" class="px-3 py-1.5 rounded bg-primary/20 text-primary text-xs border border-primary/40 hover:bg-primary/30">登入</button>
-          <button id="logoutBtn" class="px-3 py-1.5 rounded bg-surface-border text-slate-300 text-xs border border-surface-border hover:border-primary/50 hidden">登出</button>
+          <button id="loginBtn"
+            class="px-3 py-1.5 rounded bg-primary/20 text-primary text-xs border border-primary/40 hover:bg-primary/30">登入</button>
+          <button id="logoutBtn"
+            class="px-3 py-1.5 rounded bg-surface-border text-slate-300 text-xs border border-surface-border hover:border-primary/50 hidden">登出</button>
         </div>
       </div>
     </div>
@@ -82,7 +98,8 @@
         <div class="mt-2">
           <div class="text-sm text-slate-400 mb-1">Next Run</div>
           <div class="text-2xl font-bold font-mono tracking-tight text-white flex items-center gap-2">
-            <span id="nextRun">--:--</span> <span class="text-xs font-sans text-primary px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20">Taipei</span>
+            <span id="nextRun">--:--</span> <span
+              class="text-xs font-sans text-primary px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20">Taipei</span>
           </div>
         </div>
         <div class="mt-4 pt-3 border-t border-surface-border/50">
@@ -94,10 +111,12 @@
         </div>
       </div>
 
-      <div class="lg:col-span-2 bg-surface-dark border border-surface-border rounded-lg p-5 flex flex-col relative overflow-hidden">
+      <div
+        class="lg:col-span-2 bg-surface-dark border border-surface-border rounded-lg p-5 flex flex-col relative overflow-hidden">
         <div class="flex justify-between items-start mb-4">
           <h3 class="text-slate-400 text-sm font-medium">最近任務指標 (Latest Task Metrics)</h3>
-          <span id="latestBadge" class="px-2 py-0.5 rounded text-xs bg-slate-500/10 text-slate-300 border border-slate-500/20 flex items-center gap-1">--</span>
+          <span id="latestBadge"
+            class="px-2 py-0.5 rounded text-xs bg-slate-500/10 text-slate-300 border border-slate-500/20 flex items-center gap-1">--</span>
         </div>
         <div class="grid grid-cols-3 gap-4 font-mono text-sm">
           <div>
@@ -132,11 +151,14 @@
         <div class="space-y-4">
           <div class="flex justify-between items-center">
             <span class="text-sm text-slate-300">Synthetic Mode</span>
-            <div id="syntheticBadge" class="flex items-center gap-2 px-2 py-1 rounded bg-surface-border/50 border border-surface-border text-xs text-slate-400 font-mono">--</div>
+            <div id="syntheticBadge"
+              class="flex items-center gap-2 px-2 py-1 rounded bg-surface-border/50 border border-surface-border text-xs text-slate-400 font-mono">
+              --</div>
           </div>
           <div class="flex justify-between items-center">
             <span class="text-sm text-slate-300">Auto-Interval</span>
-            <span id="autoInterval" class="text-xs font-mono text-primary border border-primary/30 px-2 py-0.5 rounded bg-primary/5">--</span>
+            <span id="autoInterval"
+              class="text-xs font-mono text-primary border border-primary/30 px-2 py-0.5 rounded bg-primary/5">--</span>
           </div>
           <div class="flex justify-between items-center">
             <span class="text-sm text-slate-300">Data Source</span>
@@ -162,11 +184,15 @@
               </h4>
             </div>
             <div class="flex gap-2 mb-3">
-              <input id="rerunDate" class="bg-surface-dark border border-surface-border rounded text-xs text-slate-300 px-2 py-1.5 w-full focus:border-primary focus:ring-0" type="date" />
+              <input id="rerunDate"
+                class="bg-surface-dark border border-surface-border rounded text-xs text-slate-300 px-2 py-1.5 w-full focus:border-primary focus:ring-0"
+                type="date" />
             </div>
             <div class="grid grid-cols-2 gap-2">
-              <button id="rerunBtn" class="w-full py-1.5 rounded bg-surface-border hover:bg-primary/20 hover:text-primary text-xs text-slate-300 transition-colors border border-transparent hover:border-primary/50">擷取並分析</button>
-              <button id="analysisOnlyBtn" class="w-full py-1.5 rounded bg-surface-border hover:bg-secondary/20 hover:text-secondary text-xs text-slate-300 transition-colors border border-transparent hover:border-secondary/50">僅分析</button>
+              <button id="rerunBtn"
+                class="w-full py-1.5 rounded bg-surface-border hover:bg-primary/20 hover:text-primary text-xs text-slate-300 transition-colors border border-transparent hover:border-primary/50">擷取並分析</button>
+              <button id="analysisOnlyBtn"
+                class="w-full py-1.5 rounded bg-surface-border hover:bg-secondary/20 hover:text-secondary text-xs text-slate-300 transition-colors border border-transparent hover:border-secondary/50">僅分析</button>
             </div>
           </div>
           <div class="bg-background-dark/50 rounded-lg p-4 border border-surface-border">
@@ -174,13 +200,20 @@
               <span class="material-symbols-outlined text-sm text-slate-400">candlestick_chart</span> 日期區間回補
             </h4>
             <div class="grid grid-cols-2 gap-2 mb-3">
-              <input id="rangeStart" class="bg-surface-dark border border-surface-border rounded text-xs text-slate-300 px-2 py-1.5 w-full focus:border-primary focus:ring-0" type="date" />
-              <input id="rangeEnd" class="bg-surface-dark border border-surface-border rounded text-xs text-slate-300 px-2 py-1.5 w-full focus:border-primary focus:ring-0" type="date" />
+              <input id="rangeStart"
+                class="bg-surface-dark border border-surface-border rounded text-xs text-slate-300 px-2 py-1.5 w-full focus:border-primary focus:ring-0"
+                type="date" />
+              <input id="rangeEnd"
+                class="bg-surface-dark border border-surface-border rounded text-xs text-slate-300 px-2 py-1.5 w-full focus:border-primary focus:ring-0"
+                type="date" />
             </div>
-            <button id="rangeBtn" class="w-full py-1.5 rounded bg-surface-border hover:bg-primary/20 hover:text-primary text-xs text-slate-300 transition-colors border border-transparent hover:border-primary/50">回補並分析</button>
+            <button id="rangeBtn"
+              class="w-full py-1.5 rounded bg-surface-border hover:bg-primary/20 hover:text-primary text-xs text-slate-300 transition-colors border border-transparent hover:border-primary/50">回補並分析</button>
           </div>
         </div>
-        <div id="opResult" class="mt-4 text-xs text-slate-300 border border-surface-border rounded-lg p-3 bg-background-dark/60">尚未執行</div>
+        <div id="opResult"
+          class="mt-4 text-xs text-slate-300 border border-surface-border rounded-lg p-3 bg-background-dark/60">尚未執行
+        </div>
       </div>
 
       <div class="lg:col-span-1 bg-surface-dark border border-surface-border rounded-xl p-6 flex flex-col">
@@ -210,7 +243,8 @@
       <div class="bg-surface-dark border border-surface-border rounded-xl p-6 flex flex-col gap-3">
         <div class="flex items-center justify-between">
           <h3 class="text-sm text-slate-400 font-medium">走勢摘要 (Analysis Summary)</h3>
-          <button id="refreshSummary" class="text-xs px-2 py-1 rounded bg-primary/20 text-primary border border-primary/40 hover:bg-primary/30">重整</button>
+          <button id="refreshSummary"
+            class="text-xs px-2 py-1 rounded bg-primary/20 text-primary border border-primary/40 hover:bg-primary/30">重整</button>
         </div>
         <div class="text-xs text-slate-400">角色：<span id="roleLabel" class="text-white">--</span></div>
         <div class="text-xs text-slate-400">日期：<span id="summaryDate" class="text-white">--</span></div>
@@ -231,10 +265,13 @@
         <div class="flex items-center justify-between mb-3">
           <div class="flex items-center gap-3">
             <h3 class="text-sm text-slate-400 font-medium">近期分析 (最新在前)</h3>
-            <input id="symbolInput" class="bg-surface-border border border-surface-border rounded text-xs text-slate-200 px-2 py-1 focus:border-primary focus:ring-0 w-28" value="BTCUSDT" />
+            <input id="symbolInput"
+              class="bg-surface-border border border-surface-border rounded text-xs text-slate-200 px-2 py-1 focus:border-primary focus:ring-0 w-28"
+              value="BTCUSDT" />
           </div>
           <div class="flex gap-2">
-            <button id="refreshHistory" class="text-xs px-2 py-1 rounded bg-primary/20 text-primary border border-primary/40 hover:bg-primary/30">重整</button>
+            <button id="refreshHistory"
+              class="text-xs px-2 py-1 rounded bg-primary/20 text-primary border border-primary/40 hover:bg-primary/30">重整</button>
           </div>
         </div>
         <div class="mb-4">
@@ -245,24 +282,32 @@
     </div>
   </main>
 
-  <dialog id="loginModal" class="bg-surface-dark text-white rounded-lg border border-surface-border shadow-neon p-6 w-[420px] max-w-full">
+  <dialog id="loginModal"
+    class="bg-surface-dark text-white rounded-lg border border-surface-border shadow-neon p-6 w-[420px] max-w-full">
     <h3 class="text-lg font-bold mb-3">登入</h3>
     <form id="loginForm" class="space-y-3">
       <div>
         <label class="text-xs text-slate-400">Email</label>
-        <input id="loginEmail" type="email" class="w-full bg-background-dark border border-surface-border rounded px-3 py-2 text-sm text-white focus:border-primary focus:ring-0" value="admin@example.com" required />
+        <input id="loginEmail" type="email"
+          class="w-full bg-background-dark border border-surface-border rounded px-3 py-2 text-sm text-white focus:border-primary focus:ring-0"
+          value="admin@example.com" required />
       </div>
       <div>
         <label class="text-xs text-slate-400">Password</label>
-        <input id="loginPassword" type="password" class="w-full bg-background-dark border border-surface-border rounded px-3 py-2 text-sm text-white focus:border-primary focus:ring-0" value="password123" required />
+        <input id="loginPassword" type="password"
+          class="w-full bg-background-dark border border-surface-border rounded px-3 py-2 text-sm text-white focus:border-primary focus:ring-0"
+          value="password123" required />
       </div>
       <div class="flex justify-end gap-2 mt-4">
-        <button type="button" id="closeLogin" class="px-3 py-1.5 rounded bg-surface-border text-slate-300 text-xs border border-surface-border hover:border-primary/50">取消</button>
-        <button type="submit" class="px-3 py-1.5 rounded bg-primary/80 text-background-dark text-xs font-semibold shadow-neon hover:bg-primary">登入</button>
+        <button type="button" id="closeLogin"
+          class="px-3 py-1.5 rounded bg-surface-border text-slate-300 text-xs border border-surface-border hover:border-primary/50">取消</button>
+        <button type="submit"
+          class="px-3 py-1.5 rounded bg-primary/80 text-background-dark text-xs font-semibold shadow-neon hover:bg-primary">登入</button>
       </div>
     </form>
   </dialog>
 
   <script type="module" src="./dashboard.js"></script>
 </body>
+
 </html>

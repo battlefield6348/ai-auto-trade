@@ -66,6 +66,8 @@
         </div>
       </div>
       <div class="flex items-center gap-3">
+        <a href="/strategies.html"
+          class="px-3 py-1.5 rounded bg-surface-border text-slate-200 text-xs border border-surface-border hover:border-primary/50">策略管理</a>
         <a href="/"
           class="px-3 py-1.5 rounded bg-surface-border text-slate-200 text-xs border border-surface-border hover:border-primary/50">返回管線面板</a>
         <span id="loginStatus" class="text-xs text-slate-400">未登入</span>
@@ -136,16 +138,16 @@
             value="5" /></label>
       </div>
       <div class="grid md:grid-cols-5 gap-3 text-xs text-slate-300">
-        <label id="wrapper-btChangeMin" class="space-y-1">日漲跌門檻(%) <input id="btChangeMin" type="number" step="0.001"
+        <label id="wrapper-btChangeMin" class="space-y-1">日漲跌門檻(%) <input id="btChangeMin" type="number" step="0.01"
             class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
             value="0.5" /></label>
-        <label id="wrapper-btVolMin" class="space-y-1">量能門檻(倍) <input id="btVolMin" type="number" step="0.01"
+        <label id="wrapper-btVolMin" class="space-y-1">量能門檻(倍) <input id="btVolMin" type="number" step="0.1"
             class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
             value="1.2" /></label>
-        <label id="wrapper-btRet5Min" class="space-y-1">近5日門檻(%) <input id="btRet5Min" type="number" step="0.001"
+        <label id="wrapper-btRet5Min" class="space-y-1">近5日門檻(%) <input id="btRet5Min" type="number" step="0.01"
             class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
             value="1" /></label>
-        <label id="wrapper-btMaGapMin" class="space-y-1">MA 乖離門檻(%) <input id="btMaGapMin" type="number" step="0.001"
+        <label id="wrapper-btMaGapMin" class="space-y-1">MA 乖離門檻(%) <input id="btMaGapMin" type="number" step="0.01"
             class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
             value="1" /></label>
         <label class="space-y-1">Horizons (逗號分隔) <input id="btHorizons"

@@ -4,9 +4,17 @@ const state = {
   role: "",
   btScoreChart: null,
   btReturnChart: null,
+  debounceTimer: null,
 };
 
 const el = (id) => document.getElementById(id);
+
+function debounce(fn, delay = 500) {
+  return (...args) => {
+    clearTimeout(state.debounceTimer);
+    state.debounceTimer = setTimeout(() => fn(...args), delay);
+  };
+}
 
 function setAlert(msg, type = "info") {
   const box = el("alert");
@@ -68,7 +76,7 @@ function readForm() {
     start_date: el("btStart").value,
     end_date: el("btEnd").value,
     weights: {
-      score: 1,
+      score: 0,
       change_bonus: parse("btChangeBonus", 10),
       volume_bonus: parse("btVolumeBonus", 10),
       return_bonus: parse("btReturnBonus", 8),
@@ -258,22 +266,25 @@ function setBusy(id, busy, labelWhenIdle) {
   }
 }
 
-async function runBacktest() {
+async function runBacktest(isAuto = false) {
   const payload = readForm();
-  if (!payload.start_date || !payload.end_date) return setAlert("請選擇回測起訖日", "error");
-  console.log("[Backtest] Running with payload:", payload);
-  setBusy("runBacktestBtn", true, "執行回測");
+  if (!payload.start_date || !payload.end_date) return;
+  console.log("[Backtest] Running...", isAuto ? "(auto)" : "");
+  if (!isAuto) setBusy("runBacktestBtn", true, "執行中...");
   try {
     const res = await api("/api/analysis/backtest", { method: "POST", body: payload });
     renderResult(res);
-    setAlert("回測完成", "success");
+    if (!isAuto) setAlert("回測完成", "success");
+    else setAlert(""); // Clear any old error alerts on success
   } catch (err) {
-    setAlert(err.message, "error");
+    if (!isAuto) setAlert(err.message, "error");
     renderResult({ error: err.message });
   } finally {
-    setBusy("runBacktestBtn", false, "執行回測");
+    if (!isAuto) setBusy("runBacktestBtn", false, "執行回測");
   }
 }
+
+const debouncedRunBacktest = debounce(() => runBacktest(true), 400);
 
 async function runDbStrategy() {
   const slug = el("btStrategySlug").value;
@@ -477,11 +488,34 @@ function bootstrap() {
   el("savePresetBtn").addEventListener("click", savePreset);
   el("loadPresetBtn").addEventListener("click", loadPreset);
 
-  fetchStrategies();
+  fetchStrategies().then(() => {
+    const params = new URLSearchParams(window.location.search);
+    const slug = params.get("slug");
+    if (slug) {
+      el("btStrategySlug").value = slug;
+      setAlert(`已選取策略: ${slug}`, "info");
+    }
+  });
 
   ["btUseChange", "btUseVolume", "btUseReturn", "btUseMa"].forEach((id) => {
-    el(id).addEventListener("change", updateVisibility);
+    el(id).addEventListener("change", () => {
+      updateVisibility();
+      debouncedRunBacktest();
+    });
   });
+
+  // Auto-trigger on all inputs
+  [
+    "btSymbol", "btStart", "btEnd", "btTotalMin",
+    "btChangeBonus", "btVolumeBonus", "btReturnBonus", "btMaBonus",
+    "btChangeMin", "btVolMin", "btRet5Min", "btMaGapMin", "btHorizons"
+  ].forEach(id => {
+    const input = el(id);
+    if (!input) return;
+    const eventType = input.type === "date" || input.type === "checkbox" ? "change" : "input";
+    input.addEventListener(eventType, debouncedRunBacktest);
+  });
+
   updateVisibility();
 
   // Set default dates: 2024/1/1 to Today
@@ -495,6 +529,9 @@ function bootstrap() {
   if (state.token) {
     el("loginStatus").textContent = state.lastEmail ? `已登入：${state.lastEmail}` : "已登入";
   }
+
+  // Initial run
+  setTimeout(() => runBacktest(true), 800);
 }
 
 

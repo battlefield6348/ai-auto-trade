@@ -76,7 +76,7 @@ function readForm() {
     start_date: el("btStart").value,
     end_date: el("btEnd").value,
     weights: {
-      score: 0,
+      score: parse("btScoreWeight", 1.0),
       change_bonus: parse("btChangeBonus", 10),
       volume_bonus: parse("btVolumeBonus", 10),
       return_bonus: parse("btReturnBonus", 8),
@@ -117,31 +117,52 @@ function updateVisibility() {
       }
     });
   });
+  updateMaxScore();
+}
+
+function updateMaxScore() {
+  const parse = (id) => parseFloat(el(id)?.value) || 0;
+  const scoreWeight = parse("btScoreWeight");
+  const changeBonus = el("btUseChange").checked ? parse("btChangeBonus") : 0;
+  const volumeBonus = el("btUseVolume").checked ? parse("btVolumeBonus") : 0;
+  const returnBonus = el("btUseReturn").checked ? parse("btReturnBonus") : 0;
+  const maBonus = el("btUseMa").checked ? parse("btMaBonus") : 0;
+
+  const max = (scoreWeight * 100) + changeBonus + volumeBonus + returnBonus + maBonus;
+  const display = el("maxPossibleScore");
+  if (display) display.textContent = max.toFixed(1);
 }
 
 function fillForm(cfg) {
   if (!cfg) return;
-  el("btSymbol").value = cfg.symbol || "BTCUSDT";
-  el("btStart").value = cfg.start_date || "";
-  el("btEnd").value = cfg.end_date || "";
+  if (cfg.symbol) el("btSymbol").value = cfg.symbol;
+  if (cfg.start_date) el("btStart").value = cfg.start_date;
+  if (cfg.end_date) el("btEnd").value = cfg.end_date;
 
-  el("btChangeBonus").value = cfg.weights?.change_bonus ?? 10;
-  el("btVolumeBonus").value = cfg.weights?.volume_bonus ?? 10;
-  el("btReturnBonus").value = cfg.weights?.return_bonus ?? 8;
-  el("btMaBonus").value = cfg.weights?.ma_bonus ?? 5;
-  el("btTotalMin").value = cfg.thresholds?.total_min ?? 60;
+  if (cfg.weights) {
+    if (cfg.weights.score !== undefined) el("btScoreWeight").value = cfg.weights.score;
+    if (cfg.weights.change_bonus !== undefined) el("btChangeBonus").value = cfg.weights.change_bonus;
+    if (cfg.weights.volume_bonus !== undefined) el("btVolumeBonus").value = cfg.weights.volume_bonus;
+    if (cfg.weights.return_bonus !== undefined) el("btReturnBonus").value = cfg.weights.return_bonus;
+    if (cfg.weights.ma_bonus !== undefined) el("btMaBonus").value = cfg.weights.ma_bonus;
+  }
 
-  // Convert decimals back to percentages for UI
-  el("btChangeMin").value = (cfg.thresholds?.change_min ?? 0.005) * 100;
-  el("btVolMin").value = cfg.thresholds?.volume_ratio_min ?? 1.2;
-  el("btRet5Min").value = (cfg.thresholds?.return5_min ?? 0.01) * 100;
-  el("btMaGapMin").value = (cfg.thresholds?.ma_gap_min ?? 0.01) * 100;
+  if (cfg.thresholds) {
+    if (cfg.thresholds.total_min !== undefined) el("btTotalMin").value = cfg.thresholds.total_min;
+    if (cfg.thresholds.change_min !== undefined) el("btChangeMin").value = cfg.thresholds.change_min * 100;
+    if (cfg.thresholds.volume_ratio_min !== undefined) el("btVolMin").value = cfg.thresholds.volume_ratio_min;
+    if (cfg.thresholds.return5_min !== undefined) el("btRet5Min").value = cfg.thresholds.return5_min * 100;
+    if (cfg.thresholds.ma_gap_min !== undefined) el("btMaGapMin").value = cfg.thresholds.ma_gap_min * 100;
+  }
 
-  el("btUseChange").checked = cfg.flags?.use_change ?? true;
-  el("btUseVolume").checked = cfg.flags?.use_volume ?? true;
-  el("btUseReturn").checked = cfg.flags?.use_return ?? false;
-  el("btUseMa").checked = cfg.flags?.use_ma ?? false;
-  el("btHorizons").value = (cfg.horizons || [3, 5, 10]).join(",");
+  if (cfg.flags) {
+    if (cfg.flags.use_change !== undefined) el("btUseChange").checked = cfg.flags.use_change;
+    if (cfg.flags.use_volume !== undefined) el("btUseVolume").checked = cfg.flags.use_volume;
+    if (cfg.flags.use_return !== undefined) el("btUseReturn").checked = cfg.flags.use_return;
+    if (cfg.flags.use_ma !== undefined) el("btUseMa").checked = cfg.flags.use_ma;
+  }
+
+  if (cfg.horizons) el("btHorizons").value = cfg.horizons.join(",");
   updateVisibility();
 }
 
@@ -401,6 +422,55 @@ async function fetchStrategies() {
   }
 }
 
+async function loadStrategyDetails(slug) {
+  if (!slug) return;
+  console.log(`[Strategy] Loading details for ${slug}...`);
+  try {
+    const res = await api(`/api/analysis/strategies/get?slug=${slug}`);
+    if (res.strategy) {
+      const s = res.strategy;
+      const cfg = {
+        thresholds: { total_min: s.threshold },
+        weights: { score: 0 }, // Default to 0 if not explicitly in rules, or keep current
+        flags: {
+          use_change: false,
+          use_volume: false,
+          use_return: false,
+          use_ma: false,
+        }
+      };
+      (s.rules || []).forEach(r => {
+        const type = r.condition?.type;
+        const params = r.condition?.params || {};
+        if (type === "PRICE_RETURN" && params.days === 1) {
+          cfg.weights.change_bonus = r.weight;
+          cfg.thresholds.change_min = params.min;
+          cfg.flags.use_change = true;
+        } else if (type === "VOLUME_SURGE") {
+          cfg.weights.volume_bonus = r.weight;
+          cfg.thresholds.volume_ratio_min = params.min;
+          cfg.flags.use_volume = true;
+        } else if (type === "PRICE_RETURN" && params.days === 5) {
+          cfg.weights.return_bonus = r.weight;
+          cfg.thresholds.return5_min = params.min;
+          cfg.flags.use_return = true;
+        } else if (type === "MA_DEVIATION") {
+          cfg.weights.ma_bonus = r.weight;
+          cfg.thresholds.ma_gap_min = params.min;
+          cfg.flags.use_ma = true;
+        }
+      });
+      fillForm(cfg);
+      setAlert(`已載入策略: ${s.name}，上方的回測條件已更新`, "success");
+      // Trigger a run with new parameters
+      setTimeout(() => runBacktest(true), 200);
+    }
+  } catch (err) {
+    console.error("[Strategy] Load failed:", err);
+    setAlert(err.message, "error");
+  }
+}
+
 async function savePreset() {
   const payload = readForm();
   setBusy("savePresetBtn", true, "儲存中");
@@ -493,7 +563,13 @@ function bootstrap() {
     const slug = params.get("slug");
     if (slug) {
       el("btStrategySlug").value = slug;
-      setAlert(`已選取策略: ${slug}`, "info");
+      loadStrategyDetails(slug);
+    }
+  });
+
+  el("btStrategySlug").addEventListener("change", (e) => {
+    if (e.target.value) {
+      loadStrategyDetails(e.target.value);
     }
   });
 
@@ -506,7 +582,7 @@ function bootstrap() {
 
   // Auto-trigger on all inputs
   [
-    "btSymbol", "btStart", "btEnd", "btTotalMin",
+    "btSymbol", "btStart", "btEnd", "btTotalMin", "btScoreWeight",
     "btChangeBonus", "btVolumeBonus", "btReturnBonus", "btMaBonus",
     "btChangeMin", "btVolMin", "btRet5Min", "btMaGapMin", "btHorizons"
   ].forEach(id => {

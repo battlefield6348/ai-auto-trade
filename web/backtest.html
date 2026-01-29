@@ -119,10 +119,14 @@
             class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0" /></label>
         <label class="space-y-1">結束日 <input id="btEnd" type="date"
             class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0" /></label>
-        <label class="space-y-1">總分門檻 <input id="btTotalMin" type="number" step="0.1"
+        <label class="space-y-1">總分門檻 (滿分: <span id="maxPossibleScore" class="text-primary">--</span>) <input id="btTotalMin" type="number" step="0.1"
             class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
             value="60" /></label>
       </div>
+      <div class="grid md:grid-cols-5 gap-3 text-xs text-slate-300 border-t border-surface-border/50 pt-3">
+        <label class="space-y-1 bg-primary/5 p-2 rounded border border-primary/20">AI 基礎分權重 <input id="btScoreWeight" type="number" step="0.1"
+            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
+            value="1.0" /></label>
       <div class="grid md:grid-cols-5 gap-3 text-xs text-slate-300">
         <label id="wrapper-btChangeBonus" class="space-y-1">日漲跌加分 <input id="btChangeBonus" type="number" step="0.1"
             class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"

@@ -19,6 +19,7 @@ import (
 	"ai-auto-trade/internal/application/trading"
 	analysisDomain "ai-auto-trade/internal/domain/analysis"
 	dataDomain "ai-auto-trade/internal/domain/dataingestion"
+	"ai-auto-trade/internal/domain/strategy"
 	tradingDomain "ai-auto-trade/internal/domain/trading"
 	"ai-auto-trade/internal/infra/memory"
 )
@@ -945,6 +946,26 @@ func (s *Server) handleSaveScoringStrategy(w http.ResponseWriter, r *http.Reques
 		"success": true,
 	})
 }
+
+func (s *Server) handleGetScoringStrategy(w http.ResponseWriter, r *http.Request) {
+	slug := r.URL.Query().Get("slug")
+	if slug == "" {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "slug is required")
+		return
+	}
+
+	strat, err := strategy.LoadScoringStrategy(r.Context(), s.db, slug)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success":  true,
+		"strategy": strat,
+	})
+}
+
 
 func (s *Server) handleGetBacktestPreset(w http.ResponseWriter, r *http.Request) {
 	if s.presetStore == nil {

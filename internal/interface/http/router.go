@@ -184,6 +184,7 @@ func (s *Server) registerRoutes() {
 	s.mux.Handle("/api/admin/analysis/daily", s.requireAuth(auth.PermAnalysisTriggerDaily, s.wrapPost(s.handleAnalysisDaily)))
 	s.mux.Handle("/api/analysis/daily", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleAnalysisQuery)))
 	s.mux.Handle("/api/analysis/strategies", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleListScoringStrategies)))
+	s.mux.Handle("/api/analysis/strategies/get", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleGetScoringStrategy)))
 	s.mux.Handle("/api/analysis/strategies/save-scoring", s.requireAuth(auth.PermAnalysisQuery, s.wrapPost(s.handleSaveScoringStrategy)))
 	s.mux.Handle("/api/analysis/history", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleAnalysisHistory)))
 	s.mux.Handle("/api/analysis/summary", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleAnalysisSummary)))

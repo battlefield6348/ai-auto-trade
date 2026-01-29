@@ -232,15 +232,34 @@
 
           <!-- Execution Card -->
           <div class="bg-background-dark/80 border border-surface-border rounded-xl p-4 flex flex-col gap-3">
-            <div class="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Auto Trading Execution</div>
-            <div class="flex gap-2">
-              <button id="checkExecuteBtn"
-                class="flex-1 px-4 py-2 rounded bg-primary/20 text-primary border border-primary/40 hover:bg-primary/30 text-xs font-bold transition-all">
-                立即執行策略檢測 (Manual Check)
-              </button>
+            <div class="flex items-center justify-between">
+              <div class="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Auto Trading Monitoring</div>
+              <div id="monitoringStatus"
+                class="flex items-center gap-1.5 text-[10px] uppercase font-bold text-slate-500">
+                <div class="size-1.5 rounded-full bg-slate-500"></div> STANDBY
+              </div>
             </div>
-            <div class="text-[10px] text-slate-500">
-              * 會依據當前選取的「資料庫策略」與「正式/測試金鑰」進行評估並執行下單。
+
+            <div class="space-y-3">
+              <div class="flex gap-2">
+                <button id="checkExecuteBtn"
+                  class="flex-1 px-4 py-2 rounded bg-primary/20 text-primary border border-primary/40 hover:bg-primary/30 text-xs font-bold transition-all flex items-center justify-center gap-2">
+                  <span class="material-symbols-outlined text-sm">play_arrow</span>
+                  啟動監聽監測 (Start Monitor)
+                </button>
+              </div>
+
+              <div class="flex items-center gap-2 pt-1">
+                <label class="text-[10px] text-slate-400 font-mono flex-1">
+                  MIN BALANCE SECURE (USDT)
+                  <input id="autoStopLimit" type="number" value="1000"
+                    class="w-full mt-1 bg-background-dark border border-surface-border rounded px-2 py-1 text-xs text-white focus:border-danger focus:ring-0" />
+                </label>
+              </div>
+            </div>
+
+            <div class="text-[10px] text-slate-500 border-t border-surface-border/30 pt-2 mt-auto">
+              * 程式將在背景監控走勢，達標即自動交易。低於設定餘額時會自動觸發終止保護。
             </div>
           </div>
 

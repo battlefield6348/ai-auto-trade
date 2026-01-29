@@ -201,11 +201,17 @@ FROM strategies
 	return out, rows.Err()
 }
 
-// SetStatus 切換狀態。
 func (r *TradingRepo) SetStatus(ctx context.Context, id string, status tradingDomain.Status, env tradingDomain.Environment) error {
 	isActive := status == tradingDomain.StatusActive
 	const q = `UPDATE strategies SET status=$1, env=$2, is_active=$3, updated_at=NOW() WHERE id=$4;`
 	_, err := r.db.ExecContext(ctx, q, string(status), string(env), isActive, id)
+	return err
+}
+
+func (r *TradingRepo) UpdateRiskSettings(ctx context.Context, id string, risk tradingDomain.RiskSettings) error {
+	riskJSON, _ := json.Marshal(risk)
+	const q = `UPDATE strategies SET risk_settings=$1, updated_at=NOW() WHERE id=$2`
+	_, err := r.db.ExecContext(ctx, q, riskJSON, id)
 	return err
 }
 

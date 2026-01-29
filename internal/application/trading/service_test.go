@@ -544,6 +544,9 @@ func (f *fakeRepo) ListStrategies(context.Context, StrategyFilter) ([]tradingDom
 func (f *fakeRepo) SetStatus(context.Context, string, tradingDomain.Status, tradingDomain.Environment) error {
 	return nil
 }
+func (f *fakeRepo) UpdateRiskSettings(context.Context, string, tradingDomain.RiskSettings) error {
+	return nil
+}
 func (f *fakeRepo) SaveBacktest(_ context.Context, rec tradingDomain.BacktestRecord) (string, error) {
 	f.saveBacktestCalled++
 	f.lastBacktest = rec

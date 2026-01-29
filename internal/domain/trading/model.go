@@ -60,7 +60,8 @@ type RiskSettings struct {
 	CoolDownDays    int           `json:"cool_down_days"`
 	MinHoldDays     int           `json:"min_hold_days"`
 	MaxPositions    int           `json:"max_positions"`
-	PriceMode       PriceMode     `json:"price_mode"`
+	PriceMode          PriceMode     `json:"price_mode"`
+	AutoStopMinBalance float64       `json:"auto_stop_min_balance"` // 當可用餘額低於此值時自動停止交易監控
 }
 
 // Strategy 定義買賣條件與風控設定。

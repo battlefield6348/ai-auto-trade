@@ -23,6 +23,7 @@ type Repository interface {
 	ListStrategies(ctx context.Context, filter StrategyFilter) ([]tradingDomain.Strategy, error)
 	DeleteStrategy(ctx context.Context, id string) error
 	SetStatus(ctx context.Context, id string, status tradingDomain.Status, env tradingDomain.Environment) error
+	UpdateRiskSettings(ctx context.Context, id string, risk tradingDomain.RiskSettings) error
 	LoadScoringStrategy(ctx context.Context, slug string) (*strategyDomain.ScoringStrategy, error)
 	ListActiveScoringStrategies(ctx context.Context) ([]*strategyDomain.ScoringStrategy, error)
 
@@ -67,6 +68,7 @@ type Exchange interface {
 	GetPrice(ctx context.Context, symbol string) (float64, error)
 	PlaceMarketOrder(ctx context.Context, symbol, side string, qty float64) (float64, error)
 	PlaceMarketOrderQuote(ctx context.Context, symbol, side string, quoteAmount float64) (float64, error)
+	GetBalance(ctx context.Context, asset string) (float64, error)
 }
 
 // Notifier 傳送外部通知。
@@ -187,6 +189,10 @@ func (s *Service) UpdateStrategy(ctx context.Context, id string, input tradingDo
 // SetStatus 切換策略狀態。
 func (s *Service) SetStatus(ctx context.Context, id string, status tradingDomain.Status, env tradingDomain.Environment) error {
 	return s.repo.SetStatus(ctx, id, status, env)
+}
+
+func (s *Service) UpdateRiskSettings(ctx context.Context, id string, risk tradingDomain.RiskSettings) error {
+	return s.repo.UpdateRiskSettings(ctx, id, risk)
 }
 
 // DeleteStrategy 刪除策略。
@@ -351,6 +357,16 @@ func (s *Service) ExecuteScoringAutoTrade(ctx context.Context, slug string, env 
 	strat, err := s.repo.LoadScoringStrategy(ctx, slug)
 	if err != nil {
 		return fmt.Errorf("load scoring strategy: %w", err)
+	}
+
+	if strat.Risk.AutoStopMinBalance > 0 {
+		balance, berr := s.ex.GetBalance(ctx, "USDT")
+		if berr == nil && balance < strat.Risk.AutoStopMinBalance {
+			_ = s.repo.SetStatus(ctx, strat.ID, tradingDomain.StatusDraft, env)
+			s.notify(fmt.Sprintf("⚠️ [AUTO-STOP] 策略 %s 已停止。\n原因：可用餘額 %.2f 低於限制 %.2f。",
+				strat.Name, balance, strat.Risk.AutoStopMinBalance))
+			return fmt.Errorf("balance %.2f below limit %.2f", balance, strat.Risk.AutoStopMinBalance)
+		}
 	}
 
 	// 2. 獲取最新行情分析 (取得最後 1 天的結果)

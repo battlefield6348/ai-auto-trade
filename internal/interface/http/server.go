@@ -1523,9 +1523,26 @@ func (s *Server) handleRunStrategy(w http.ResponseWriter, r *http.Request, strat
 
 func (s *Server) handleActivateStrategy(w http.ResponseWriter, r *http.Request, strategyID string) {
 	var body struct {
-		Env string `json:"env"`
+		Env                string  `json:"env"`
+		AutoStopMinBalance float64 `json:"auto_stop_min_balance"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
+
+	if body.AutoStopMinBalance > 0 {
+		// 嘗試獲取現有策略以更新風控設定
+		rows, err := s.db.QueryContext(r.Context(), "SELECT risk_settings FROM strategies WHERE id = $1", strategyID)
+		if err == nil && rows.Next() {
+			var riskRaw []byte
+			if err := rows.Scan(&riskRaw); err == nil {
+				var risk tradingDomain.RiskSettings
+				_ = json.Unmarshal(riskRaw, &risk)
+				risk.AutoStopMinBalance = body.AutoStopMinBalance
+				_ = s.tradingSvc.UpdateRiskSettings(r.Context(), strategyID, risk)
+			}
+			rows.Close()
+		}
+	}
+
 	env := tradingDomain.Environment(body.Env)
 	if env == "" {
 		env = tradingDomain.EnvTest

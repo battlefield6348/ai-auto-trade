@@ -27,4 +27,4 @@ binance:
 
 auto_trade:
   enabled: true
-  interval: 1h
+  interval: 1m

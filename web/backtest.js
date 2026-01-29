@@ -611,8 +611,11 @@ function bootstrap() {
 
   // Binance Live
   el("refreshBinanceBtn")?.addEventListener("click", fetchBinanceInfo);
-  el("checkExecuteBtn")?.addEventListener("click", executeManualStrategyCheck);
+  el("btStrategySlug").addEventListener("change", updateMonitoringUI);
+  el("checkExecuteBtn").addEventListener("click", toggleMonitoring);
   fetchBinanceInfo();
+  setInterval(updateMonitoringUI, 10000);
+  setInterval(fetchBinanceInfo, 30000);
 }
 
 
@@ -651,27 +654,79 @@ async function fetchBinanceInfo() {
   }
 }
 
-async function executeManualStrategyCheck() {
+async function updateMonitoringUI() {
   const slug = el("btStrategySlug").value;
+  const statusEl = el("monitoringStatus");
+  const btn = el("checkExecuteBtn");
   const logEl = el("executionLog");
 
   if (!slug) {
-    alert("請先選取一個資料庫策略 (SQL Strategy) 才能執行檢測。");
+    statusEl.innerHTML = `<div class="size-1.5 rounded-full bg-slate-500"></div> STANDBY`;
+    statusEl.className = "flex items-center gap-1.5 text-[10px] uppercase font-bold text-slate-500";
+    btn.innerHTML = `<span class="material-symbols-outlined text-sm">play_arrow</span> 啟動監聽監測 (Start Monitor)`;
+    btn.className = "flex-1 px-4 py-2 rounded bg-primary/20 text-primary border border-primary/40 hover:bg-primary/30 text-xs font-bold transition-all flex items-center justify-center gap-2";
     return;
   }
 
   try {
-    logEl.textContent = `Executing ${slug}...`;
-    logEl.classList.remove("text-danger");
-    logEl.classList.add("text-primary");
-
-    const res = await api(`/api/admin/strategies/execute/${slug}`, { method: "POST" });
-
-    logEl.textContent = `SUCCESS: ${res.message || "Executed ok"}`;
-    // 執行成功後重新抓取餘額
-    setTimeout(fetchBinanceInfo, 2000);
+    const data = await api(`/api/analysis/strategies/get?slug=${slug}`);
+    const strat = data.strategy;
+    if (strat.is_active) {
+      statusEl.innerHTML = `<div class="size-1.5 rounded-full bg-success animate-pulse"></div> MONITORING`;
+      statusEl.className = "flex items-center gap-1.5 text-[10px] uppercase font-bold text-success";
+      btn.innerHTML = `<span class="material-symbols-outlined text-sm">stop</span> 停止監聽 (Stop Monitor)`;
+      btn.className = "flex-1 px-4 py-2 rounded bg-danger/20 text-danger border border-danger/40 hover:bg-danger/30 text-xs font-bold transition-all flex items-center justify-center gap-2";
+      logEl.textContent = `Active monitoring for ${slug}...`;
+    } else {
+      statusEl.innerHTML = `<div class="size-1.5 rounded-full bg-slate-500"></div> STANDBY`;
+      statusEl.className = "flex items-center gap-1.5 text-[10px] uppercase font-bold text-slate-500";
+      btn.innerHTML = `<span class="material-symbols-outlined text-sm">play_arrow</span> 啟動監聽監測 (Start Monitor)`;
+      btn.className = "flex-1 px-4 py-2 rounded bg-primary/20 text-primary border border-primary/40 hover:bg-primary/30 text-xs font-bold transition-all flex items-center justify-center gap-2";
+      logEl.textContent = `Strategy ${slug} is currently idle.`;
+    }
   } catch (err) {
-    logEl.textContent = `FAILED: ${err.message}`;
+    console.error("Failed to fetch strat status:", err);
+  }
+}
+
+async function toggleMonitoring() {
+  const slug = el("btStrategySlug").value;
+  if (!slug) {
+    alert("請先選取一個資料庫策略。");
+    return;
+  }
+
+  const btn = el("checkExecuteBtn");
+  const isRunning = btn.textContent.includes("停止");
+  const logEl = el("executionLog");
+
+  try {
+    const data = await api(`/api/analysis/strategies/get?slug=${slug}`);
+    const id = data.strategy.id;
+    const minBalance = parseFloat(el("autoStopLimit").value) || 0;
+
+    if (!isRunning) {
+      logEl.textContent = "Starting monitoring...";
+      // 1. Update risk settings (optional, but good to save the min balance)
+      // For now we just activate it. We might need an API to update risk too.
+      // But let's simplify: call activate.
+      await api(`/api/admin/strategies/${id}/activate`, {
+        method: "POST",
+        body: {
+          env: "test",
+          auto_stop_min_balance: minBalance
+        }
+      });
+      logEl.textContent = "Monitoring started. Program is now listening to Binance...";
+    } else {
+      logEl.textContent = "Stopping monitoring...";
+      await api(`/api/admin/strategies/${id}/deactivate`, { method: "POST" });
+      logEl.textContent = "Monitoring stopped.";
+    }
+    updateMonitoringUI();
+    setTimeout(fetchBinanceInfo, 1000);
+  } catch (err) {
+    logEl.textContent = `ERROR: ${err.message}`;
     logEl.classList.add("text-danger");
   }
 }

@@ -105,6 +105,19 @@ func (r *TradingRepo) SetStatus(_ context.Context, id string, status tradingDoma
 	return nil
 }
 
+func (r *TradingRepo) UpdateRiskSettings(_ context.Context, id string, risk tradingDomain.RiskSettings) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, ok := r.strategies[id]
+	if !ok {
+		return fmt.Errorf("strategy not found")
+	}
+	s.Risk = risk
+	s.UpdatedAt = time.Now()
+	r.strategies[id] = s
+	return nil
+}
+
 func (r *TradingRepo) DeleteStrategy(_ context.Context, id string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

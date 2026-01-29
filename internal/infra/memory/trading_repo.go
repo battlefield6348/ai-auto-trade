@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"ai-auto-trade/internal/application/trading"
+	strategyDomain "ai-auto-trade/internal/domain/strategy"
 	tradingDomain "ai-auto-trade/internal/domain/trading"
 )
 
@@ -201,6 +202,17 @@ func (r *TradingRepo) GetOpenPosition(_ context.Context, strategyID string, env 
 	return &p, nil
 }
 
+func (r *TradingRepo) GetPosition(_ context.Context, id string) (*tradingDomain.Position, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, p := range r.positions {
+		if p.ID == id {
+			return &p, nil
+		}
+	}
+	return nil, fmt.Errorf("position not found")
+}
+
 func (r *TradingRepo) ListOpenPositions(_ context.Context) ([]tradingDomain.Position, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -300,4 +312,12 @@ func containsFold(haystack, needle string) bool {
 	haystack = strings.ToLower(haystack)
 	needle = strings.ToLower(needle)
 	return strings.Contains(haystack, needle)
+}
+
+func (r *TradingRepo) LoadScoringStrategy(_ context.Context, _ string) (*strategyDomain.ScoringStrategy, error) {
+	return nil, fmt.Errorf("LoadScoringStrategy not implemented in memory repo")
+}
+
+func (r *TradingRepo) ListActiveScoringStrategies(ctx context.Context) ([]*strategyDomain.ScoringStrategy, error) {
+	return nil, nil
 }

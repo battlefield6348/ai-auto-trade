@@ -70,10 +70,18 @@ function renderTable() {
         const date = new Date(s.updated_at).toLocaleString();
         const tr = document.createElement("tr");
         tr.className = "hover:bg-white/5 transition-colors group";
+        const isActive = s.status === "active";
         tr.innerHTML = `
       <td class="px-4 py-4 font-medium text-white">${s.name}</td>
       <td class="px-4 py-4 font-mono text-xs text-slate-400">${s.slug}</td>
       <td class="px-4 py-4 text-center font-mono text-primary">${s.threshold}</td>
+      <td class="px-4 py-4 text-center">
+        <button class="status-toggle-btn group/toggle flex items-center justify-center mx-auto" data-id="${s.id}" data-status="${s.status}">
+          <div class="w-10 h-5 rounded-full p-1 transition-colors duration-200 ${isActive ? 'bg-primary' : 'bg-slate-700'}">
+            <div class="w-3 h-3 bg-white rounded-full transition-transform duration-200 transform ${isActive ? 'translate-x-5' : 'translate-x-0'}"></div>
+          </div>
+        </button>
+      </td>
       <td class="px-4 py-4 text-xs text-slate-500">${date}</td>
       <td class="px-4 py-4 text-right space-x-2">
         <button class="edit-btn text-xs px-2 py-1 rounded bg-surface-border text-slate-300 hover:text-white" data-slug="${s.slug}">
@@ -97,6 +105,25 @@ function renderTable() {
             window.location.href = `/backtest.html?slug=${btn.dataset.slug}`;
         });
     });
+    document.querySelectorAll(".status-toggle-btn").forEach((btn) => {
+        btn.addEventListener("click", () => toggleStatus(btn.dataset.id, btn.dataset.status));
+    });
+}
+
+async function toggleStatus(id, currentStatus) {
+    const nextStatus = currentStatus === "active" ? "draft" : "active";
+    try {
+        const path = nextStatus === "active" ? "activate" : "deactivate";
+        // 預設切換至 test 環境
+        await api(`/api/admin/strategies/${id}/${path}`, {
+            method: "POST",
+            body: { env: "test" }
+        });
+        setAlert(`策略已${nextStatus === "active" ? "啟用(Test)" : "停用"}`, "success");
+        fetchStrategies();
+    } catch (err) {
+        setAlert(err.message, "error");
+    }
 }
 
 async function deleteStrategy(id, name) {

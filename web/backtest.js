@@ -608,8 +608,72 @@ function bootstrap() {
 
   // Initial run
   setTimeout(() => runBacktest(true), 800);
+
+  // Binance Live
+  el("refreshBinanceBtn")?.addEventListener("click", fetchBinanceInfo);
+  el("checkExecuteBtn")?.addEventListener("click", executeManualStrategyCheck);
+  fetchBinanceInfo();
 }
 
 
+
+async function fetchBinanceInfo() {
+  const balanceEl = el("binanceBalance");
+  const assetsEl = el("binanceAssets");
+  const logEl = el("executionLog");
+
+  try {
+    if (!assetsEl) return;
+    assetsEl.textContent = "Fetching...";
+    const data = await api("/api/admin/binance/account");
+    if (data.account && data.account.balances) {
+      const usdt = data.account.balances.find(b => b.asset === "USDT");
+      const btc = data.account.balances.find(b => b.asset === "BTC");
+
+      if (usdt) {
+        balanceEl.innerHTML = `${parseFloat(usdt.free).toFixed(2)} <span class="text-xs font-normal text-slate-500">USDT</span>`;
+      }
+
+      let assetStr = "";
+      if (btc) assetStr += `BTC: ${parseFloat(btc.free).toFixed(6)}`;
+      assetsEl.textContent = assetStr || "No other assets found";
+
+      const tag = el("binanceTag");
+      if (data.account.accountType === "SPOT") {
+        tag.textContent = "BINANCE LIVE (SPOT)";
+        tag.className = "px-2 py-0.5 rounded bg-green-500/10 text-green-500 border border-green-500/20 text-[10px] font-bold";
+      }
+    }
+  } catch (err) {
+    console.error("Failed to fetch Binance account:", err);
+    if (balanceEl) balanceEl.textContent = "ERROR";
+    if (assetsEl) assetsEl.textContent = err.message;
+  }
+}
+
+async function executeManualStrategyCheck() {
+  const slug = el("btStrategySlug").value;
+  const logEl = el("executionLog");
+
+  if (!slug) {
+    alert("請先選取一個資料庫策略 (SQL Strategy) 才能執行檢測。");
+    return;
+  }
+
+  try {
+    logEl.textContent = `Executing ${slug}...`;
+    logEl.classList.remove("text-danger");
+    logEl.classList.add("text-primary");
+
+    const res = await api(`/api/admin/strategies/execute/${slug}`, { method: "POST" });
+
+    logEl.textContent = `SUCCESS: ${res.message || "Executed ok"}`;
+    // 執行成功後重新抓取餘額
+    setTimeout(fetchBinanceInfo, 2000);
+  } catch (err) {
+    logEl.textContent = `FAILED: ${err.message}`;
+    logEl.classList.add("text-danger");
+  }
+}
 
 bootstrap();

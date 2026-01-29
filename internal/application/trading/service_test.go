@@ -9,6 +9,7 @@ import (
 	"ai-auto-trade/internal/application/analysis"
 	analysisDomain "ai-auto-trade/internal/domain/analysis"
 	dataDomain "ai-auto-trade/internal/domain/dataingestion"
+	strategyDomain "ai-auto-trade/internal/domain/strategy"
 	tradingDomain "ai-auto-trade/internal/domain/trading"
 )
 
@@ -120,7 +121,7 @@ func TestValidateStrategyContent_SingleConditionLimit(t *testing.T) {
 
 func TestCreateStrategy_RequireUser(t *testing.T) {
 	repo := &fakeRepo{}
-	svc := NewService(repo, dummyDataProvider{})
+	svc := NewService(repo, dummyDataProvider{}, &mockExchange{}, nil)
 
 	input := tradingDomain.Strategy{
 		Name: "no-user",
@@ -149,7 +150,7 @@ func TestCreateStrategy_RequireUser(t *testing.T) {
 
 func TestCreateStrategy_DefaultsAndPersist(t *testing.T) {
 	repo := &fakeRepo{id: "id-123"}
-	svc := NewService(repo, dummyDataProvider{})
+	svc := NewService(repo, dummyDataProvider{}, &mockExchange{}, nil)
 
 	input := tradingDomain.Strategy{
 		Name:        "with-user",
@@ -360,7 +361,7 @@ func TestComputeStats(t *testing.T) {
 
 func TestBacktest_RequireDates(t *testing.T) {
 	repo := &fakeRepo{}
-	svc := NewService(repo, dummyDataProvider{})
+	svc := NewService(repo, dummyDataProvider{}, &mockExchange{}, nil)
 	if _, err := svc.Backtest(context.Background(), BacktestInput{}); err == nil {
 		t.Fatalf("expected error when dates missing")
 	}
@@ -381,7 +382,7 @@ func TestBacktest_InlineStrategyAndSave(t *testing.T) {
 		{TradeDate: day2, Open: 110, Close: 110},
 	}
 	repo := &fakeRepo{}
-	svc := NewService(repo, stubDataProvider{history: history, prices: prices})
+	svc := NewService(repo, stubDataProvider{history: history, prices: prices}, &mockExchange{}, nil)
 
 	strategy := tradingDomain.Strategy{
 		ID:         "s1",
@@ -427,7 +428,7 @@ func TestBacktest_InlineStrategyAndSave(t *testing.T) {
 
 func TestBacktest_GetStrategyError(t *testing.T) {
 	repo := &fakeRepo{getErr: fmt.Errorf("boom")}
-	svc := NewService(repo, dummyDataProvider{})
+	svc := NewService(repo, dummyDataProvider{}, &mockExchange{}, nil)
 	_, err := svc.Backtest(context.Background(), BacktestInput{
 		StrategyID: "s1",
 		StartDate:  time.Now(),
@@ -463,7 +464,7 @@ func TestUpdateStrategy_VersionBump(t *testing.T) {
 			Risk: tradingDomain.RiskSettings{OrderSizeValue: 1000, PriceMode: tradingDomain.PriceNextOpen},
 		},
 	}
-	svc := NewService(repo, dummyDataProvider{})
+	svc := NewService(repo, dummyDataProvider{}, &mockExchange{}, nil)
 	update := tradingDomain.Strategy{
 		Name:        "new",
 		Description: "desc",
@@ -558,6 +559,9 @@ func (f *fakeRepo) ListTrades(context.Context, tradingDomain.TradeFilter) ([]tra
 func (f *fakeRepo) GetOpenPosition(context.Context, string, tradingDomain.Environment) (*tradingDomain.Position, error) {
 	return nil, nil
 }
+func (f *fakeRepo) GetPosition(context.Context, string) (*tradingDomain.Position, error) {
+	return nil, nil
+}
 func (f *fakeRepo) ListOpenPositions(context.Context) ([]tradingDomain.Position, error) {
 	return nil, nil
 }
@@ -569,6 +573,12 @@ func (f *fakeRepo) ListLogs(context.Context, tradingDomain.LogFilter) ([]trading
 }
 func (f *fakeRepo) SaveReport(context.Context, tradingDomain.Report) (string, error) { return "", nil }
 func (f *fakeRepo) ListReports(context.Context, string) ([]tradingDomain.Report, error) {
+	return nil, nil
+}
+func (f *fakeRepo) LoadScoringStrategy(ctx context.Context, slug string) (*strategyDomain.ScoringStrategy, error) {
+	return nil, nil
+}
+func (f *fakeRepo) ListActiveScoringStrategies(ctx context.Context) ([]*strategyDomain.ScoringStrategy, error) {
 	return nil, nil
 }
 
@@ -593,4 +603,22 @@ func (s stubDataProvider) FindHistory(context.Context, string, *time.Time, *time
 
 func (s stubDataProvider) PricesByPair(context.Context, string) ([]dataDomain.DailyPrice, error) {
 	return s.prices, nil
+}
+
+type mockExchange struct{}
+
+func (m *mockExchange) GetBalance(ctx context.Context, asset string) (float64, error) {
+	return 0, nil
+}
+func (m *mockExchange) GetOrder(ctx context.Context, symbol, orderID string) (OrderResponse, error) {
+	return OrderResponse{}, nil
+}
+func (m *mockExchange) GetPrice(ctx context.Context, symbol string) (float64, error) {
+	return 0, nil
+}
+func (m *mockExchange) PlaceMarketOrder(ctx context.Context, symbol, side string, qty float64) (float64, error) {
+	return 0, nil
+}
+func (m *mockExchange) PlaceMarketOrderQuote(ctx context.Context, symbol, side string, quoteAmount float64) (float64, error) {
+	return 0, nil
 }

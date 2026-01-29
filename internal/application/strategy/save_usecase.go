@@ -32,6 +32,9 @@ func NewSaveScoringStrategyUseCase(db strategyDomain.DBQueryer) *SaveScoringStra
 
 // Execute performs the save operation into the database.
 func (u *SaveScoringStrategyUseCase) Execute(ctx context.Context, input SaveScoringStrategyInput) error {
+	if u.db == nil {
+		return fmt.Errorf("database not available")
+	}
 	// 1. Insert or Update Strategy
 	var strategyID string
 	err := u.db.QueryRowContext(ctx, `

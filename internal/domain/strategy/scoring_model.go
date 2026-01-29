@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	tradingDomain "ai-auto-trade/internal/domain/trading"
 )
 
 // ScoringStrategy represents the new three-layer strategy design.
@@ -15,7 +17,11 @@ type ScoringStrategy struct {
 	ID        string         `json:"id" db:"id"`
 	Name      string         `json:"name" db:"name"`
 	Slug      string         `json:"slug" db:"slug"`
+	BaseSymbol string        `json:"base_symbol" db:"base_symbol"`
 	Threshold float64        `json:"threshold" db:"threshold"`
+	IsActive  bool           `json:"is_active" db:"is_active"`
+	Env       string         `json:"env" db:"env"`
+	Risk      tradingDomain.RiskSettings `json:"risk_settings" db:"risk_settings"`
 	Rules     []StrategyRule `json:"rules"`
 	CreatedAt time.Time      `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at" db:"updated_at"`
@@ -64,13 +70,17 @@ func LoadScoringStrategy(ctx context.Context, db DBQueryer, slug string) (*Scori
 	// 1. Fetch the base Strategy
 	s := &ScoringStrategy{}
 	strategyQuery := `
-		SELECT id, name, slug, threshold, created_at, updated_at
+		SELECT id, name, slug, base_symbol, threshold, is_active, env, risk_settings, created_at, updated_at
 		FROM strategies
 		WHERE slug = $1
 	`
+	var riskRaw []byte
 	err := db.QueryRowContext(ctx, strategyQuery, slug).Scan(
-		&s.ID, &s.Name, &s.Slug, &s.Threshold, &s.CreatedAt, &s.UpdatedAt,
+		&s.ID, &s.Name, &s.Slug, &s.BaseSymbol, &s.Threshold, &s.IsActive, &s.Env, &riskRaw, &s.CreatedAt, &s.UpdatedAt,
 	)
+	if err == nil && len(riskRaw) > 0 {
+		_ = json.Unmarshal(riskRaw, &s.Risk)
+	}
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("strategy not found with slug: %s", slug)

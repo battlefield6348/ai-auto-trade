@@ -207,8 +207,10 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	} else {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
-		if err := s.db.PingContext(ctx); err == nil {
-			dbStatus = "ok"
+		if s.db != nil { // Redundant check, but added as per instruction
+			if err := s.db.PingContext(ctx); err == nil {
+				dbStatus = "ok" // Reverted to original logic for dbStatus
+			}
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
@@ -894,7 +896,44 @@ func (s *Server) handleSlugBacktest(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleStrategyExecute(w http.ResponseWriter, r *http.Request) {
+	slug := strings.TrimPrefix(r.URL.Path, "/api/admin/strategies/execute/")
+	if slug == "" {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "slug is required")
+		return
+	}
+
+	// 預設執行環境為 Test (Binance Testnet)
+	env := tradingDomain.EnvTest
+	if r.URL.Query().Get("env") == "prod" {
+		env = tradingDomain.EnvProd
+	}
+
+	userID := currentUserID(r)
+	if userID == "" {
+		userID = "00000000-0000-0000-0000-000000000001" // Fallback admin
+	}
+
+	err := s.tradingSvc.ExecuteScoringAutoTrade(r.Context(), slug, env, userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": "Strategy check executed",
+	})
+}
+
 func (s *Server) handleListScoringStrategies(w http.ResponseWriter, r *http.Request) {
+	if s.db == nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"success":    true,
+			"strategies": []interface{}{},
+		})
+		return
+	}
 	rows, err := s.db.QueryContext(r.Context(), "SELECT id, name, slug, threshold, updated_at FROM strategies WHERE slug IS NOT NULL ORDER BY updated_at DESC")
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, errCodeInternal, "failed to query strategies")
@@ -954,6 +993,10 @@ func (s *Server) handleGetScoringStrategy(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	if s.db == nil {
+		writeError(w, http.StatusNotFound, errCodeNotFound, "database not available")
+		return
+	}
 	strat, err := strategy.LoadScoringStrategy(r.Context(), s.db, slug)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
@@ -2484,4 +2527,72 @@ func (s *Server) fetchBTCSeries(ctx context.Context, tradeDate time.Time) ([]dat
 		}
 	}
 	return nil, lastErr
+}
+
+func (s *Server) handleBinanceAccount(w http.ResponseWriter, r *http.Request) {
+	if s.binanceClient == nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, "binance client not initialized")
+		return
+	}
+	info, err := s.binanceClient.GetAccountInfo()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"account": info,
+	})
+}
+
+func (s *Server) handleBinancePrice(w http.ResponseWriter, r *http.Request) {
+	symbol := r.URL.Query().Get("symbol")
+	if symbol == "" {
+		symbol = "BTCUSDT"
+	}
+	price, err := s.tradingSvc.GetExchangePrice(r.Context(), symbol)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"symbol":  symbol,
+		"price":   price,
+	})
+}
+
+func (s *Server) handlePositionClose(w http.ResponseWriter, r *http.Request, id string) {
+	if err := s.tradingSvc.ClosePositionManually(r.Context(), id); err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+	})
+}
+func (s *Server) handlePositionRoute(w http.ResponseWriter, r *http.Request) {
+	// Path: /api/admin/positions/:id/:tail
+	parts := strings.Split(r.URL.Path, "/")
+	if len(parts) < 5 {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "position id required")
+		return
+	}
+	// [ , api, admin, positions, {id}, {tail}]
+	id := parts[4]
+	tail := ""
+	if len(parts) > 5 {
+		tail = parts[5]
+	}
+
+	switch tail {
+	case "close":
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
+			return
+		}
+		s.handlePositionClose(w, r, id)
+	default:
+		writeError(w, http.StatusNotFound, errCodeNotFound, "not found")
+	}
 }

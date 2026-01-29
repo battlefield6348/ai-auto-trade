@@ -15,6 +15,7 @@ import (
 	"ai-auto-trade/internal/infra/memory"
 	authinfra "ai-auto-trade/internal/infrastructure/auth"
 	"ai-auto-trade/internal/infrastructure/config"
+	"ai-auto-trade/internal/infrastructure/external/binance"
 	"ai-auto-trade/internal/infrastructure/notify"
 	"ai-auto-trade/internal/infrastructure/persistence/postgres"
 )
@@ -54,6 +55,7 @@ type Server struct {
 	presetStore   backtestPresetStore
 	scoringBtUC   *appStrategy.BacktestUseCase
 	saveScoringBtUC *appStrategy.SaveScoringStrategyUseCase
+	binanceClient   *binance.Client
 }
 
 // NewServer 建立 API 伺服器，預設使用記憶體資料存儲；若 db 未來可用，再注入對應 repository。
@@ -94,11 +96,21 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 	logoutUC := auth.NewLogoutUseCase(tokenSvc)
 	authz := auth.NewAuthorizer(authRepo, memory.OwnerChecker{})
 	queryUC := analysis.NewQueryUseCase(dataRepo)
-	tradingSvc := trading.NewService(tradingRepo, dataRepo)
+	
+	binanceClient := binance.NewClient(cfg.Binance.APIKey, cfg.Binance.APISecret, cfg.Binance.UseTestnet)
+	binanceAdapter := binance.NewExchangeAdapter(binanceClient)
+	
 	var tgClient *notify.TelegramClient
 	if cfg.Notifier.Telegram.Enabled && cfg.Notifier.Telegram.Token != "" && cfg.Notifier.Telegram.ChatID != 0 {
 		tgClient = notify.NewTelegramClient(cfg.Notifier.Telegram.Token, cfg.Notifier.Telegram.ChatID)
 	}
+
+	var tgNotifier trading.Notifier
+	if tgClient != nil {
+		tgNotifier = &telegramNotifierAdapter{client: tgClient}
+	}
+
+	tradingSvc := trading.NewService(tradingRepo, dataRepo, binanceAdapter, tgNotifier)
 
 	source := "binance"
 	if cfg.Ingestion.UseSynthetic {
@@ -128,6 +140,7 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 		presetStore:   presetStore,
 		scoringBtUC:   appStrategy.NewBacktestUseCase(db, dataRepo),
 		saveScoringBtUC: appStrategy.NewSaveScoringStrategyUseCase(db),
+		binanceClient: binanceClient,
 	}
 	if db != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), seedTimeout)
@@ -145,6 +158,10 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 	}
 	if s.backfillStart != "" {
 		go s.startConfigBackfill()
+	}
+	if cfg.AutoTrade.Enabled {
+		worker := trading.NewBackgroundWorker(tradingSvc, cfg.AutoTrade.Interval)
+		worker.Start()
 	}
 	return s
 }
@@ -202,9 +219,21 @@ func (s *Server) registerRoutes() {
 		http.MethodPost: s.handleCreateStrategy,
 	})))
 	s.mux.Handle("/api/admin/strategies/backtest", s.requireAuth(auth.PermStrategy, s.wrapPost(s.handleInlineBacktest)))
+	s.mux.Handle("/api/admin/strategies/execute/", s.requireAuth(auth.PermStrategy, http.HandlerFunc(s.handleStrategyExecute)))
 	s.mux.Handle("/api/admin/strategies/", s.requireAuth(auth.PermStrategy, http.HandlerFunc(s.handleStrategyRoute)))
 	s.mux.Handle("/api/admin/trades", s.requireAuth(auth.PermStrategy, s.wrapGet(s.handleListTrades)))
 	s.mux.Handle("/api/admin/positions", s.requireAuth(auth.PermStrategy, s.wrapGet(s.handleListPositions)))
+	s.mux.Handle("/api/admin/positions/", s.requireAuth(auth.PermStrategy, http.HandlerFunc(s.handlePositionRoute)))
+	s.mux.Handle("/api/admin/binance/account", s.requireAuth(auth.PermStrategy, s.wrapGet(s.handleBinanceAccount)))
+	s.mux.Handle("/api/admin/binance/price", s.requireAuth(auth.PermStrategy, s.wrapGet(s.handleBinancePrice)))
 	// 前端操作介面
 	s.mux.Handle("/", http.FileServer(http.Dir("web")))
+}
+
+type telegramNotifierAdapter struct {
+	client *notify.TelegramClient
+}
+
+func (a *telegramNotifierAdapter) Notify(msg string) error {
+	return a.client.SendMessage(context.Background(), msg)
 }

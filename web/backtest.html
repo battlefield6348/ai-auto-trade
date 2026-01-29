@@ -70,6 +70,11 @@
           class="px-3 py-1.5 rounded bg-surface-border text-slate-200 text-xs border border-surface-border hover:border-primary/50">策略管理</a>
         <a href="/"
           class="px-3 py-1.5 rounded bg-surface-border text-slate-200 text-xs border border-surface-border hover:border-primary/50">返回管線面板</a>
+        <a href="/trading.html"
+          class="px-3 py-1.5 rounded bg-primary/20 text-primary border border-primary/40 text-xs font-bold hover:bg-primary/30 transition-all flex items-center gap-1">
+          <span class="material-symbols-outlined text-sm">rocket_launch</span>
+          自動交易
+        </a>
         <span id="loginStatus" class="text-xs text-slate-400">未登入</span>
         <button id="loginBtn"
           class="px-3 py-1.5 rounded bg-primary/20 text-primary text-xs border border-primary/40 hover:bg-primary/30">登入</button>
@@ -119,15 +124,16 @@
             class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0" /></label>
         <label class="space-y-1">結束日 <input id="btEnd" type="date"
             class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0" /></label>
-        <label class="space-y-1">總分門檻 (滿分: <span id="maxPossibleScore" class="text-primary">--</span>) <input id="btTotalMin" type="number" step="0.1"
+        <label class="space-y-1">總分門檻 (滿分: <span id="maxPossibleScore" class="text-primary">--</span>) <input
+            id="btTotalMin" type="number" step="0.1"
             class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
             value="60" /></label>
       </div>
-      <div class="grid md:grid-cols-5 gap-3 text-xs text-slate-300 border-t border-surface-border/50 pt-3">
-        <label class="space-y-1 bg-primary/5 p-2 rounded border border-primary/20">AI 基礎分權重 <input id="btScoreWeight" type="number" step="0.1"
+      <div class="grid md:grid-cols-5 gap-3 text-xs text-slate-300 border-t border-surface-border/50 pt-3 items-end">
+        <label class="space-y-1 bg-primary/5 p-2 rounded border border-primary/20">AI 基礎分權重 <input id="btScoreWeight"
+            type="number" step="0.1"
             class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
             value="1.0" /></label>
-      <div class="grid md:grid-cols-5 gap-3 text-xs text-slate-300">
         <label id="wrapper-btChangeBonus" class="space-y-1">日漲跌加分 <input id="btChangeBonus" type="number" step="0.1"
             class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
             value="10" /></label>
@@ -202,6 +208,55 @@
         </div>
       </div>
       <div id="btEvents" class="grid md:grid-cols-2 gap-3 text-sm"></div>
+
+      <!-- Binance Live Execution Section -->
+      <div class="border-t border-surface-border pt-6 mt-4">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-amber-500">account_balance_wallet</span>
+            <h3 class="text-sm text-slate-400 font-medium uppercase tracking-wider">實盤/測試服觀測 (Binance Live)</h3>
+          </div>
+          <div id="binanceTag"
+            class="px-2 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[10px] font-bold">
+            BINANCE TESTNET</div>
+        </div>
+
+        <div class="grid md:grid-cols-3 gap-4">
+          <!-- Balance Card -->
+          <div class="bg-background-dark/80 border border-surface-border rounded-xl p-4 flex flex-col gap-2">
+            <div class="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Available Balance</div>
+            <div id="binanceBalance" class="text-2xl font-display font-bold text-white leading-none">-- <span
+                class="text-xs font-normal text-slate-500">USDT</span></div>
+            <div id="binanceAssets" class="text-[10px] text-slate-400 font-mono mt-1">Fetching...</div>
+          </div>
+
+          <!-- Execution Card -->
+          <div class="bg-background-dark/80 border border-surface-border rounded-xl p-4 flex flex-col gap-3">
+            <div class="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Auto Trading Execution</div>
+            <div class="flex gap-2">
+              <button id="checkExecuteBtn"
+                class="flex-1 px-4 py-2 rounded bg-primary/20 text-primary border border-primary/40 hover:bg-primary/30 text-xs font-bold transition-all">
+                立即執行策略檢測 (Manual Check)
+              </button>
+            </div>
+            <div class="text-[10px] text-slate-500">
+              * 會依據當前選取的「資料庫策略」與「正式/測試金鑰」進行評估並執行下單。
+            </div>
+          </div>
+
+          <!-- Log Card -->
+          <div class="bg-background-dark/80 border border-surface-border rounded-xl p-4 flex flex-col gap-2 relative">
+            <div class="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">Execution Status</div>
+            <div id="executionLog" class="text-xs text-primary font-mono h-14 overflow-hidden mask-fade-bottom">
+              Waiting for user action...
+            </div>
+            <button id="refreshBinanceBtn"
+              class="absolute top-2 right-2 text-slate-500 hover:text-white transition-colors">
+              <span class="material-symbols-outlined text-sm">refresh</span>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   </main>
 

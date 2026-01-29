@@ -11,6 +11,7 @@ import (
 	"ai-auto-trade/internal/application/analysis"
 	analysisDomain "ai-auto-trade/internal/domain/analysis"
 	dataDomain "ai-auto-trade/internal/domain/dataingestion"
+	strategyDomain "ai-auto-trade/internal/domain/strategy"
 	tradingDomain "ai-auto-trade/internal/domain/trading"
 )
 
@@ -22,6 +23,8 @@ type Repository interface {
 	ListStrategies(ctx context.Context, filter StrategyFilter) ([]tradingDomain.Strategy, error)
 	DeleteStrategy(ctx context.Context, id string) error
 	SetStatus(ctx context.Context, id string, status tradingDomain.Status, env tradingDomain.Environment) error
+	LoadScoringStrategy(ctx context.Context, slug string) (*strategyDomain.ScoringStrategy, error)
+	ListActiveScoringStrategies(ctx context.Context) ([]*strategyDomain.ScoringStrategy, error)
 
 	SaveBacktest(ctx context.Context, rec tradingDomain.BacktestRecord) (string, error)
 	ListBacktests(ctx context.Context, strategyID string) ([]tradingDomain.BacktestRecord, error)
@@ -29,6 +32,7 @@ type Repository interface {
 	SaveTrade(ctx context.Context, trade tradingDomain.TradeRecord) error
 	ListTrades(ctx context.Context, filter tradingDomain.TradeFilter) ([]tradingDomain.TradeRecord, error)
 	GetOpenPosition(ctx context.Context, strategyID string, env tradingDomain.Environment) (*tradingDomain.Position, error)
+	GetPosition(ctx context.Context, id string) (*tradingDomain.Position, error)
 	ListOpenPositions(ctx context.Context) ([]tradingDomain.Position, error)
 	UpsertPosition(ctx context.Context, p tradingDomain.Position) error
 	ClosePosition(ctx context.Context, id string, exitDate time.Time, exitPrice float64) error
@@ -46,6 +50,30 @@ type MarketDataProvider interface {
 	PricesByPair(ctx context.Context, pair string) ([]dataDomain.DailyPrice, error)
 }
 
+// OrderResponse represents the response from an order query.
+type OrderResponse struct {
+	OrderID string
+	Symbol  string
+	Side    string
+	Price   float64
+	Qty     float64
+	Status  string // e.g., "NEW", "FILLED", "PARTIALLY_FILLED", "CANCELED"
+	// Add other relevant fields as needed
+}
+
+// Exchange 封裝外部交易所下單。
+type Exchange interface {
+	GetOrder(ctx context.Context, symbol, orderID string) (OrderResponse, error)
+	GetPrice(ctx context.Context, symbol string) (float64, error)
+	PlaceMarketOrder(ctx context.Context, symbol, side string, qty float64) (float64, error)
+	PlaceMarketOrderQuote(ctx context.Context, symbol, side string, quoteAmount float64) (float64, error)
+}
+
+// Notifier 傳送外部通知。
+type Notifier interface {
+	Notify(msg string) error
+}
+
 // StrategyFilter 供列表查詢使用。
 type StrategyFilter struct {
 	Status tradingDomain.Status
@@ -57,15 +85,25 @@ type StrategyFilter struct {
 type Service struct {
 	repo Repository
 	data MarketDataProvider
+	ex   Exchange
+	noty Notifier
 	now  func() time.Time
 }
 
 // NewService 建立服務。
-func NewService(repo Repository, data MarketDataProvider) *Service {
+func NewService(repo Repository, data MarketDataProvider, ex Exchange, noty Notifier) *Service {
 	return &Service{
 		repo: repo,
 		data: data,
+		ex:   ex,
+		noty: noty,
 		now:  time.Now,
+	}
+}
+
+func (s *Service) notify(msg string) {
+	if s.noty != nil {
+		_ = s.noty.Notify(msg)
 	}
 }
 
@@ -305,6 +343,213 @@ func (s *Service) RunOnce(ctx context.Context, id string, env tradingDomain.Envi
 		_ = s.repo.SaveTrade(ctx, tr)
 	}
 	return trades, nil
+}
+
+// ExecuteScoringAutoTrade 針對 ScoringStrategy 進行自動交易評估與執行。
+func (s *Service) ExecuteScoringAutoTrade(ctx context.Context, slug string, env tradingDomain.Environment, userID string) error {
+	// 1. 載入評分策略
+	strat, err := s.repo.LoadScoringStrategy(ctx, slug)
+	if err != nil {
+		return fmt.Errorf("load scoring strategy: %w", err)
+	}
+
+	// 2. 獲取最新行情分析 (取得最後 1 天的結果)
+	results, err := s.data.FindHistory(ctx, strat.BaseSymbol, nil, nil, 1, true)
+	if err != nil || len(results) == 0 {
+		return fmt.Errorf("no analysis results found for %s", strat.BaseSymbol)
+	}
+	latest := results[0]
+
+	// 檢查是否太舊 (例如超過 24 小時)
+	if time.Since(latest.TradeDate) > 48*time.Hour {
+		return fmt.Errorf("analysis result too old: %v", latest.TradeDate)
+	}
+
+	// 3. 檢查目前持倉
+	pos, err := s.repo.GetOpenPosition(ctx, strat.ID, env)
+	if err != nil {
+		// 忽略錯誤或處理
+	}
+
+	// 4. 評估是否觸發
+	triggered, score, err := strat.IsTriggered(latest)
+	if err != nil {
+		return err
+	}
+
+	// 記錄執行日誌
+	_ = s.repo.SaveLog(ctx, tradingDomain.LogEntry{
+		StrategyID: strat.ID,
+		Env:        env,
+		Date:       s.now(),
+		Phase:      "eval",
+		Message:    fmt.Sprintf("Score evaluated: %.2f (Threshold: %.2f, Triggered: %v)", score, strat.Threshold, triggered),
+	})
+
+	if triggered && pos == nil {
+		// 執行買入
+		return s.handleScoringBuy(ctx, strat, latest, env, userID)
+	} else if pos != nil {
+		// 檢查賣出 (這裡目前缺乏 ScoringStrategy 的賣出邏輯，暫時使用固定停利停損或簡單邏輯)
+		// TODO: 未來可在 ScoringStrategy 增加賣出規則
+		return s.handleScoringSellCheck(ctx, strat, pos, latest, env)
+	}
+
+	return nil
+}
+
+func (s *Service) handleScoringBuy(ctx context.Context, strat *strategyDomain.ScoringStrategy, data analysisDomain.DailyAnalysisResult, env tradingDomain.Environment, userID string) error {
+	// 決定金額 (假設固定 1000 USDT 或從策略讀取)
+	amount := strat.Risk.OrderSizeValue
+	if amount <= 0 {
+		amount = 100 // Default 100 USDT
+	}
+	// 執行下單
+	price, err := s.ex.PlaceMarketOrderQuote(ctx, strat.BaseSymbol, "buy", amount)
+	if err != nil {
+		return fmt.Errorf("place binance buy order: %w", err)
+	}
+
+	qty := amount / price
+	
+	// 記錄交易
+	tRec := tradingDomain.TradeRecord{
+		StrategyID:      strat.ID,
+		StrategyVersion: 1,
+		Env:             env,
+		Side:            "buy",
+		EntryDate:       s.now(),
+		EntryPrice:      price,
+		Reason:          fmt.Sprintf("Scoring triggered: %.2f", data.Score),
+		CreatedAt:       s.now(),
+	}
+	_ = s.repo.SaveTrade(ctx, tRec)
+
+	// 建立持倉
+	newPos := tradingDomain.Position{
+		StrategyID: strat.ID,
+		Env:        env,
+		EntryDate:  s.now(),
+		EntryPrice: price,
+		Size:       qty,
+		Status:     "open",
+		UpdatedAt:  s.now(),
+	}
+	_ = s.repo.UpsertPosition(ctx, newPos)
+
+	s.notify(fmt.Sprintf("🚀 [AUTO-TRADE] BUY %s\nPrice: %.2f\nAmount: %.2f USDT\nReason: %s", 
+		strat.BaseSymbol, price, amount, tRec.Reason))
+
+	return nil
+}
+
+func (s *Service) handleScoringSellCheck(ctx context.Context, strat *strategyDomain.ScoringStrategy, pos *tradingDomain.Position, data analysisDomain.DailyAnalysisResult, env tradingDomain.Environment) error {
+	sl := -0.02
+	if strat.Risk.StopLossPct != nil {
+		sl = -(*strat.Risk.StopLossPct)
+		if sl > 0 { sl = -sl } // Ensure negative
+	}
+	tp := 0.05
+	if strat.Risk.TakeProfitPct != nil {
+		tp = *strat.Risk.TakeProfitPct
+	}
+
+	change := (data.Close - pos.EntryPrice) / pos.EntryPrice
+	shouldSell := false
+	reason := ""
+
+	if change <= sl {
+		shouldSell = true
+		reason = fmt.Sprintf("Stop Loss (%.1f%%)", sl*100)
+	} else if change >= tp {
+		shouldSell = true
+		reason = fmt.Sprintf("Take Profit (%.1f%%)", tp*100)
+	}
+
+	if shouldSell {
+		price, err := s.ex.PlaceMarketOrder(ctx, strat.BaseSymbol, "sell", pos.Size)
+		if err != nil {
+			return err
+		}
+
+		pnl := (price - pos.EntryPrice) * pos.Size
+		pnlPct := pnl / (pos.EntryPrice * pos.Size)
+		
+		exitDate := s.now()
+		_ = s.repo.SaveTrade(ctx, tradingDomain.TradeRecord{
+			StrategyID:      strat.ID,
+			StrategyVersion: 1,
+			Env:             env,
+			Side:            "sell",
+			EntryDate:       pos.EntryDate,
+			EntryPrice:      pos.EntryPrice,
+			ExitDate:        &exitDate,
+			ExitPrice:       &price,
+			PNL:             &pnl,
+			PNLPct:          &pnlPct,
+			Reason:          reason,
+			CreatedAt:       s.now(),
+		})
+		
+		_ = s.repo.ClosePosition(ctx, pos.ID, exitDate, price)
+
+		s.notify(fmt.Sprintf("💰 [AUTO-TRADE] SELL %s\nPrice: %.2f (Entry: %.2f)\nPNL: %.2f (%.2f%%)\nReason: %s", 
+			strat.BaseSymbol, price, pos.EntryPrice, pnl, pnlPct*100, reason))
+	}
+
+	return nil
+}
+
+func (s *Service) GetExchangePrice(ctx context.Context, symbol string) (float64, error) {
+	return s.ex.GetPrice(ctx, symbol)
+}
+
+// ClosePositionManually 手動平倉。
+func (s *Service) ClosePositionManually(ctx context.Context, positionID string) error {
+	pos, err := s.repo.GetPosition(ctx, positionID)
+	if err != nil {
+		return err
+	}
+	if pos.Status != "open" {
+		return fmt.Errorf("position already closed")
+	}
+
+	strat, err := s.repo.LoadScoringStrategy(ctx, pos.StrategyID)
+	if err != nil {
+		// Fallback if not scoring strategy
+		return fmt.Errorf("could not load strategy: %w", err)
+	}
+
+	price, err := s.ex.PlaceMarketOrder(ctx, strat.BaseSymbol, "sell", pos.Size)
+	if err != nil {
+		return fmt.Errorf("place market order: %w", err)
+	}
+
+	pnl := (price - pos.EntryPrice) * pos.Size
+	pnlPct := pnl / (pos.EntryPrice * pos.Size)
+	
+	exitDate := s.now()
+	_ = s.repo.SaveTrade(ctx, tradingDomain.TradeRecord{
+		StrategyID:      pos.StrategyID,
+		StrategyVersion: 1,
+		Env:             pos.Env,
+		Side:            "sell",
+		EntryDate:       pos.EntryDate,
+		EntryPrice:      pos.EntryPrice,
+		ExitDate:        &exitDate,
+		ExitPrice:       &price,
+		PNL:             &pnl,
+		PNLPct:          &pnlPct,
+		Reason:          "Manual Close",
+		CreatedAt:       s.now(),
+	})
+	
+	err = s.repo.ClosePosition(ctx, pos.ID, exitDate, price)
+	if err == nil {
+		s.notify(fmt.Sprintf("✋ [MANUAL] SELL %s\nPrice: %.2f (Entry: %.2f)\nPNL: %.2f (%.2f%%)\nReason: Manual Close", 
+			strat.BaseSymbol, price, pos.EntryPrice, pnl, pnlPct*100))
+	}
+	return err
 }
 
 // ListTrades 查詢交易紀錄。

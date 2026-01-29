@@ -15,6 +15,8 @@ type Config struct {
 	Auth      AuthConfig      `yaml:"auth"`
 	Ingestion IngestionConfig `yaml:"ingestion"`
 	Notifier  NotifierConfig  `yaml:"notifier"`
+	Binance   BinanceConfig   `yaml:"binance"`
+	AutoTrade AutoTradeConfig `yaml:"auto_trade"`
 }
 
 type HTTPConfig struct {
@@ -52,6 +54,17 @@ type TelegramConfig struct {
 	StrongLimit    int           `yaml:"strong_limit"`
 	ScoreMin       float64       `yaml:"score_min"`
 	VolumeRatioMin float64       `yaml:"volume_ratio_min"`
+}
+
+type BinanceConfig struct {
+	APIKey    string `yaml:"api_key"`
+	APISecret string `yaml:"api_secret"`
+	UseTestnet bool   `yaml:"use_testnet"`
+}
+
+type AutoTradeConfig struct {
+	Enabled  bool          `yaml:"enabled"`
+	Interval time.Duration `yaml:"interval"`
 }
 
 // LoadFromFile 從 YAML 組態檔載入設定。

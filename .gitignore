@@ -1,0 +1,16 @@
+# Binaries
+api
+migrate
+*.exe
+*.test
+
+# Logs
+*.log
+
+# Workspace
+.DS_Store
+.idea/
+.vscode/
+
+# Config (Secrets remain in file for user convenience but usually ignored)
+# config.yaml (optional to ignore)

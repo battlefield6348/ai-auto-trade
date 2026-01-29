@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html class="dark" lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>自動交易監控 - AI Auto Trade</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+        rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#0ddff2",
+                        secondary: "#7c3aed",
+                        "background-dark": "#0A0E1A",
+                        "surface-dark": "#161b2e",
+                        "surface-border": "#232d4b",
+                        success: "#10b981",
+                        danger: "#ef4444",
+                        warning: "#f59e0b",
+                    },
+                    fontFamily: {
+                        display: ["Space Grotesk", "sans-serif"],
+                        body: ["Noto Sans TC", "sans-serif"],
+                    },
+                },
+            },
+        };
+    </script>
+    <style>
+        body {
+            font-family: "Space Grotesk", "Noto Sans TC", sans-serif;
+        }
+
+        .mask-fade-bottom {
+            mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+        }
+    </style>
+</head>
+
+<body class="bg-background-dark text-white min-h-screen flex flex-col">
+    <header class="sticky top-0 z-50 border-b border-surface-border bg-background-dark/80 backdrop-blur-md">
+        <div class="px-6 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <div class="size-8 text-primary flex items-center justify-center rounded bg-primary/10">
+                    <span class="material-symbols-outlined">rocket_launch</span>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight text-white uppercase font-display">自動交易監控</h1>
+                    <p class="text-xs text-slate-400 font-mono tracking-wider">LIVE TRADING MONITOR</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <a href="/"
+                    class="px-3 py-1.5 rounded bg-surface-border text-slate-200 text-xs border border-transparent hover:border-primary/50">控制面板</a>
+                <a href="/strategies.html"
+                    class="px-3 py-1.5 rounded bg-surface-border text-slate-200 text-xs border border-transparent hover:border-primary/50">策略管理</a>
+                <a href="/backtest.html"
+                    class="px-3 py-1.5 rounded bg-surface-border text-slate-200 text-xs border border-transparent hover:border-primary/50">回測控制台</a>
+                <span id="loginStatus" class="text-xs text-slate-400">未登入</span>
+                <button id="logoutBtn"
+                    class="px-3 py-1.5 rounded bg-surface-border text-slate-300 text-xs border border-transparent hover:border-danger/50 hidden">登出</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 p-6 md:p-8 max-w-[1400px] mx-auto w-full flex flex-col gap-8">
+        <div id="alert" class="hidden rounded border px-4 py-3 text-sm"></div>
+
+        <!-- Active Positions Section -->
+        <section>
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-bold flex items-center gap-2 uppercase tracking-wide">
+                    <span class="material-symbols-outlined text-primary">shopping_cart_checkout</span>
+                    當前持有倉位 (Active Positions)
+                </h2>
+                <div class="flex items-center gap-4">
+                    <select id="envFilter"
+                        class="bg-surface-dark border-surface-border rounded text-xs px-3 py-1.5 focus:border-primary focus:ring-0">
+                        <option value="test">測試環境 (Testnet)</option>
+                        <option value="prod">正式環境 (Live)</option>
+                    </select>
+                    <button id="refreshPositionsBtn" class="p-2 rounded hover:bg-white/5 transition-colors">
+                        <span class="material-symbols-outlined text-slate-400">refresh</span>
+                    </button>
+                </div>
+            </div>
+
+            <div id="positionsList" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Position cards will be injected here -->
+                <div
+                    class="col-span-full py-20 text-center text-slate-500 bg-surface-dark/30 border border-dashed border-surface-border rounded-xl">
+                    <span class="material-symbols-outlined text-5xl mb-3 block opacity-20">hourglass_empty</span>
+                    載入中或目前無持有倉位...
+                </div>
+            </div>
+        </section>
+
+        <!-- Trade History Section -->
+        <section class="flex-1">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-bold flex items-center gap-2 uppercase tracking-wide">
+                    <span class="material-symbols-outlined text-warning">history</span>
+                    最近交易紀錄 (Recent Trades)
+                </h2>
+                <button id="refreshTradesBtn" class="p-2 rounded hover:bg-white/5 transition-colors">
+                    <span class="material-symbols-outlined text-slate-400 text-sm">refresh</span>
+                </button>
+            </div>
+
+            <div class="bg-surface-dark border border-surface-border rounded-xl overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead>
+                            <tr
+                                class="text-[10px] text-slate-500 border-b border-surface-border uppercase tracking-widest font-bold bg-background-dark/50">
+                                <th class="px-6 py-4">時間 / 方向</th>
+                                <th class="px-6 py-4">策略</th>
+                                <th class="px-6 py-4">進場/出場價</th>
+                                <th class="px-6 py-4">損益 (PNL)</th>
+                                <th class="px-6 py-4">原因 (Reason)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tradesTableBody" class="divide-y divide-surface-border/30 text-sm">
+                            <!-- Trade rows -->
+                        </tbody>
+                    </table>
+                </div>
+                <div id="emptyTrades" class="hidden py-10 text-center text-slate-500">
+                    暫無交易紀錄
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script type="module" src="./trading.js"></script>
+</body>
+
+</html>

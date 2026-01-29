@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"ai-auto-trade/internal/application/trading"
+	strategyDomain "ai-auto-trade/internal/domain/strategy"
 	tradingDomain "ai-auto-trade/internal/domain/trading"
 )
 
@@ -202,8 +203,9 @@ FROM strategies
 
 // SetStatus 切換狀態。
 func (r *TradingRepo) SetStatus(ctx context.Context, id string, status tradingDomain.Status, env tradingDomain.Environment) error {
-	const q = `UPDATE strategies SET status=$1, env=$2, updated_at=NOW() WHERE id=$3;`
-	_, err := r.db.ExecContext(ctx, q, string(status), string(env), id)
+	isActive := status == tradingDomain.StatusActive
+	const q = `UPDATE strategies SET status=$1, env=$2, is_active=$3, updated_at=NOW() WHERE id=$4;`
+	_, err := r.db.ExecContext(ctx, q, string(status), string(env), isActive, id)
 	return err
 }
 
@@ -402,6 +404,27 @@ LIMIT 200;
 	return out, rows.Err()
 }
 
+func (r *TradingRepo) GetPosition(ctx context.Context, id string) (*tradingDomain.Position, error) {
+	const q = `SELECT id, strategy_id, env, entry_date, entry_price, size, stop_loss, take_profit, status, updated_at FROM strategy_positions WHERE id = $1`
+	var p tradingDomain.Position
+	var sl, tp sql.NullFloat64
+	err := r.db.QueryRowContext(ctx, q, id).Scan(
+		&p.ID, &p.StrategyID, &p.Env, &p.EntryDate, &p.EntryPrice, &p.Size, &sl, &tp, &p.Status, &p.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if sl.Valid {
+		v := sl.Float64
+		p.StopLoss = &v
+	}
+	if tp.Valid {
+		v := tp.Float64
+		p.TakeProfit = &v
+	}
+	return &p, nil
+}
+
 // UpsertPosition 新增或更新持倉。
 func (r *TradingRepo) UpsertPosition(ctx context.Context, p tradingDomain.Position) error {
 	if p.ID == "" {
@@ -548,4 +571,31 @@ func (r *TradingRepo) fallbackUser(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return id, nil
+}
+
+func (r *TradingRepo) LoadScoringStrategy(ctx context.Context, slug string) (*strategyDomain.ScoringStrategy, error) {
+	return strategyDomain.LoadScoringStrategy(ctx, r.db, slug)
+}
+
+func (r *TradingRepo) ListActiveScoringStrategies(ctx context.Context) ([]*strategyDomain.ScoringStrategy, error) {
+	const q = `SELECT slug FROM strategies WHERE is_active = true AND slug IS NOT NULL`
+	rows, err := r.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*strategyDomain.ScoringStrategy
+	for rows.Next() {
+		var slug string
+		if err := rows.Scan(&slug); err != nil {
+			return nil, err
+		}
+		s, err := r.LoadScoringStrategy(ctx, slug)
+		if err != nil {
+			continue // skip or log
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
 }

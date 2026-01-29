@@ -48,6 +48,9 @@ func NewBacktestUseCase(db strategyDomain.DBQueryer, dataProv DataProvider) *Bac
 }
 
 func (u *BacktestUseCase) Execute(ctx context.Context, slug string, symbol string, start, end time.Time) (*BacktestResult, error) {
+	if u.db == nil {
+		return nil, fmt.Errorf("database not available")
+	}
 	// 1. Load Strategy
 	s, err := strategyDomain.LoadScoringStrategy(ctx, u.db, slug)
 	if err != nil {

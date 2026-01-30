@@ -1,3 +1,5 @@
+import { updateExchangeLink } from "./common.js";
+
 const state = {
     token: localStorage.getItem("aat_token") || "",
     positions: [],
@@ -224,6 +226,7 @@ function refresh() {
 }
 
 function bootstrap() {
+    updateExchangeLink();
     if (!state.token) {
         window.location.href = "/";
         return;

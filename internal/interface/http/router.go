@@ -56,6 +56,7 @@ type Server struct {
 	scoringBtUC   *appStrategy.BacktestUseCase
 	saveScoringBtUC *appStrategy.SaveScoringStrategyUseCase
 	binanceClient   *binance.Client
+	useTestnet      bool
 }
 
 // NewServer 建立 API 伺服器，預設使用記憶體資料存儲；若 db 未來可用，再注入對應 repository。
@@ -141,6 +142,7 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 		scoringBtUC:   appStrategy.NewBacktestUseCase(db, dataRepo),
 		saveScoringBtUC: appStrategy.NewSaveScoringStrategyUseCase(db),
 		binanceClient: binanceClient,
+		useTestnet:    cfg.Binance.UseTestnet,
 	}
 	if db != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), seedTimeout)

@@ -217,6 +217,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"success":        true,
 		"db":             dbStatus,
 		"use_synthetic":  s.useSynthetic,
+		"use_testnet":    s.useTestnet,
 		"analysis_ready": s.tokenSvc != nil,
 	})
 }

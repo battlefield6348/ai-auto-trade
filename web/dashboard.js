@@ -1,3 +1,5 @@
+import { updateExchangeLink } from "./common.js";
+
 const state = {
   token: localStorage.getItem("aat_token") || "",
   lastEmail: localStorage.getItem("aat_email") || "",
@@ -443,6 +445,7 @@ function setBusy(id, busy, labelWhenIdle) {
 }
 
 function bootstrap() {
+  updateExchangeLink();
   setupClock();
   setupLoginModal();
   setupActions();

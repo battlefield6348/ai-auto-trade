@@ -1,3 +1,5 @@
+import { updateExchangeLink } from "./common.js";
+
 const state = {
     token: localStorage.getItem("aat_token") || "",
     strategies: [],
@@ -139,6 +141,7 @@ async function deleteStrategy(id, name) {
 }
 
 function bootstrap() {
+    updateExchangeLink();
     if (!state.token) {
         window.location.href = "/";
         return;

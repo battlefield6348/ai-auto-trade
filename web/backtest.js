@@ -1,3 +1,5 @@
+import { updateExchangeLink } from "./common.js";
+
 const state = {
   token: localStorage.getItem("aat_token") || "",
   lastEmail: localStorage.getItem("aat_email") || "",
@@ -562,6 +564,7 @@ function setupLoginModal() {
 
 
 function bootstrap() {
+  updateExchangeLink();
   setupLoginModal();
   el("runBacktestBtn").addEventListener("click", runBacktest);
   el("runDbStrategyBtn").addEventListener("click", runDbStrategy);

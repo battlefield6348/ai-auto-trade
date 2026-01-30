@@ -997,7 +997,7 @@ func (s *Server) handleGetScoringStrategy(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusNotFound, errCodeNotFound, "database not available")
 		return
 	}
-	strat, err := strategy.LoadScoringStrategy(r.Context(), s.db, slug)
+	strat, err := strategy.LoadScoringStrategyBySlug(r.Context(), s.db, slug)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
 		return

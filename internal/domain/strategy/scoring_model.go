@@ -69,17 +69,26 @@ type DBQueryer interface {
 	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
 }
 
-// LoadScoringStrategy fetches a strategy and all its associated rules/conditions by slug.
-func LoadScoringStrategy(ctx context.Context, db DBQueryer, slug string) (*ScoringStrategy, error) {
+// LoadScoringStrategyBySlug fetches a strategy and all its associated rules/conditions by slug.
+func LoadScoringStrategyBySlug(ctx context.Context, db DBQueryer, slug string) (*ScoringStrategy, error) {
+	return loadScoringStrategy(ctx, db, "slug", slug)
+}
+
+// LoadScoringStrategyByID fetches a strategy and all its associated rules/conditions by ID.
+func LoadScoringStrategyByID(ctx context.Context, db DBQueryer, id string) (*ScoringStrategy, error) {
+	return loadScoringStrategy(ctx, db, "id", id)
+}
+
+func loadScoringStrategy(ctx context.Context, db DBQueryer, field, value string) (*ScoringStrategy, error) {
 	// 1. Fetch the base Strategy
 	s := &ScoringStrategy{}
-	strategyQuery := `
+	strategyQuery := fmt.Sprintf(`
 		SELECT id, name, slug, base_symbol, threshold, exit_threshold, is_active, env, risk_settings, created_at, updated_at
 		FROM strategies
-		WHERE slug = $1
-	`
+		WHERE %s = $1
+	`, field)
 	var riskRaw []byte
-	err := db.QueryRowContext(ctx, strategyQuery, slug).Scan(
+	err := db.QueryRowContext(ctx, strategyQuery, value).Scan(
 		&s.ID, &s.Name, &s.Slug, &s.BaseSymbol, &s.Threshold, &s.ExitThreshold, &s.IsActive, &s.Env, &riskRaw, &s.CreatedAt, &s.UpdatedAt,
 	)
 	if err == nil && len(riskRaw) > 0 {
@@ -87,7 +96,7 @@ func LoadScoringStrategy(ctx context.Context, db DBQueryer, slug string) (*Scori
 	}
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("strategy not found with slug: %s", slug)
+			return nil, fmt.Errorf("strategy not found with %s: %s", field, value)
 		}
 		return nil, fmt.Errorf("failed to fetch strategy: %w", err)
 	}

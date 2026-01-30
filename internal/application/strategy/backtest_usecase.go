@@ -52,7 +52,7 @@ func (u *BacktestUseCase) Execute(ctx context.Context, slug string, symbol strin
 		return nil, fmt.Errorf("database not available")
 	}
 	// 1. Load Strategy
-	s, err := strategyDomain.LoadScoringStrategy(ctx, u.db, slug)
+	s, err := strategyDomain.LoadScoringStrategyBySlug(ctx, u.db, slug)
 	if err != nil {
 		return nil, fmt.Errorf("load strategy failed: %w", err)
 	}

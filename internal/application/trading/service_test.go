@@ -578,7 +578,10 @@ func (f *fakeRepo) SaveReport(context.Context, tradingDomain.Report) (string, er
 func (f *fakeRepo) ListReports(context.Context, string) ([]tradingDomain.Report, error) {
 	return nil, nil
 }
-func (f *fakeRepo) LoadScoringStrategy(ctx context.Context, slug string) (*strategyDomain.ScoringStrategy, error) {
+func (f *fakeRepo) LoadScoringStrategyBySlug(ctx context.Context, slug string) (*strategyDomain.ScoringStrategy, error) {
+	return nil, nil
+}
+func (f *fakeRepo) LoadScoringStrategyByID(ctx context.Context, id string) (*strategyDomain.ScoringStrategy, error) {
 	return nil, nil
 }
 func (f *fakeRepo) ListActiveScoringStrategies(ctx context.Context) ([]*strategyDomain.ScoringStrategy, error) {

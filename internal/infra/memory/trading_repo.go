@@ -327,8 +327,12 @@ func containsFold(haystack, needle string) bool {
 	return strings.Contains(haystack, needle)
 }
 
-func (r *TradingRepo) LoadScoringStrategy(_ context.Context, _ string) (*strategyDomain.ScoringStrategy, error) {
-	return nil, fmt.Errorf("LoadScoringStrategy not implemented in memory repo")
+func (r *TradingRepo) LoadScoringStrategyBySlug(_ context.Context, _ string) (*strategyDomain.ScoringStrategy, error) {
+	return nil, fmt.Errorf("LoadScoringStrategyBySlug not implemented in memory repo")
+}
+
+func (r *TradingRepo) LoadScoringStrategyByID(_ context.Context, _ string) (*strategyDomain.ScoringStrategy, error) {
+	return nil, fmt.Errorf("LoadScoringStrategyByID not implemented in memory repo")
 }
 
 func (r *TradingRepo) ListActiveScoringStrategies(ctx context.Context) ([]*strategyDomain.ScoringStrategy, error) {

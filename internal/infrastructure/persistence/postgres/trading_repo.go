@@ -579,8 +579,12 @@ func (r *TradingRepo) fallbackUser(ctx context.Context) (string, error) {
 	return id, nil
 }
 
-func (r *TradingRepo) LoadScoringStrategy(ctx context.Context, slug string) (*strategyDomain.ScoringStrategy, error) {
-	return strategyDomain.LoadScoringStrategy(ctx, r.db, slug)
+func (r *TradingRepo) LoadScoringStrategyBySlug(ctx context.Context, slug string) (*strategyDomain.ScoringStrategy, error) {
+	return strategyDomain.LoadScoringStrategyBySlug(ctx, r.db, slug)
+}
+
+func (r *TradingRepo) LoadScoringStrategyByID(ctx context.Context, id string) (*strategyDomain.ScoringStrategy, error) {
+	return strategyDomain.LoadScoringStrategyByID(ctx, r.db, id)
 }
 
 func (r *TradingRepo) ListActiveScoringStrategies(ctx context.Context) ([]*strategyDomain.ScoringStrategy, error) {
@@ -597,7 +601,7 @@ func (r *TradingRepo) ListActiveScoringStrategies(ctx context.Context) ([]*strat
 		if err := rows.Scan(&slug); err != nil {
 			return nil, err
 		}
-		s, err := r.LoadScoringStrategy(ctx, slug)
+		s, err := r.LoadScoringStrategyBySlug(ctx, slug)
 		if err != nil {
 			continue // skip or log
 		}

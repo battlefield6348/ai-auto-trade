@@ -55,7 +55,38 @@ func (a *ExchangeAdapter) GetPrice(ctx context.Context, symbol string) (float64,
 }
 
 func (a *ExchangeAdapter) PlaceMarketOrder(ctx context.Context, symbol, side string, qty float64) (float64, float64, error) {
-	return a.placeOrder(symbol, side, fmt.Sprintf("%.8f", qty), "")
+	fmtQty := a.formatQuantity(symbol, qty)
+	price, executed, err := a.placeOrder(symbol, side, fmtQty, "")
+	if err != nil {
+		return 0, 0, fmt.Errorf("symbol %s qty %s err: %w", symbol, fmtQty, err)
+	}
+	return price, executed, nil
+}
+
+func (a *ExchangeAdapter) formatQuantity(symbol string, qty float64) string {
+	precision := 6 // Default
+	s := strings.ToUpper(symbol)
+	if strings.Contains(s, "BTC") {
+		precision = 5
+	} else if strings.Contains(s, "ETH") {
+		precision = 4
+	} else if strings.Contains(s, "BNB") {
+		precision = 2
+	} else if strings.Contains(s, "SOL") || strings.Contains(s, "ADA") || strings.Contains(s, "XRP") {
+		precision = 1
+	}
+
+	// Truncate using epsilon to handle float inaccuracy
+	shift := 1.0
+	for i := 0; i < precision; i++ {
+		shift *= 10
+	}
+	
+	// qty * shift + epsilon to avoid 118.111 becoming 118.110999999
+	truncated := float64(int64(qty*shift+0.0000001)) / shift
+	
+	format := fmt.Sprintf("%%.%df", precision)
+	return fmt.Sprintf(format, truncated)
 }
 
 func (a *ExchangeAdapter) PlaceMarketOrderQuote(ctx context.Context, symbol, side string, quoteAmount float64) (float64, float64, error) {

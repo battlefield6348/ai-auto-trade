@@ -24,7 +24,8 @@ type Repository interface {
 	DeleteStrategy(ctx context.Context, id string) error
 	SetStatus(ctx context.Context, id string, status tradingDomain.Status, env tradingDomain.Environment) error
 	UpdateRiskSettings(ctx context.Context, id string, risk tradingDomain.RiskSettings) error
-	LoadScoringStrategy(ctx context.Context, slug string) (*strategyDomain.ScoringStrategy, error)
+	LoadScoringStrategyBySlug(ctx context.Context, slug string) (*strategyDomain.ScoringStrategy, error)
+	LoadScoringStrategyByID(ctx context.Context, id string) (*strategyDomain.ScoringStrategy, error)
 	ListActiveScoringStrategies(ctx context.Context) ([]*strategyDomain.ScoringStrategy, error)
 
 	SaveBacktest(ctx context.Context, rec tradingDomain.BacktestRecord) (string, error)
@@ -354,7 +355,7 @@ func (s *Service) RunOnce(ctx context.Context, id string, env tradingDomain.Envi
 // ExecuteScoringAutoTrade 針對 ScoringStrategy 進行自動交易評估與執行。
 func (s *Service) ExecuteScoringAutoTrade(ctx context.Context, slug string, env tradingDomain.Environment, userID string) error {
 	// 1. 載入評分策略
-	strat, err := s.repo.LoadScoringStrategy(ctx, slug)
+	strat, err := s.repo.LoadScoringStrategyBySlug(ctx, slug)
 	if err != nil {
 		return fmt.Errorf("load scoring strategy: %w", err)
 	}
@@ -556,7 +557,7 @@ func (s *Service) ClosePositionManually(ctx context.Context, positionID string) 
 		return fmt.Errorf("position already closed")
 	}
 
-	strat, err := s.repo.LoadScoringStrategy(ctx, pos.StrategyID)
+	strat, err := s.repo.LoadScoringStrategyByID(ctx, pos.StrategyID)
 	if err != nil {
 		// Fallback if not scoring strategy
 		return fmt.Errorf("could not load strategy: %w", err)

@@ -619,9 +619,9 @@ func (m *mockExchange) GetOrder(ctx context.Context, symbol, orderID string) (Or
 func (m *mockExchange) GetPrice(ctx context.Context, symbol string) (float64, error) {
 	return 0, nil
 }
-func (m *mockExchange) PlaceMarketOrder(ctx context.Context, symbol, side string, qty float64) (float64, error) {
-	return 0, nil
+func (m *mockExchange) PlaceMarketOrder(ctx context.Context, symbol, side string, qty float64) (float64, float64, error) {
+	return 0, 0, nil
 }
-func (m *mockExchange) PlaceMarketOrderQuote(ctx context.Context, symbol, side string, quoteAmount float64) (float64, error) {
-	return 0, nil
+func (m *mockExchange) PlaceMarketOrderQuote(ctx context.Context, symbol, side string, quoteAmount float64) (float64, float64, error) {
+	return 0, 0, nil
 }

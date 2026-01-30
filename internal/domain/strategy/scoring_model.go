@@ -18,13 +18,16 @@ type ScoringStrategy struct {
 	Name      string         `json:"name" db:"name"`
 	Slug      string         `json:"slug" db:"slug"`
 	BaseSymbol string        `json:"base_symbol" db:"base_symbol"`
-	Threshold float64        `json:"threshold" db:"threshold"`
-	IsActive  bool           `json:"is_active" db:"is_active"`
-	Env       string         `json:"env" db:"env"`
-	Risk      tradingDomain.RiskSettings `json:"risk_settings" db:"risk_settings"`
-	Rules     []StrategyRule `json:"rules"`
-	CreatedAt time.Time      `json:"created_at" db:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at" db:"updated_at"`
+	Threshold     float64        `json:"threshold" db:"threshold"`
+	ExitThreshold float64        `json:"exit_threshold" db:"exit_threshold"`
+	IsActive      bool           `json:"is_active" db:"is_active"`
+	Env           string         `json:"env" db:"env"`
+	Risk          tradingDomain.RiskSettings `json:"risk_settings" db:"risk_settings"`
+	Rules         []StrategyRule `json:"rules"` // Legacy field for back-compat if needed, or keeping it as list
+	EntryRules    []StrategyRule `json:"entry_rules"`
+	ExitRules     []StrategyRule `json:"exit_rules"`
+	CreatedAt     time.Time      `json:"created_at" db:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at" db:"updated_at"`
 }
 
 // Condition represents a reusable logic component.
@@ -55,6 +58,7 @@ type StrategyRule struct {
 	StrategyID  string    `json:"strategy_id" db:"strategy_id"`
 	ConditionID string    `json:"condition_id" db:"condition_id"`
 	Weight      float64   `json:"weight" db:"weight"`
+	RuleType    string    `json:"rule_type" db:"rule_type"` // 'entry' or 'exit'
 	Condition   Condition `json:"condition"`
 }
 
@@ -70,13 +74,13 @@ func LoadScoringStrategy(ctx context.Context, db DBQueryer, slug string) (*Scori
 	// 1. Fetch the base Strategy
 	s := &ScoringStrategy{}
 	strategyQuery := `
-		SELECT id, name, slug, base_symbol, threshold, is_active, env, risk_settings, created_at, updated_at
+		SELECT id, name, slug, base_symbol, threshold, exit_threshold, is_active, env, risk_settings, created_at, updated_at
 		FROM strategies
 		WHERE slug = $1
 	`
 	var riskRaw []byte
 	err := db.QueryRowContext(ctx, strategyQuery, slug).Scan(
-		&s.ID, &s.Name, &s.Slug, &s.BaseSymbol, &s.Threshold, &s.IsActive, &s.Env, &riskRaw, &s.CreatedAt, &s.UpdatedAt,
+		&s.ID, &s.Name, &s.Slug, &s.BaseSymbol, &s.Threshold, &s.ExitThreshold, &s.IsActive, &s.Env, &riskRaw, &s.CreatedAt, &s.UpdatedAt,
 	)
 	if err == nil && len(riskRaw) > 0 {
 		_ = json.Unmarshal(riskRaw, &s.Risk)
@@ -91,7 +95,7 @@ func LoadScoringStrategy(ctx context.Context, db DBQueryer, slug string) (*Scori
 	// 2. Fetch Rules and Conditions via JOIN
 	rulesQuery := `
 		SELECT 
-			sr.strategy_id, sr.weight,
+			sr.strategy_id, sr.weight, sr.rule_type,
 			c.id, c.name, c.type, c.params
 		FROM strategy_rules sr
 		JOIN conditions c ON sr.condition_id = c.id
@@ -111,7 +115,7 @@ func LoadScoringStrategy(ctx context.Context, db DBQueryer, slug string) (*Scori
 		var paramsBytes []byte
 
 		err := rows.Scan(
-			&r.StrategyID, &r.Weight,
+			&r.StrategyID, &r.Weight, &r.RuleType,
 			&c.ID, &c.Name, &c.Type, &paramsBytes,
 		)
 		if err != nil {
@@ -123,6 +127,11 @@ func LoadScoringStrategy(ctx context.Context, db DBQueryer, slug string) (*Scori
 		r.Condition = c
 
 		rules = append(rules, r)
+		if r.RuleType == "exit" {
+			s.ExitRules = append(s.ExitRules, r)
+		} else {
+			s.EntryRules = append(s.EntryRules, r)
+		}
 	}
 
 	if err = rows.Err(); err != nil {

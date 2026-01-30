@@ -11,8 +11,9 @@ type SaveScoringStrategyInput struct {
 	UserID    string             `json:"user_id"`
 	Name      string             `json:"name"`
 	Slug      string             `json:"slug"`
-	Threshold float64            `json:"threshold"`
-	Rules     []SaveRuleInput    `json:"rules"`
+	Threshold     float64            `json:"threshold"`
+	ExitThreshold float64            `json:"exit_threshold"`
+	Rules         []SaveRuleInput    `json:"rules"`
 }
 
 type SaveRuleInput struct {
@@ -20,6 +21,7 @@ type SaveRuleInput struct {
 	Type          string                 `json:"type"`
 	Params        map[string]interface{} `json:"params"`
 	Weight        float64                `json:"weight"`
+	RuleType      string                 `json:"rule_type"` // 'entry' or 'exit'
 }
 
 type SaveScoringStrategyUseCase struct {
@@ -38,11 +40,15 @@ func (u *SaveScoringStrategyUseCase) Execute(ctx context.Context, input SaveScor
 	// 1. Insert or Update Strategy
 	var strategyID string
 	err := u.db.QueryRowContext(ctx, `
-		INSERT INTO strategies (user_id, name, slug, threshold, updated_at)
-		VALUES ($1, $2, $3, $4, NOW())
-		ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, threshold = EXCLUDED.threshold, updated_at = NOW()
+		INSERT INTO strategies (user_id, name, slug, threshold, exit_threshold, updated_at)
+		VALUES ($1, $2, $3, $4, $5, NOW())
+		ON CONFLICT (slug) DO UPDATE SET 
+			name = EXCLUDED.name, 
+			threshold = EXCLUDED.threshold, 
+			exit_threshold = EXCLUDED.exit_threshold,
+			updated_at = NOW()
 		RETURNING id
-	`, input.UserID, input.Name, input.Slug, input.Threshold).Scan(&strategyID)
+	`, input.UserID, input.Name, input.Slug, input.Threshold, input.ExitThreshold).Scan(&strategyID)
 	if err != nil {
 		return fmt.Errorf("upsert strategy failed: %w", err)
 	}
@@ -68,10 +74,14 @@ func (u *SaveScoringStrategyUseCase) Execute(ctx context.Context, input SaveScor
 		}
 
 		// 4. Link Rule
+		ruleType := r.RuleType
+		if ruleType == "" {
+			ruleType = "entry"
+		}
 		_, err = u.db.ExecContext(ctx, `
-			INSERT INTO strategy_rules (strategy_id, condition_id, weight)
-			VALUES ($1, $2, $3)
-		`, strategyID, conditionID, r.Weight)
+			INSERT INTO strategy_rules (strategy_id, condition_id, weight, rule_type)
+			VALUES ($1, $2, $3, $4)
+		`, strategyID, conditionID, r.Weight, ruleType)
 		if err != nil {
 			return fmt.Errorf("link rule failed: %w", err)
 		}

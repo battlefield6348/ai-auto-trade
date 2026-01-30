@@ -99,14 +99,18 @@ func evalRangePos(params map[string]interface{}, data analysis.DailyAnalysisResu
 	return (*data.RangePos20 - 0.5) * 10, nil
 }
 
-// CalculateScore executes all rules in a strategy and returns the total score.
+// CalculateScore executes all rules in a strategy (defaults to EntryRules) and returns the total score.
 func (s *ScoringStrategy) CalculateScore(data analysis.DailyAnalysisResult) (float64, error) {
-	totalScore := 0.0 // Starting base score (can be adjusted)
+	return s.CalculateScoreForRules(s.EntryRules, data)
+}
 
-	for _, rule := range s.Rules {
+// CalculateScoreForRules executes a specific set of rules and returns the total score.
+func (s *ScoringStrategy) CalculateScoreForRules(rules []StrategyRule, data analysis.DailyAnalysisResult) (float64, error) {
+	totalScore := 0.0
+
+	for _, rule := range rules {
 		evaluator, ok := EvaluatorRegistry[rule.Condition.Type]
 		if !ok {
-			// Skip unknown condition types or return error
 			continue
 		}
 
@@ -126,11 +130,24 @@ func (s *ScoringStrategy) CalculateScore(data analysis.DailyAnalysisResult) (flo
 	return totalScore, nil
 }
 
-// IsTriggered checks if the total score exceeds the strategy's threshold.
+// IsTriggered checks if the entry score exceeds the strategy's threshold.
 func (s *ScoringStrategy) IsTriggered(data analysis.DailyAnalysisResult) (bool, float64, error) {
-	score, err := s.CalculateScore(data)
+	score, err := s.CalculateScoreForRules(s.EntryRules, data)
 	if err != nil {
 		return false, 0, err
 	}
 	return score >= s.Threshold, score, nil
+}
+
+// IsExitTriggered checks if the exit rules are satisfied.
+func (s *ScoringStrategy) IsExitTriggered(data analysis.DailyAnalysisResult) (bool, float64, error) {
+	if len(s.ExitRules) == 0 {
+		return false, 0, nil
+	}
+	score, err := s.CalculateScoreForRules(s.ExitRules, data)
+	if err != nil {
+		return false, 0, err
+	}
+	// Note: Exit can be based on a separate ExitThreshold
+	return score >= s.ExitThreshold, score, nil
 }

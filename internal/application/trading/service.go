@@ -66,8 +66,8 @@ type OrderResponse struct {
 type Exchange interface {
 	GetOrder(ctx context.Context, symbol, orderID string) (OrderResponse, error)
 	GetPrice(ctx context.Context, symbol string) (float64, error)
-	PlaceMarketOrder(ctx context.Context, symbol, side string, qty float64) (float64, error)
-	PlaceMarketOrderQuote(ctx context.Context, symbol, side string, quoteAmount float64) (float64, error)
+	PlaceMarketOrder(ctx context.Context, symbol, side string, qty float64) (float64, float64, error)
+	PlaceMarketOrderQuote(ctx context.Context, symbol, side string, quoteAmount float64) (float64, float64, error)
 	GetBalance(ctx context.Context, asset string) (float64, error)
 }
 
@@ -421,13 +421,13 @@ func (s *Service) handleScoringBuy(ctx context.Context, strat *strategyDomain.Sc
 		amount = 100 // Default 100 USDT
 	}
 	// 執行下單
-	price, err := s.ex.PlaceMarketOrderQuote(ctx, strat.BaseSymbol, "buy", amount)
+	price, executedQty, err := s.ex.PlaceMarketOrderQuote(ctx, strat.BaseSymbol, "buy", amount)
 	if err != nil {
 		return fmt.Errorf("place binance buy order: %w", err)
 	}
 
-	qty := amount / price
-	
+	qty := executedQty
+
 	// 記錄交易
 	tRec := tradingDomain.TradeRecord{
 		StrategyID:      strat.ID,
@@ -453,7 +453,7 @@ func (s *Service) handleScoringBuy(ctx context.Context, strat *strategyDomain.Sc
 	}
 	_ = s.repo.UpsertPosition(ctx, newPos)
 
-	s.notify(fmt.Sprintf("🚀 [AUTO-TRADE] BUY %s\nPrice: %.2f\nAmount: %.2f USDT\nReason: %s", 
+	s.notify(fmt.Sprintf("🚀 [AUTO-TRADE] BUY %s\nPrice: %.2f\nAmount: %.2f USDT\nReason: %s",
 		strat.BaseSymbol, price, amount, tRec.Reason))
 
 	return nil
@@ -463,7 +463,9 @@ func (s *Service) handleScoringSellCheck(ctx context.Context, strat *strategyDom
 	sl := -0.02
 	if strat.Risk.StopLossPct != nil {
 		sl = -(*strat.Risk.StopLossPct)
-		if sl > 0 { sl = -sl } // Ensure negative
+		if sl > 0 {
+			sl = -sl
+		} // Ensure negative
 	}
 	tp := 0.05
 	if strat.Risk.TakeProfitPct != nil {
@@ -474,23 +476,42 @@ func (s *Service) handleScoringSellCheck(ctx context.Context, strat *strategyDom
 	shouldSell := false
 	reason := ""
 
+	// 1. 固定停利停損
 	if change <= sl {
 		shouldSell = true
-		reason = fmt.Sprintf("Stop Loss (%.1f%%)", sl*100)
+		reason = fmt.Sprintf("止損 (%.1f%%)", sl*100)
 	} else if change >= tp {
 		shouldSell = true
-		reason = fmt.Sprintf("Take Profit (%.1f%%)", tp*100)
+		reason = fmt.Sprintf("止盈 (%.1f%%)", tp*100)
+	}
+
+	// 2. AI 信號反轉 (分數低於門檻的一半)
+	if !shouldSell {
+		score, _ := strat.CalculateScore(data)
+		if score < (strat.Threshold * 0.5) {
+			shouldSell = true
+			reason = fmt.Sprintf("AI信號轉弱 (分數 %.1f < %.1f)", score, strat.Threshold*0.5)
+		}
+	}
+
+	// 3. 策略自定義出場條件 (從資料庫讀取)
+	if !shouldSell {
+		triggered, score, _ := strat.IsExitTriggered(data)
+		if triggered {
+			shouldSell = true
+			reason = fmt.Sprintf("觸發策略出場條件 (分數 %.1f >= %.1f)", score, strat.ExitThreshold)
+		}
 	}
 
 	if shouldSell {
-		price, err := s.ex.PlaceMarketOrder(ctx, strat.BaseSymbol, "sell", pos.Size)
+		price, executedQty, err := s.ex.PlaceMarketOrder(ctx, strat.BaseSymbol, "sell", pos.Size)
 		if err != nil {
 			return err
 		}
 
-		pnl := (price - pos.EntryPrice) * pos.Size
+		pnl := (price - pos.EntryPrice) * executedQty
 		pnlPct := pnl / (pos.EntryPrice * pos.Size)
-		
+
 		exitDate := s.now()
 		_ = s.repo.SaveTrade(ctx, tradingDomain.TradeRecord{
 			StrategyID:      strat.ID,
@@ -506,10 +527,10 @@ func (s *Service) handleScoringSellCheck(ctx context.Context, strat *strategyDom
 			Reason:          reason,
 			CreatedAt:       s.now(),
 		})
-		
+
 		_ = s.repo.ClosePosition(ctx, pos.ID, exitDate, price)
 
-		s.notify(fmt.Sprintf("💰 [AUTO-TRADE] SELL %s\nPrice: %.2f (Entry: %.2f)\nPNL: %.2f (%.2f%%)\nReason: %s", 
+		s.notify(fmt.Sprintf("💰 [AUTO-TRADE] SELL %s\nPrice: %.2f (Entry: %.2f)\nPNL: %.2f (%.2f%%)\nReason: %s",
 			strat.BaseSymbol, price, pos.EntryPrice, pnl, pnlPct*100, reason))
 	}
 
@@ -518,6 +539,11 @@ func (s *Service) handleScoringSellCheck(ctx context.Context, strat *strategyDom
 
 func (s *Service) GetExchangePrice(ctx context.Context, symbol string) (float64, error) {
 	return s.ex.GetPrice(ctx, symbol)
+}
+
+func (s *Service) ExecuteManualBacktestBuy(ctx context.Context, symbol string, amount float64) (float64, float64, error) {
+	price, executedQty, err := s.ex.PlaceMarketOrderQuote(ctx, symbol, "buy", amount)
+	return price, executedQty, err
 }
 
 // ClosePositionManually 手動平倉。
@@ -536,14 +562,14 @@ func (s *Service) ClosePositionManually(ctx context.Context, positionID string) 
 		return fmt.Errorf("could not load strategy: %w", err)
 	}
 
-	price, err := s.ex.PlaceMarketOrder(ctx, strat.BaseSymbol, "sell", pos.Size)
+	price, executedQty, err := s.ex.PlaceMarketOrder(ctx, strat.BaseSymbol, "sell", pos.Size)
 	if err != nil {
 		return fmt.Errorf("place market order: %w", err)
 	}
 
-	pnl := (price - pos.EntryPrice) * pos.Size
+	pnl := (price - pos.EntryPrice) * executedQty
 	pnlPct := pnl / (pos.EntryPrice * pos.Size)
-	
+
 	exitDate := s.now()
 	_ = s.repo.SaveTrade(ctx, tradingDomain.TradeRecord{
 		StrategyID:      pos.StrategyID,
@@ -559,10 +585,10 @@ func (s *Service) ClosePositionManually(ctx context.Context, positionID string) 
 		Reason:          "Manual Close",
 		CreatedAt:       s.now(),
 	})
-	
+
 	err = s.repo.ClosePosition(ctx, pos.ID, exitDate, price)
 	if err == nil {
-		s.notify(fmt.Sprintf("✋ [MANUAL] SELL %s\nPrice: %.2f (Entry: %.2f)\nPNL: %.2f (%.2f%%)\nReason: Manual Close", 
+		s.notify(fmt.Sprintf("✋ [MANUAL] SELL %s\nPrice: %.2f (Entry: %.2f)\nPNL: %.2f (%.2f%%)\nReason: Manual Close",
 			strat.BaseSymbol, price, pos.EntryPrice, pnl, pnlPct*100))
 	}
 	return err

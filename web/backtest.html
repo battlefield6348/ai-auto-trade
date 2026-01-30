@@ -109,6 +109,9 @@
         <label class="space-y-1 text-xs text-slate-300">唯一代碼 (Slug) <input id="newStrategySlug"
             class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-green-500 focus:ring-0"
             placeholder="e.g. my_trend_v1" /></label>
+        <label class="space-y-1 text-xs text-slate-300">出場總分門檻 <input id="newStrategyExitThreshold" type="number"
+            step="0.1" value="10"
+            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-green-500 focus:ring-0" /></label>
         <div class="flex items-end gap-2">
           <button id="confirmSaveStrategyBtn"
             class="flex-1 px-3 py-1 rounded bg-green-600 text-white text-xs font-bold hover:bg-green-500">確認儲存</button>
@@ -165,14 +168,41 @@
             value="3,5,10" /></label>
       </div>
       <div class="grid md:grid-cols-4 gap-3 text-xs text-slate-300">
-        <label class="inline-flex items-center gap-2"><input id="btUseChange" type="checkbox"
-            class="rounded border-surface-border text-primary" checked />啟用日漲跌</label>
-        <label class="inline-flex items-center gap-2"><input id="btUseVolume" type="checkbox"
-            class="rounded border-surface-border text-primary" checked />啟用量能</label>
-        <label class="inline-flex items-center gap-2"><input id="btUseReturn" type="checkbox"
-            class="rounded border-surface-border text-primary" />啟用近5日</label>
-        <label class="inline-flex items-center gap-2"><input id="btUseMa" type="checkbox"
-            class="rounded border-surface-border text-primary" />啟用 MA 乖離</label>
+        <div class="flex flex-col gap-2 p-2 rounded bg-white/5 border border-white/10">
+          <label class="inline-flex items-center gap-2"><input id="btUseChange" type="checkbox"
+              class="rounded border-surface-border text-primary" checked />啟用日漲跌</label>
+          <select id="btSideChange"
+            class="bg-background-dark border border-surface-border rounded px-2 py-0.5 text-[10px]">
+            <option value="entry">進場 (Entry)</option>
+            <option value="exit">出場 (Exit)</option>
+          </select>
+        </div>
+        <div class="flex flex-col gap-2 p-2 rounded bg-white/5 border border-white/10">
+          <label class="inline-flex items-center gap-2"><input id="btUseVolume" type="checkbox"
+              class="rounded border-surface-border text-primary" checked />啟用量能</label>
+          <select id="btSideVolume"
+            class="bg-background-dark border border-surface-border rounded px-2 py-0.5 text-[10px]">
+            <option value="entry">進場 (Entry)</option>
+            <option value="exit">出場 (Exit)</option>
+          </select>
+        </div>
+        <div class="flex flex-col gap-2 p-2 rounded bg-white/5 border border-white/10">
+          <label class="inline-flex items-center gap-2"><input id="btUseReturn" type="checkbox"
+              class="rounded border-surface-border text-primary" />啟用近5日</label>
+          <select id="btSideReturn"
+            class="bg-background-dark border border-surface-border rounded px-2 py-0.5 text-[10px]">
+            <option value="entry">進場 (Entry)</option>
+            <option value="exit">出場 (Exit)</option>
+          </select>
+        </div>
+        <div class="flex flex-col gap-2 p-2 rounded bg-white/5 border border-white/10">
+          <label class="inline-flex items-center gap-2"><input id="btUseMa" type="checkbox"
+              class="rounded border-surface-border text-primary" />啟用 MA 乖離</label>
+          <select id="btSideMa" class="bg-background-dark border border-surface-border rounded px-2 py-0.5 text-[10px]">
+            <option value="entry">進場 (Entry)</option>
+            <option value="exit">出場 (Exit)</option>
+          </select>
+        </div>
       </div>
 
       <div class="border-t border-surface-border pt-4 mt-2">

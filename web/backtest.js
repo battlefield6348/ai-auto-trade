@@ -340,13 +340,14 @@ async function confirmSaveScoringStrategy() {
   const rules = [];
   if (el("btUseChange").checked) {
     rules.push({
-      condition_name: "日漲跌",
+      condition_name: "日漲跌條件",
       type: "PRICE_RETURN",
       params: {
         days: 1,
         min: (parseFloat(el("btChangeMin").value) || 0) / 100
       },
-      weight: parseFloat(el("btChangeBonus").value) || 0
+      weight: parseFloat(el("btChangeBonus").value) || 0,
+      rule_type: el("btSideChange").value
     });
   }
   if (el("btUseVolume").checked) {
@@ -356,7 +357,8 @@ async function confirmSaveScoringStrategy() {
       params: {
         min: parseFloat(el("btVolMin").value) || 0
       },
-      weight: parseFloat(el("btVolumeBonus").value) || 0
+      weight: parseFloat(el("btVolumeBonus").value) || 0,
+      rule_type: el("btSideVolume").value
     });
   }
   if (el("btUseReturn").checked) {
@@ -367,7 +369,8 @@ async function confirmSaveScoringStrategy() {
         days: 5,
         min: (parseFloat(el("btRet5Min").value) || 0) / 100
       },
-      weight: parseFloat(el("btReturnBonus").value) || 0
+      weight: parseFloat(el("btReturnBonus").value) || 0,
+      rule_type: el("btSideReturn").value
     });
   }
   if (el("btUseMa").checked) {
@@ -378,7 +381,8 @@ async function confirmSaveScoringStrategy() {
         ma: 20,
         min: (parseFloat(el("btMaGapMin").value) || 0) / 100
       },
-      weight: parseFloat(el("btMaBonus").value) || 0
+      weight: parseFloat(el("btMaBonus").value) || 0,
+      rule_type: el("btSideMa").value
     });
   }
 
@@ -386,6 +390,7 @@ async function confirmSaveScoringStrategy() {
     name: name,
     slug: slug,
     threshold: parseFloat(el("btTotalMin").value) || 0,
+    exit_threshold: parseFloat(el("newStrategyExitThreshold").value) || 0,
     rules: rules
   };
 
@@ -431,7 +436,8 @@ async function loadStrategyDetails(slug) {
       const s = res.strategy;
       const cfg = {
         thresholds: { total_min: s.threshold },
-        weights: { score: 0 }, // Default to 0 if not explicitly in rules, or keep current
+        exit_threshold: s.exit_threshold || 10,
+        weights: { score: 0 },
         flags: {
           use_change: false,
           use_volume: false,
@@ -442,24 +448,31 @@ async function loadStrategyDetails(slug) {
       (s.rules || []).forEach(r => {
         const type = r.condition?.type;
         const params = r.condition?.params || {};
+        const side = r.rule_type || "entry";
+
         if (type === "PRICE_RETURN" && params.days === 1) {
           cfg.weights.change_bonus = r.weight;
-          cfg.thresholds.change_min = params.min;
+          cfg.thresholds.change_min = Math.abs(params.min * 100); // UI likes absolute for common patterns
           cfg.flags.use_change = true;
+          el("btSideChange").value = side;
         } else if (type === "VOLUME_SURGE") {
           cfg.weights.volume_bonus = r.weight;
           cfg.thresholds.volume_ratio_min = params.min;
           cfg.flags.use_volume = true;
+          el("btSideVolume").value = side;
         } else if (type === "PRICE_RETURN" && params.days === 5) {
           cfg.weights.return_bonus = r.weight;
-          cfg.thresholds.return5_min = params.min;
+          cfg.thresholds.return5_min = Math.abs(params.min * 100);
           cfg.flags.use_return = true;
+          el("btSideReturn").value = side;
         } else if (type === "MA_DEVIATION") {
           cfg.weights.ma_bonus = r.weight;
-          cfg.thresholds.ma_gap_min = params.min;
+          cfg.thresholds.ma_gap_min = Math.abs(params.min * 100);
           cfg.flags.use_ma = true;
+          el("btSideMa").value = side;
         }
       });
+      if (el("newStrategyExitThreshold")) el("newStrategyExitThreshold").value = cfg.exit_threshold;
       fillForm(cfg);
       setAlert(`已載入策略: ${s.name}，上方的回測條件已更新`, "success");
       // Trigger a run with new parameters

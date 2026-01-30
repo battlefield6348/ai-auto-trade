@@ -54,23 +54,23 @@ func (a *ExchangeAdapter) GetPrice(ctx context.Context, symbol string) (float64,
 	return a.client.GetPrice(symbol)
 }
 
-func (a *ExchangeAdapter) PlaceMarketOrder(ctx context.Context, symbol, side string, qty float64) (float64, error) {
-	return a.placeOrder(symbol, side, fmt.Sprintf("%f", qty), "")
+func (a *ExchangeAdapter) PlaceMarketOrder(ctx context.Context, symbol, side string, qty float64) (float64, float64, error) {
+	return a.placeOrder(symbol, side, fmt.Sprintf("%.8f", qty), "")
 }
 
-func (a *ExchangeAdapter) PlaceMarketOrderQuote(ctx context.Context, symbol, side string, quoteAmount float64) (float64, error) {
-	return a.placeOrder(symbol, side, "", fmt.Sprintf("%f", quoteAmount))
+func (a *ExchangeAdapter) PlaceMarketOrderQuote(ctx context.Context, symbol, side string, quoteAmount float64) (float64, float64, error) {
+	return a.placeOrder(symbol, side, "", fmt.Sprintf("%.2f", quoteAmount))
 }
 
-func (a *ExchangeAdapter) placeOrder(symbol, side, qty, quoteQty string) (float64, error) {
+func (a *ExchangeAdapter) placeOrder(symbol, side, qty, quoteQty string) (float64, float64, error) {
 	res, err := a.client.CreateOrder(symbol, strings.ToUpper(side), "MARKET", qty, "", quoteQty)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	
 	executedQty, _ := strconv.ParseFloat(res.ExecutedQty, 64)
 	if executedQty <= 0 {
-		return 0, fmt.Errorf("order executed with zero quantity")
+		return 0, 0, fmt.Errorf("order executed with zero quantity")
 	}
 
 	// Calculate average price from fills
@@ -84,8 +84,8 @@ func (a *ExchangeAdapter) placeOrder(symbol, side, qty, quoteQty string) (float6
 	}
 
 	if totalQty > 0 {
-		return totalCost / totalQty, nil
+		return totalCost / totalQty, totalQty, nil
 	}
 
-	return 0, fmt.Errorf("could not determine execution price")
+	return 0, 0, fmt.Errorf("could not determine execution price")
 }

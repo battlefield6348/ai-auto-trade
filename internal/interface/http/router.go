@@ -159,7 +159,7 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 	}
 	s.registerRoutes()
 	if s.tgClient != nil && s.tgConfig.Enabled {
-		go s.startTelegramJob()
+	// go s.startTelegramJob() // 移除每小時摘要報告，只保留進出場通知
 	}
 	if s.autoInterval > 0 {
 		go s.startAutoPipeline()

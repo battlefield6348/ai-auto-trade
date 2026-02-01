@@ -13,4 +13,4 @@ migrate
 .vscode/
 
 # Config (Secrets remain in file for user convenience but usually ignored)
-# config.yaml (optional to ignore)
+config.yaml

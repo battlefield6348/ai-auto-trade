@@ -1,0 +1,30 @@
+http:
+  addr: ":8080"
+
+db:
+  dsn: "postgres://user:password@localhost:5432/dbname?sslmode=disable"
+
+auth:
+  secret: "your-secret-key"
+  token_ttl: 24h
+  refresh_ttl: 720h
+
+ingestion:
+  use_synthetic: false
+  auto_interval: 1h
+  backfill_start_date: "2024-01-01"
+
+notifier:
+  telegram:
+    enabled: false
+    token: "your-bot-token"
+    chat_id: 0
+
+binance:
+  api_key: "your-api-key"
+  api_secret: "your-api-secret"
+  use_testnet: true
+
+auto_trade:
+  enabled: false
+  interval: 1m

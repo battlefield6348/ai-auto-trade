@@ -1,4 +1,4 @@
-import { updateExchangeLink } from "./common.js";
+import { updateExchangeLink, initBinanceConfigModal, initSidebar } from "./common.js";
 
 const state = {
   token: localStorage.getItem("aat_token") || "",
@@ -565,6 +565,14 @@ function setupLoginModal() {
 
 function bootstrap() {
   updateExchangeLink();
+  initSidebar();
+  initBinanceConfigModal();
+
+  window.onBinanceConfigUpdate = () => {
+    // Refresh page or update data
+    window.location.reload();
+  };
+
   setupLoginModal();
   el("runBacktestBtn").addEventListener("click", runBacktest);
   el("runDbStrategyBtn").addEventListener("click", runDbStrategy);
@@ -639,10 +647,35 @@ function bootstrap() {
 async function fetchBinanceInfo() {
   const balanceEl = el("binanceBalance");
   const assetsEl = el("binanceAssets");
-  const logEl = el("executionLog");
+  const tag = el("binanceTag");
+  const title = el("binanceHeaderTitle");
+
+  if (!balanceEl) return;
 
   try {
-    if (!assetsEl) return;
+    const health = await api("/api/health");
+    const activeEnv = health.active_env || (health.use_testnet ? "test" : "prod");
+
+    if (activeEnv === "prod") {
+      if (title) title.textContent = "正式站連線觀測 (Binance Mainnet)";
+      if (tag) {
+        tag.textContent = "Live Mode";
+        tag.className = "px-2 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[10px] font-bold uppercase";
+      }
+    } else if (activeEnv === "paper") {
+      if (title) title.textContent = "虛擬實盤監測 (Paper Trading)";
+      if (tag) {
+        tag.textContent = "Paper Mode";
+        tag.className = "px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 text-[10px] font-bold uppercase";
+      }
+    } else {
+      if (title) title.textContent = "測試網連線觀測 (Binance Testnet)";
+      if (tag) {
+        tag.textContent = "Testnet";
+        tag.className = "px-2 py-0.5 rounded bg-secondary/10 text-secondary border border-secondary/20 text-[10px] font-bold uppercase";
+      }
+    }
+
     assetsEl.textContent = "Fetching...";
     const data = await api("/api/admin/binance/account");
     if (data.account && data.account.balances) {
@@ -656,19 +689,26 @@ async function fetchBinanceInfo() {
       let assetStr = "";
       if (btc) assetStr += `BTC: ${parseFloat(btc.free).toFixed(6)}`;
       assetsEl.textContent = assetStr || "No other assets found";
-
-      const tag = el("binanceTag");
-      if (data.account.accountType === "SPOT") {
-        tag.textContent = "BINANCE LIVE (SPOT)";
-        tag.className = "px-2 py-0.5 rounded bg-green-500/10 text-green-500 border border-green-500/20 text-[10px] font-bold";
-      }
+      assetsEl.classList.remove("text-danger", "text-primary/70");
     }
   } catch (err) {
     console.error("Failed to fetch Binance account:", err);
-    if (balanceEl) balanceEl.textContent = "ERROR";
-    if (assetsEl) assetsEl.textContent = err.message;
+    // Check if we are in a mock/paper mode
+    const isMock = (tag && tag.textContent.toUpperCase().includes("PAPER"));
+
+    if (isMock) {
+      balanceEl.innerHTML = `VIRTUAL <span class="text-xs font-normal text-slate-500">USDT</span>`;
+      assetsEl.textContent = "未偵測到實盤金鑰 (API-401 已攔截)";
+      assetsEl.classList.remove("text-danger");
+      assetsEl.classList.add("text-primary/70");
+    } else {
+      balanceEl.textContent = "連線失敗";
+      assetsEl.textContent = "請檢查 API Key 或連線環境";
+      assetsEl.classList.add("text-danger");
+    }
   }
 }
+
 
 async function updateMonitoringUI() {
   const slug = el("btStrategySlug").value;
@@ -723,13 +763,11 @@ async function toggleMonitoring() {
 
     if (!isRunning) {
       logEl.textContent = "Starting monitoring...";
-      // 1. Update risk settings (optional, but good to save the min balance)
-      // For now we just activate it. We might need an API to update risk too.
-      // But let's simplify: call activate.
+      // Activation will now follow system default mode (Live/Paper/Testnet)
       await api(`/api/admin/strategies/${id}/activate`, {
         method: "POST",
         body: {
-          env: "test",
+          env: "", // Backend will use default system mode
           auto_stop_min_balance: minBalance
         }
       });

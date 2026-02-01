@@ -217,7 +217,8 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"success":        true,
 		"db":             dbStatus,
 		"use_synthetic":  s.useSynthetic,
-		"use_testnet":    s.useTestnet,
+		"active_env":     s.defaultEnv,
+		"use_testnet":    s.defaultEnv == tradingDomain.EnvTest,
 		"analysis_ready": s.tokenSvc != nil,
 	})
 }
@@ -1546,7 +1547,7 @@ func (s *Server) handleActivateStrategy(w http.ResponseWriter, r *http.Request, 
 
 	env := tradingDomain.Environment(body.Env)
 	if env == "" {
-		env = tradingDomain.EnvTest
+		env = s.defaultEnv
 	}
 	if err := s.tradingSvc.SetStatus(r.Context(), strategyID, tradingDomain.StatusActive, env); err != nil {
 		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
@@ -2554,6 +2555,22 @@ func (s *Server) handleBinanceAccount(w http.ResponseWriter, r *http.Request) {
 	}
 	info, err := s.binanceClient.GetAccountInfo()
 	if err != nil {
+		// If we are in Paper mode, don't return an error even if key is invalid.
+		// Return a mock balance instead.
+		if s.defaultEnv == tradingDomain.EnvPaper {
+			writeJSON(w, http.StatusOK, map[string]interface{}{
+				"success": true,
+				"is_mock": true,
+				"account": map[string]interface{}{
+					"accountType": "SPOT",
+					"balances": []map[string]interface{}{
+						{"asset": "USDT", "free": "0.00", "locked": "0.00"},
+						{"asset": "BTC", "free": "0.000000", "locked": "0.000000"},
+					},
+				},
+			})
+			return
+		}
 		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
 		return
 	}
@@ -2614,3 +2631,45 @@ func (s *Server) handlePositionRoute(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, errCodeNotFound, "not found")
 	}
 }
+
+func (s *Server) handleGetBinanceConfig(w http.ResponseWriter, r *http.Request) {
+	s.configMu.Lock()
+	defer s.configMu.Unlock()
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success":    true,
+		"active_env": s.defaultEnv,
+	})
+}
+
+func (s *Server) handleUpdateBinanceConfig(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		ActiveEnv string `json:"active_env"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+		return
+	}
+
+	newEnv := tradingDomain.Environment(body.ActiveEnv)
+	// Simple validation
+	switch newEnv {
+	case tradingDomain.EnvProd, tradingDomain.EnvPaper, tradingDomain.EnvTest:
+	default:
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "unsupported environment")
+		return
+	}
+
+	s.configMu.Lock()
+	defer s.configMu.Unlock()
+
+	if s.binanceClient != nil {
+		s.binanceClient.SetBaseURL(newEnv == tradingDomain.EnvTest)
+	}
+	s.defaultEnv = newEnv
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": fmt.Sprintf("System environment switched to %s", newEnv),
+	})
+}
+

@@ -11,9 +11,11 @@ import (
 type Environment string
 
 const (
-	EnvTest Environment = "test"
-	EnvProd Environment = "prod"
-	EnvBoth Environment = "both"
+	EnvTest  Environment = "test"
+	EnvProd  Environment = "prod"
+	EnvReal  Environment = "real"
+	EnvPaper Environment = "paper"
+	EnvBoth  Environment = "both"
 )
 
 // Status 表示策略狀態。
@@ -94,7 +96,7 @@ func (s Strategy) Validate() error {
 		return fmt.Errorf("base_symbol is required")
 	}
 	switch s.Env {
-	case EnvTest, EnvProd, EnvBoth, "":
+	case EnvTest, EnvProd, EnvReal, EnvPaper, EnvBoth, "":
 	default:
 		return fmt.Errorf("unsupported env")
 	}

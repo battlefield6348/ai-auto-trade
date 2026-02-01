@@ -1,4 +1,4 @@
-import { updateExchangeLink } from "./common.js";
+import { updateExchangeLink, initSidebar, initBinanceConfigModal } from "./common.js";
 
 const state = {
     token: localStorage.getItem("aat_token") || "",
@@ -9,6 +9,7 @@ const el = (id) => document.getElementById(id);
 
 function setAlert(msg, type = "info") {
     const box = el("alert");
+    if (!box) return;
     if (!msg) {
         box.classList.add("hidden");
         return;
@@ -60,13 +61,14 @@ async function fetchStrategies() {
 function renderTable() {
     const tbody = el("strategyTableBody");
     const empty = el("emptyState");
+    if (!tbody) return;
     tbody.innerHTML = "";
 
     if (state.strategies.length === 0) {
-        empty.classList.remove("hidden");
+        if (empty) empty.classList.remove("hidden");
         return;
     }
-    empty.classList.add("hidden");
+    if (empty) empty.classList.add("hidden");
 
     state.strategies.forEach((s) => {
         const date = new Date(s.updated_at).toLocaleString();
@@ -142,6 +144,8 @@ async function deleteStrategy(id, name) {
 
 function bootstrap() {
     updateExchangeLink();
+    initSidebar();
+    initBinanceConfigModal();
     if (!state.token) {
         window.location.href = "/";
         return;

@@ -1,4 +1,4 @@
-import { updateExchangeLink } from "./common.js";
+import { updateExchangeLink, initBinanceConfigModal, initSidebar } from "./common.js";
 
 const state = {
     token: localStorage.getItem("aat_token") || "",
@@ -12,6 +12,7 @@ const el = (id) => document.getElementById(id);
 
 function setAlert(msg, type = "info") {
     const box = el("alert");
+    if (!box) return;
     if (!msg) {
         box.classList.add("hidden");
         return;
@@ -91,6 +92,7 @@ async function fetchTrades() {
 
 function renderPositions() {
     const container = el("positionsList");
+    if (!container) return;
     container.innerHTML = "";
 
     if (state.positions.length === 0) {
@@ -176,13 +178,14 @@ async function closePosition(id) {
 function renderTrades() {
     const tbody = el("tradesTableBody");
     const empty = el("emptyTrades");
+    if (!tbody) return;
     tbody.innerHTML = "";
 
     if (state.trades.length === 0) {
-        empty.classList.remove("hidden");
+        if (empty) empty.classList.remove("hidden");
         return;
     }
-    empty.classList.add("hidden");
+    if (empty) empty.classList.add("hidden");
 
     state.trades.forEach((t) => {
         const isBuy = t.side === "buy";
@@ -227,23 +230,40 @@ function refresh() {
 
 function bootstrap() {
     updateExchangeLink();
+    initSidebar();
+    initBinanceConfigModal();
+
+    window.onBinanceConfigUpdate = () => {
+        refresh();
+    };
+
     if (!state.token) {
         window.location.href = "/";
         return;
     }
 
-    el("envFilter").addEventListener("change", (e) => {
-        state.env = e.target.value;
-        refresh();
-    });
-    el("refreshPositionsBtn").addEventListener("click", fetchPositions);
-    el("refreshTradesBtn").addEventListener("click", fetchTrades);
+    const envFilter = el("envFilter");
+    if (envFilter) {
+        envFilter.addEventListener("change", (e) => {
+            state.env = e.target.value;
+            refresh();
+        });
+    }
 
-    el("logoutBtn").classList.remove("hidden");
-    el("logoutBtn").addEventListener("click", () => {
-        localStorage.removeItem("aat_token");
-        window.location.href = "/";
-    });
+    const refreshPositionsBtn = el("refreshPositionsBtn");
+    if (refreshPositionsBtn) refreshPositionsBtn.addEventListener("click", fetchPositions);
+
+    const refreshTradesBtn = el("refreshTradesBtn");
+    if (refreshTradesBtn) refreshTradesBtn.addEventListener("click", fetchTrades);
+
+    const logoutBtn = el("logoutBtn");
+    if (logoutBtn) {
+        logoutBtn.classList.remove("hidden");
+        logoutBtn.addEventListener("click", () => {
+            localStorage.removeItem("aat_token");
+            window.location.href = "/";
+        });
+    }
 
     refresh();
     setInterval(refresh, 30000); // Auto refresh every 30s

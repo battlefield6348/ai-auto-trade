@@ -4,14 +4,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>回測控制台</title>
+  <title>回測控制台 - AI Auto Trade</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
     href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
     rel="stylesheet" />
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script id="tailwind-config">
     tailwind.config = {
       darkMode: "class",
@@ -25,11 +24,11 @@
             "surface-border": "#232d4b",
             success: "#10b981",
             danger: "#ef4444",
+            warning: "#f59e0b",
           },
           fontFamily: {
             display: ["Space Grotesk", "sans-serif"],
             body: ["Noto Sans TC", "sans-serif"],
-            mono: ["ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "monospace"],
           },
         },
       },
@@ -38,6 +37,18 @@
   <style>
     body {
       font-family: "Space Grotesk", "Noto Sans TC", sans-serif;
+    }
+
+    .sidebar-collapsed {
+      width: 72px !important;
+    }
+
+    .sidebar-collapsed .sidebar-expanded-only {
+      display: none !important;
+    }
+
+    .content-collapsed-padding {
+      padding-left: 72px !important;
     }
 
     #btEvents {
@@ -50,296 +61,573 @@
       width: 100% !important;
       height: 100% !important;
     }
+
+    .mask-fade-bottom {
+      mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+    }
+
+    .scrollbar-thin::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar-thumb {
+      background: #232d4b;
+      border-radius: 10px;
+    }
   </style>
 </head>
 
-<body class="bg-background-dark text-white min-h-screen flex flex-col">
-  <header class="sticky top-0 z-50 border-b border-surface-border bg-background-dark/80 backdrop-blur-md">
-    <div class="px-6 py-4 flex items-center justify-between">
-      <div class="flex items-center gap-4">
-        <div class="size-8 text-primary flex items-center justify-center rounded bg-primary/10">
-          <span class="material-symbols-outlined">query_stats</span>
+<body class="bg-background-dark text-white min-h-screen flex flex-col antialiased">
+  <!-- Sidebar Start -->
+  <aside id="sidebar"
+    class="fixed top-0 left-0 h-full z-40 bg-[#0E1324] border-r border-surface-border flex flex-col transition-all duration-300 overflow-hidden w-64 lg:translate-x-0 -translate-x-full">
+    <div class="px-6 py-8 flex items-center justify-between">
+      <div class="flex items-center gap-3 sidebar-expanded-only text-primary">
+        <div class="size-8 bg-primary/10 rounded-lg flex items-center justify-center">
+          <span class="material-symbols-outlined">hub</span>
         </div>
-        <div>
-          <h1 class="text-xl font-bold tracking-tight text-white uppercase font-display">策略回測控制台</h1>
-          <p class="text-xs text-slate-400 font-mono tracking-wider">BACKTEST PANEL</p>
+        <div class="flex flex-col">
+          <span class="font-bold font-display tracking-tight text-white leading-none">AI TRADE</span>
+          <span class="text-[10px] text-slate-500 font-mono leading-none tracking-widest mt-1 uppercase">BACKTEST</span>
         </div>
       </div>
-      <div class="flex items-center gap-3">
-        <a href="/strategies.html"
-          class="px-3 py-1.5 rounded bg-surface-border text-slate-200 text-xs border border-surface-border hover:border-primary/50">策略管理</a>
-        <a href="/"
-          class="px-3 py-1.5 rounded bg-surface-border text-slate-200 text-xs border border-surface-border hover:border-primary/50">返回管線面板</a>
-        <a href="/trading.html"
-          class="px-3 py-1.5 rounded bg-primary/20 text-primary border border-primary/40 text-xs font-bold hover:bg-primary/30 transition-all flex items-center gap-1">
-          <span class="material-symbols-outlined text-sm">rocket_launch</span>
-          自動交易
-        </a>
-        <!-- Dynamic Exchange Link -->
-        <a id="exchangeLink" href="#" target="_blank"
-          class="px-3 py-1.5 rounded bg-warning/20 text-warning text-xs border border-warning/40 hover:bg-warning/30 transition-all flex items-center gap-1">
-          <span class="material-symbols-outlined text-sm">currency_exchange</span>
-          交易所
-        </a>
-        <span id="loginStatus" class="text-xs text-slate-400">未登入</span>
-        <button id="loginBtn"
-          class="px-3 py-1.5 rounded bg-primary/20 text-primary text-xs border border-primary/40 hover:bg-primary/30">登入</button>
-        <button id="logoutBtn"
-          class="px-3 py-1.5 rounded bg-surface-border text-slate-300 text-xs border border-surface-border hover:border-primary/50 hidden">登出</button>
-      </div>
+      <button id="sidebarToggle" class="hidden lg:block p-1.5 hover:bg-white/5 rounded-lg text-slate-400">
+        <span id="sidebarToggleIcon" class="material-symbols-outlined">menu_open</span>
+      </button>
     </div>
+    <nav class="flex-1 px-3 space-y-1.5 mt-2">
+      <a href="/"
+        class="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/5 text-slate-400 hover:text-white transition-all group">
+        <span class="material-symbols-outlined">dashboard</span>
+        <span class="sidebar-expanded-only font-medium text-sm">數據面板 (Home)</span>
+      </a>
+      <a href="/strategies.html"
+        class="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/5 text-slate-400 hover:text-white transition-all group">
+        <span class="material-symbols-outlined">analytics</span>
+        <span class="sidebar-expanded-only font-medium text-sm">策略管理 (Strategies)</span>
+      </a>
+      <a href="/backtest.html"
+        class="flex items-center gap-3 px-3 py-3 rounded-xl bg-primary/10 text-primary border border-primary/20 transition-all font-bold">
+        <span class="material-symbols-outlined">query_stats</span>
+        <span class="sidebar-expanded-only text-sm font-bold tracking-tight">回測控制台 (Backtest)</span>
+      </a>
+      <a href="/trading.html"
+        class="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/5 text-slate-400 hover:text-white transition-all group">
+        <span class="material-symbols-outlined">rocket_launch</span>
+        <span class="sidebar-expanded-only font-medium text-sm">自動交易 (Trading)</span>
+      </a>
+    </nav>
+    <div class="p-3 border-t border-surface-border space-y-1">
+      <button id="binanceConfigBtn"
+        class="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/5 text-slate-400 hover:text-white transition-all">
+        <span class="material-symbols-outlined text-sm">settings</span>
+        <span class="sidebar-expanded-only font-medium text-sm">API 設定</span>
+      </button>
+      <a id="exchangeLink" href="#" target="_blank"
+        class="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/5 text-slate-400 hover:text-white transition-all">
+        <span class="material-symbols-outlined text-sm">currency_exchange</span>
+        <span class="sidebar-expanded-only font-medium text-sm">前往交易所</span>
+      </a>
+      <div
+        class="sidebar-expanded-only mt-4 px-3 py-2 bg-background-dark/50 rounded-lg border border-surface-border/50">
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Status</span>
+          <span id="loginStatusLabel" class="text-[10px] text-primary">--</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="size-2 rounded-full bg-primary animate-pulse"></div>
+          <span id="loginStatus" class="text-xs text-slate-300 truncate font-mono">載入中...</span>
+        </div>
+      </div>
+      <button id="loginBtn"
+        class="w-full mt-2 flex items-center gap-3 px-3 py-3 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-all font-bold">
+        <span class="material-symbols-outlined">login</span>
+        <span class="sidebar-expanded-only text-sm font-bold">使用者登入</span>
+      </button>
+      <button id="logoutBtn"
+        class="w-full mt-2 hidden items-center gap-3 px-3 py-3 rounded-xl hover:bg-danger/10 text-slate-400 hover:text-danger transition-all">
+        <span class="material-symbols-outlined">logout</span>
+        <span class="sidebar-expanded-only font-medium text-sm">帳號登出</span>
+      </button>
+    </div>
+  </aside>
+
+  <div id="content-overlay" class="fixed inset-0 z-30 bg-black/50 hidden lg:hidden"></div>
+  <header
+    class="lg:hidden sticky top-0 z-50 border-b border-surface-border bg-background-dark/80 backdrop-blur-md px-6 py-4 flex items-center justify-between">
+    <button id="mobileToggle" class="p-1 text-primary"><span class="material-symbols-outlined">menu</span></button>
+    <span class="font-bold font-display text-white italic tracking-widest">AI TRADE</span>
+    <div class="w-8"></div>
   </header>
 
-  <main class="flex-1 p-6 md:p-8 max-w-[1400px] mx-auto w-full flex flex-col gap-6">
-    <div id="alert" class="hidden rounded border px-4 py-3 text-sm"></div>
+  <div id="main-content" class="flex-1 transition-all duration-300 lg:pl-64 flex flex-col">
+    <div
+      class="hidden lg:flex px-8 py-4 items-center justify-between border-b border-surface-border bg-background-dark/30 backdrop-blur-sm sticky top-0 z-30">
+      <div class="flex items-center gap-2">
+        <span class="material-symbols-outlined text-primary">query_stats</span>
+        <h2 class="text-[10px] font-bold font-display uppercase tracking-[0.2em] text-slate-400">回測與策略模擬控制台 (Backtest
+          Terminal)</h2>
+      </div>
+      <div class="flex items-center gap-6">
+        <div id="serverClock" class="text-xs font-mono text-primary font-bold">00:00:00</div>
+        <div class="h-4 w-px bg-surface-border"></div>
+        <div class="flex items-center gap-2 text-[10px] text-slate-500 uppercase font-bold tracking-widest">
+          <span class="material-symbols-outlined text-xs">database</span>
+          Engine Sync
+        </div>
+      </div>
+    </div>
 
-    <div class="bg-surface-dark border border-surface-border rounded-xl p-6 flex flex-col gap-4">
-      <div class="flex items-center justify-between">
-        <h3 class="text-sm text-slate-400 font-medium">條件回測 (Backtest)</h3>
-        <div class="flex gap-2 text-xs">
-          <button id="loadPresetBtn"
-            class="px-2 py-1 rounded bg-surface-border text-slate-200 border border-surface-border hover:border-primary/40">載入預設</button>
-          <button id="savePresetBtn"
-            class="px-2 py-1 rounded bg-secondary/20 text-secondary border border-secondary/40 hover:bg-secondary/30">儲存為預設</button>
-          <button id="runBacktestBtn"
-            class="px-2 py-1 rounded bg-primary/20 text-primary border border-primary/40 hover:bg-primary/30">執行回測</button>
-          <button id="saveAsStrategyBtn"
-            class="px-2 py-1 rounded bg-green-500/20 text-green-400 border border-green-500/40 hover:bg-green-500/30">另存為新策略</button>
+    <main class="flex-1 p-6 lg:p-10 w-full flex flex-col gap-6">
+      <div id="alert" class="hidden rounded border px-4 py-3 text-sm"></div>
+
+      <!-- Main Config Panel -->
+      <div class="bg-surface-dark border border-surface-border rounded-3xl p-8 shadow-2xl">
+        <div
+          class="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8 border-b border-surface-border/50 pb-8">
+          <div class="flex items-center gap-4">
+            <div class="size-14 bg-primary/10 rounded-2xl flex items-center justify-center text-primary shadow-inner">
+              <span class="material-symbols-outlined text-4xl">tune</span>
+            </div>
+            <div>
+              <h2 class="text-2xl font-black font-display tracking-tight text-white italic uppercase">回測參數設定</h2>
+              <p class="text-xs text-slate-500 font-mono tracking-widest mt-1">SIMULATION ENGINE v4.0</p>
+            </div>
+          </div>
+          <div class="flex flex-wrap gap-3">
+            <button id="runBacktestBtn"
+              class="px-6 py-3 rounded-2xl bg-primary text-background-dark font-black text-sm uppercase tracking-widest shadow-neon-glow hover:brightness-110 active:scale-95 transition-all flex items-center gap-2">
+              <span class="material-symbols-outlined text-sm">play_arrow</span> 執行回測 (Run)
+            </button>
+            <button id="saveAsStrategyBtn"
+              class="px-6 py-3 rounded-2xl bg-secondary/10 text-secondary border border-secondary/30 hover:bg-secondary hover:text-white font-black text-sm uppercase tracking-widest transition-all">
+              儲存為策略 (Save)
+            </button>
+            <div
+              class="flex items-center gap-2 ml-4 px-4 py-3 bg-background-dark/50 rounded-2xl border border-surface-border">
+              <span class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">最高分</span>
+              <span id="maxPossibleScore" class="text-xl font-black text-primary font-mono leading-none">0.0</span>
+            </div>
+          </div>
         </div>
-      </div>
-      <div id="saveAsStrategyForm"
-        class="hidden grid md:grid-cols-3 gap-3 p-3 border border-green-500/30 rounded-lg bg-green-500/5">
-        <label class="space-y-1 text-xs text-slate-300">策略名稱 <input id="newStrategyName"
-            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-green-500 focus:ring-0"
-            placeholder="e.g. 我的趨勢策略" /></label>
-        <label class="space-y-1 text-xs text-slate-300">唯一代碼 (Slug) <input id="newStrategySlug"
-            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-green-500 focus:ring-0"
-            placeholder="e.g. my_trend_v1" /></label>
-        <label class="space-y-1 text-xs text-slate-300">出場總分門檻 <input id="newStrategyExitThreshold" type="number"
-            step="0.1" value="10"
-            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-green-500 focus:ring-0" /></label>
-        <div class="flex items-end gap-2">
-          <button id="confirmSaveStrategyBtn"
-            class="flex-1 px-3 py-1 rounded bg-green-600 text-white text-xs font-bold hover:bg-green-500">確認儲存</button>
-          <button id="cancelSaveStrategyBtn"
-            class="px-3 py-1 rounded bg-surface-border text-slate-300 text-xs hover:bg-slate-700">取消</button>
-        </div>
-      </div>
-      <div class="grid md:grid-cols-4 gap-3 text-xs text-slate-300">
-        <label class="space-y-1">交易對 <input id="btSymbol"
-            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
-            value="BTCUSDT" /></label>
-        <label class="space-y-1">起始日 <input id="btStart" type="date"
-            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0" /></label>
-        <label class="space-y-1">結束日 <input id="btEnd" type="date"
-            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0" /></label>
-        <label class="space-y-1">總分門檻 (滿分: <span id="maxPossibleScore" class="text-primary">--</span>) <input
-            id="btTotalMin" type="number" step="0.1"
-            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
-            value="60" /></label>
-      </div>
-      <div class="grid md:grid-cols-5 gap-3 text-xs text-slate-300 border-t border-surface-border/50 pt-3 items-end">
-        <label class="space-y-1 bg-primary/5 p-2 rounded border border-primary/20">AI 基礎分權重 <input id="btScoreWeight"
-            type="number" step="0.1"
-            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
-            value="1.0" /></label>
-        <label id="wrapper-btChangeBonus" class="space-y-1">日漲跌加分 <input id="btChangeBonus" type="number" step="0.1"
-            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
-            value="10" /></label>
-        <label id="wrapper-btVolumeBonus" class="space-y-1">量能加分 <input id="btVolumeBonus" type="number" step="0.1"
-            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
-            value="10" /></label>
-        <label id="wrapper-btReturnBonus" class="space-y-1">近5日加分 <input id="btReturnBonus" type="number" step="0.1"
-            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
-            value="8" /></label>
-        <label id="wrapper-btMaBonus" class="space-y-1">MA 加分 <input id="btMaBonus" type="number" step="0.1"
-            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
-            value="5" /></label>
-      </div>
-      <div class="grid md:grid-cols-5 gap-3 text-xs text-slate-300">
-        <label id="wrapper-btChangeMin" class="space-y-1">日漲跌門檻(%) <input id="btChangeMin" type="number" step="0.01"
-            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
-            value="0.5" /></label>
-        <label id="wrapper-btVolMin" class="space-y-1">量能門檻(倍) <input id="btVolMin" type="number" step="0.1"
-            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
-            value="1.2" /></label>
-        <label id="wrapper-btRet5Min" class="space-y-1">近5日門檻(%) <input id="btRet5Min" type="number" step="0.01"
-            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
-            value="1" /></label>
-        <label id="wrapper-btMaGapMin" class="space-y-1">MA 乖離門檻(%) <input id="btMaGapMin" type="number" step="0.01"
-            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
-            value="1" /></label>
-        <label class="space-y-1">Horizons (逗號分隔) <input id="btHorizons"
-            class="w-full bg-background-dark border border-surface-border rounded px-2 py-1 focus:border-primary focus:ring-0"
-            value="3,5,10" /></label>
-      </div>
-      <div class="grid md:grid-cols-4 gap-3 text-xs text-slate-300">
-        <div class="flex flex-col gap-2 p-2 rounded bg-white/5 border border-white/10">
-          <label class="inline-flex items-center gap-2"><input id="btUseChange" type="checkbox"
-              class="rounded border-surface-border text-primary" checked />啟用日漲跌</label>
-          <select id="btSideChange"
-            class="bg-background-dark border border-surface-border rounded px-2 py-0.5 text-[10px]">
-            <option value="entry">進場 (Entry)</option>
-            <option value="exit">出場 (Exit)</option>
-          </select>
-        </div>
-        <div class="flex flex-col gap-2 p-2 rounded bg-white/5 border border-white/10">
-          <label class="inline-flex items-center gap-2"><input id="btUseVolume" type="checkbox"
-              class="rounded border-surface-border text-primary" checked />啟用量能</label>
-          <select id="btSideVolume"
-            class="bg-background-dark border border-surface-border rounded px-2 py-0.5 text-[10px]">
-            <option value="entry">進場 (Entry)</option>
-            <option value="exit">出場 (Exit)</option>
-          </select>
-        </div>
-        <div class="flex flex-col gap-2 p-2 rounded bg-white/5 border border-white/10">
-          <label class="inline-flex items-center gap-2"><input id="btUseReturn" type="checkbox"
-              class="rounded border-surface-border text-primary" />啟用近5日</label>
-          <select id="btSideReturn"
-            class="bg-background-dark border border-surface-border rounded px-2 py-0.5 text-[10px]">
-            <option value="entry">進場 (Entry)</option>
-            <option value="exit">出場 (Exit)</option>
-          </select>
-        </div>
-        <div class="flex flex-col gap-2 p-2 rounded bg-white/5 border border-white/10">
-          <label class="inline-flex items-center gap-2"><input id="btUseMa" type="checkbox"
-              class="rounded border-surface-border text-primary" />啟用 MA 乖離</label>
-          <select id="btSideMa" class="bg-background-dark border border-surface-border rounded px-2 py-0.5 text-[10px]">
-            <option value="entry">進場 (Entry)</option>
-            <option value="exit">出場 (Exit)</option>
-          </select>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+          <!-- Sidebar Params -->
+          <div class="space-y-6">
+            <div>
+              <label class="block text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-4">基本回測設定</label>
+              <div class="space-y-4">
+                <div class="bg-background-dark/30 p-4 rounded-2xl border border-surface-border/50">
+                  <span class="text-[10px] text-slate-600 block mb-2 uppercase font-bold">Symbol</span>
+                  <input id="btSymbol" type="text" value="BTCUSDT"
+                    class="w-full bg-transparent border-b border-surface-border text-lg font-black text-white focus:border-primary focus:ring-0 uppercase font-mono" />
+                </div>
+                <div class="bg-background-dark/30 p-4 rounded-2xl border border-surface-border/50">
+                  <span class="text-[10px] text-slate-600 block mb-2 uppercase font-bold">Start Date</span>
+                  <input id="btStart" type="date"
+                    class="w-full bg-transparent border-0 p-0 text-sm font-mono text-slate-300 focus:ring-0" />
+                </div>
+                <div class="bg-background-dark/30 p-4 rounded-2xl border border-surface-border/50">
+                  <span class="text-[10px] text-slate-600 block mb-2 uppercase font-bold">End Date</span>
+                  <input id="btEnd" type="date"
+                    class="w-full bg-transparent border-0 p-0 text-sm font-mono text-slate-300 focus:ring-0" />
+                </div>
+                <div class="bg-background-dark/30 p-4 rounded-2xl border border-surface-border/50">
+                  <span class="text-[10px] text-slate-600 block mb-2 uppercase font-bold">Horizons (days)</span>
+                  <input id="btHorizons" type="text" value="3,5,10"
+                    class="w-full bg-transparent border-b border-surface-border text-sm font-mono text-slate-300 focus:border-primary focus:ring-0" />
+                </div>
+              </div>
+            </div>
+            <div class="pt-4 space-y-3">
+              <button id="savePresetBtn"
+                class="w-full py-3 rounded-xl border border-surface-border text-xs text-slate-500 hover:text-white hover:bg-white/5 transition-all">儲存為預設</button>
+              <button id="loadPresetBtn"
+                class="w-full py-3 rounded-xl border border-surface-border text-xs text-slate-500 hover:text-white hover:bg-white/5 transition-all">載入預設</button>
+            </div>
+          </div>
+
+          <!-- Main Weighting Controls -->
+          <div class="md:col-span-3 space-y-10">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
+              <!-- Thresholds -->
+              <div class="space-y-6">
+                <h4
+                  class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-4 pr-10 border-b border-surface-border/30 pb-2">
+                  啟動閾值 (Entry Thresholds)</h4>
+                <div class="grid grid-cols-2 gap-6">
+                  <div class="space-y-1.5">
+                    <span class="text-[10px] text-slate-500 font-bold">TOTAL MIN SCORE</span>
+                    <input id="btTotalMin" type="number" step="1" value="60"
+                      class="w-full bg-background-dark border border-surface-border rounded-xl px-4 py-3 text-lg font-black text-primary focus:border-primary focus:ring-1" />
+                  </div>
+                  <div id="wrapper-btChangeMin" class="space-y-1.5">
+                    <span class="text-[10px] text-slate-500 font-bold">DAILY CHG MIN %</span>
+                    <input id="btChangeMin" type="number" step="0.1" value="0.5"
+                      class="w-full bg-background-dark border border-surface-border rounded-xl px-4 py-3 text-lg font-black text-white focus:border-primary focus:ring-1" />
+                  </div>
+                  <div id="wrapper-btVolMin" class="space-y-1.5">
+                    <span class="text-[10px] text-slate-500 font-bold">VOL RATIO MIN</span>
+                    <input id="btVolMin" type="number" step="0.1" value="1.2"
+                      class="w-full bg-background-dark border border-surface-border rounded-xl px-4 py-3 text-lg font-black text-white focus:border-primary focus:ring-1" />
+                  </div>
+                  <div id="wrapper-btRet5Min" class="space-y-1.5">
+                    <span class="text-[10px] text-slate-500 font-bold">5D RETURN MIN %</span>
+                    <input id="btRet5Min" type="number" step="0.1" value="1.0"
+                      class="w-full bg-background-dark border border-surface-border rounded-xl px-4 py-3 text-lg font-black text-white focus:border-primary focus:ring-1" />
+                  </div>
+                  <div id="wrapper-btMaGapMin" class="space-y-1.5">
+                    <span class="text-[10px] text-slate-500 font-bold">MA GAP MIN %</span>
+                    <input id="btMaGapMin" type="number" step="0.1" value="1.0"
+                      class="w-full bg-background-dark border border-surface-border rounded-xl px-4 py-3 text-lg font-black text-white focus:border-primary focus:ring-1" />
+                  </div>
+                </div>
+              </div>
+
+              <!-- Weights -->
+              <div class="space-y-6">
+                <h4
+                  class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-4 pr-10 border-b border-surface-border/30 pb-2">
+                  權重配分 (Scoring Weights)</h4>
+                <div class="space-y-4">
+                  <div
+                    class="flex items-center justify-between gap-6 p-4 bg-background-dark/30 rounded-2xl border border-surface-border">
+                    <div class="flex-1">
+                      <div class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Base Analysis Score
+                      </div>
+                      <div class="text-[10px] text-slate-600 mt-1">Multiplier for core AI prediction (0~100)</div>
+                    </div>
+                    <input id="btScoreWeight" type="number" step="0.1" value="1.0"
+                      class="w-20 bg-transparent text-right text-xl font-black text-primary border-0 focus:ring-0" />
+                  </div>
+
+                  <div class="space-y-3">
+                    <!-- Toggleable Bonus Rows -->
+                    <div
+                      class="flex items-center gap-4 bg-background-dark/30 p-3 rounded-2xl border border-surface-border">
+                      <input id="btUseChange" type="checkbox" checked
+                        class="rounded text-primary border-surface-border bg-background-dark focus:ring-primary h-5 w-5" />
+                      <div class="flex-1 text-xs font-bold uppercase tracking-wider text-slate-400">Daily Change Bonus
+                      </div>
+                      <select id="btSideChange"
+                        class="bg-transparent border-0 text-[10px] font-black text-slate-500 focus:ring-0">
+                        <option value="entry">ENTRY ONLY</option>
+                        <option value="exit">EXIT ONLY</option>
+                        <option value="both">BOTH</option>
+                      </select>
+                      <div id="wrapper-btChangeBonus"><input id="btChangeBonus" type="number" value="10"
+                          class="w-16 bg-transparent text-right font-black border-0 focus:ring-0" /></div>
+                    </div>
+                    <div
+                      class="flex items-center gap-4 bg-background-dark/30 p-3 rounded-2xl border border-surface-border">
+                      <input id="btUseVolume" type="checkbox" checked
+                        class="rounded text-primary border-surface-border bg-background-dark focus:ring-primary h-5 w-5" />
+                      <div class="flex-1 text-xs font-bold uppercase tracking-wider text-slate-400">Volume Surge Bonus
+                      </div>
+                      <select id="btSideVolume"
+                        class="bg-transparent border-0 text-[10px] font-black text-slate-500 focus:ring-0">
+                        <option value="entry">ENTRY ONLY</option>
+                        <option value="exit">EXIT ONLY</option>
+                        <option value="both">BOTH</option>
+                      </select>
+                      <div id="wrapper-btVolumeBonus"><input id="btVolumeBonus" type="number" value="10"
+                          class="w-16 bg-transparent text-right font-black border-0 focus:ring-0" /></div>
+                    </div>
+                    <div
+                      class="flex items-center gap-4 bg-background-dark/30 p-3 rounded-2xl border border-surface-border">
+                      <input id="btUseReturn" type="checkbox" checked
+                        class="rounded text-primary border-surface-border bg-background-dark focus:ring-primary h-5 w-5" />
+                      <div class="flex-1 text-xs font-bold uppercase tracking-wider text-slate-400">5D Return Bonus
+                      </div>
+                      <select id="btSideReturn"
+                        class="bg-transparent border-0 text-[10px] font-black text-slate-500 focus:ring-0">
+                        <option value="entry">ENTRY ONLY</option>
+                        <option value="exit">EXIT ONLY</option>
+                        <option value="both">BOTH</option>
+                      </select>
+                      <div id="wrapper-btReturnBonus"><input id="btReturnBonus" type="number" value="8"
+                          class="w-16 bg-transparent text-right font-black border-0 focus:ring-0" /></div>
+                    </div>
+                    <div
+                      class="flex items-center gap-4 bg-background-dark/30 p-3 rounded-2xl border border-surface-border">
+                      <input id="btUseMa" type="checkbox" checked
+                        class="rounded text-primary border-surface-border bg-background-dark focus:ring-primary h-5 w-5" />
+                      <div class="flex-1 text-xs font-bold uppercase tracking-wider text-slate-400">MA Deviation Bonus
+                      </div>
+                      <select id="btSideMa"
+                        class="bg-transparent border-0 text-[10px] font-black text-slate-500 focus:ring-0">
+                        <option value="entry">ENTRY ONLY</option>
+                        <option value="exit">EXIT ONLY</option>
+                        <option value="both">BOTH</option>
+                      </select>
+                      <div id="wrapper-btMaBonus"><input id="btMaBonus" type="number" value="5"
+                          class="w-16 bg-transparent text-right font-black border-0 focus:ring-0" /></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="border-t border-surface-border pt-4 mt-2">
-        <h3 class="text-sm text-slate-400 font-medium mb-3">資料庫策略 (SQL Strategies)</h3>
-        <div class="flex items-end gap-3">
-          <label class="space-y-1 flex-1 text-xs text-slate-300">
-            選取已儲存策略
-            <select id="btStrategySlug"
-              class="w-full bg-background-dark border border-surface-border rounded px-2 py-1.5 focus:border-primary focus:ring-0 text-white">
-              <option value="">-- 手動權重模式 --</option>
-            </select>
-          </label>
+      <!-- Strategy Database Selection -->
+      <div id="dbStrategySection" class="bg-surface-dark border border-surface-border rounded-3xl p-8 shadow-xl">
+        <div class="flex items-center justify-between mb-6">
+          <h3 class="text-lg font-black italic flex items-center gap-3">
+            <span class="material-symbols-outlined text-primary">database</span> 資料庫策略載入 (Load from DB)
+          </h3>
+        </div>
+        <div class="flex flex-col md:flex-row gap-4">
+          <select id="btStrategySlug"
+            class="flex-1 bg-background-dark border border-surface-border rounded-2xl px-6 py-4 text-white font-bold focus:border-primary focus:ring-0 transition-all uppercase font-mono">
+            <option value="">-- 選取已存策略 (Select Protocol) --</option>
+          </select>
           <button id="runDbStrategyBtn"
-            class="px-4 py-1.5 rounded bg-secondary/20 text-secondary border border-secondary/40 hover:bg-secondary/30 text-xs font-medium">
+            class="px-8 py-4 rounded-2xl bg-surface-border text-slate-300 font-black text-sm uppercase tracking-widest hover:bg-white/5 border border-transparent hover:border-primary/30 transition-all">
             執行資料庫策略回測
           </button>
         </div>
       </div>
-      <div id="btResult"
-        class="text-xs text-slate-300 border border-surface-border rounded-lg p-3 bg-background-dark/60">尚未回測</div>
-      <div class="grid md:grid-cols-2 gap-4">
-        <div class="bg-background-dark/50 border border-surface-border rounded-lg p-3">
-          <div class="text-xs text-slate-400 mb-2">總分/收盤趨勢</div>
-          <div class="h-72 md:h-80">
-            <canvas id="btScoreChart"></canvas>
+
+      <!-- Save Strategy Form (Hidden by default) -->
+      <div id="saveAsStrategyForm"
+        class="hidden bg-secondary/5 border border-secondary/30 rounded-3xl p-8 shadow-2xl animate-in fade-in slide-in-from-top-4">
+        <div class="flex items-center gap-4 mb-8">
+          <div class="size-12 bg-secondary/20 rounded-2xl flex items-center justify-center text-secondary">
+            <span class="material-symbols-outlined text-2xl">save</span>
+          </div>
+          <div>
+            <h3 class="text-xl font-black text-white italic">儲存為全新策略</h3>
+            <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">Persisting configuration to
+              database</p>
           </div>
         </div>
-        <div class="bg-background-dark/50 border border-surface-border rounded-lg p-3">
-          <div class="text-xs text-slate-400 mb-2">Forward Return (d5)</div>
-          <div class="h-72 md:h-80">
-            <canvas id="btReturnChart"></canvas>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div>
+            <label class="block text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2 ml-1">Strategy
+              Name</label>
+            <input id="newStrategyName" type="text" placeholder="例如：BTC 激增追蹤"
+              class="w-full bg-background-dark border border-surface-border rounded-2xl px-4 py-3 text-sm text-white focus:border-secondary focus:ring-1" />
+          </div>
+          <div>
+            <label class="block text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2 ml-1">Unique
+              Slug</label>
+            <input id="newStrategySlug" type="text" placeholder="例如：btc-surge-01"
+              class="w-full bg-background-dark border border-surface-border rounded-2xl px-4 py-3 text-sm text-white focus:border-secondary focus:ring-1 font-mono uppercase" />
+          </div>
+          <div>
+            <label class="block text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2 ml-1">Exit Threshold
+              (Min Score to Keep)</label>
+            <input id="newStrategyExitThreshold" type="number" step="1" value="10"
+              class="w-full bg-background-dark border border-surface-border rounded-2xl px-4 py-3 text-sm text-white focus:border-secondary focus:ring-1 font-mono" />
+          </div>
+        </div>
+        <div class="flex gap-4 mt-8">
+          <button id="confirmSaveStrategyBtn"
+            class="px-8 py-3 rounded-2xl bg-secondary text-white font-black text-xs uppercase tracking-widest shadow-lg shadow-secondary/20 hover:brightness-110 transition-all">確認儲存
+            (Confirm)</button>
+          <button id="cancelSaveStrategyBtn"
+            class="px-8 py-3 rounded-2xl bg-surface-border text-slate-400 font-black text-xs uppercase tracking-widest hover:bg-white/5 transition-all">取消
+            (Cancel)</button>
+        </div>
+      </div>
+
+      <!-- Result Visualization -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div class="lg:col-span-2 space-y-8">
+          <div class="bg-surface-dark border border-surface-border rounded-3xl p-8 shadow-xl">
+            <div class="flex items-center justify-between mb-8">
+              <h3 class="text-sm font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                <span class="material-symbols-outlined text-sm text-primary">timeline</span> 分數與價格趨勢
+              </h3>
+            </div>
+            <div class="h-[320px] relative">
+              <canvas id="btScoreChart"></canvas>
+            </div>
+          </div>
+          <div class="bg-surface-dark border border-surface-border rounded-3xl p-8 shadow-xl">
+            <div class="flex items-center justify-between mb-8">
+              <h3 class="text-sm font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                <span class="material-symbols-outlined text-sm text-success">bar_chart</span> 未來收益分析 (Forward Returns)
+              </h3>
+            </div>
+            <div class="h-[240px] relative">
+              <canvas id="btReturnChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div class="space-y-8">
+          <div class="bg-surface-dark border border-surface-border rounded-3xl p-8 shadow-xl flex flex-col min-h-full">
+            <h3 class="text-sm font-bold text-slate-500 uppercase tracking-widest mb-6">回測數據摘要 (Summary)</h3>
+            <div id="btResult"
+              class="bg-background-dark/50 rounded-2xl p-6 border border-surface-border text-sm font-medium leading-relaxed mb-6">
+              尚未執行回測
+            </div>
+
+            <h3 class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-4">事件軌跡 (Recent Hits)</h3>
+            <div id="btEvents" class="space-y-3 flex-1 scrollbar-thin pr-2">
+              <!-- Events list here -->
+            </div>
           </div>
         </div>
       </div>
-      <div id="btEvents" class="grid md:grid-cols-2 gap-3 text-sm"></div>
 
-      <!-- Binance Live Execution Section -->
-      <div class="border-t border-surface-border pt-6 mt-4">
-        <div class="flex items-center justify-between mb-4">
-          <div class="flex items-center gap-2">
-            <span class="material-symbols-outlined text-amber-500">account_balance_wallet</span>
-            <h3 class="text-sm text-slate-400 font-medium uppercase tracking-wider">實盤/測試服觀測 (Binance Live)</h3>
-          </div>
-          <div id="binanceTag"
-            class="px-2 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[10px] font-bold">
-            BINANCE TESTNET</div>
-        </div>
-
-        <div class="grid md:grid-cols-3 gap-4">
-          <!-- Balance Card -->
-          <div class="bg-background-dark/80 border border-surface-border rounded-xl p-4 flex flex-col gap-2">
-            <div class="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Available Balance</div>
-            <div id="binanceBalance" class="text-2xl font-display font-bold text-white leading-none">-- <span
-                class="text-xs font-normal text-slate-500">USDT</span></div>
-            <div id="binanceAssets" class="text-[10px] text-slate-400 font-mono mt-1">Fetching...</div>
-          </div>
-
-          <!-- Execution Card -->
-          <div class="bg-background-dark/80 border border-surface-border rounded-xl p-4 flex flex-col gap-3">
-            <div class="flex items-center justify-between">
-              <div class="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Auto Trading Monitoring</div>
+      <!-- Operational Monitor Section (Bottom) -->
+      <div id="monitoringSection" class="bg-[#0c152a] border border-primary/20 rounded-3xl p-8 shadow-xl">
+        <div class="flex flex-col md:flex-row items-center justify-between gap-8 mb-8">
+          <div class="flex items-center gap-6">
+            <div class="size-16 rounded-3xl bg-primary/5 flex items-center justify-center text-primary relative">
+              <span class="material-symbols-outlined text-4xl">radar</span>
+              <div class="absolute -top-1 -right-1 size-3 bg-primary animate-ping rounded-full opacity-20"></div>
+            </div>
+            <div>
+              <div class="flex items-center gap-4 mb-1">
+                <h3 id="binanceHeaderTitle" class="text-xl font-black italic tracking-tight">連線觀測中心 (Observer)</h3>
+                <span id="binanceTag"
+                  class="px-2 py-0.5 rounded bg-slate-500/10 text-slate-500 border border-slate-500/20 text-[10px] font-bold uppercase tracking-widest">Standalone</span>
+              </div>
               <div id="monitoringStatus"
-                class="flex items-center gap-1.5 text-[10px] uppercase font-bold text-slate-500">
+                class="flex items-center gap-1.5 text-[10px] uppercase font-bold text-slate-500 italic">
                 <div class="size-1.5 rounded-full bg-slate-500"></div> STANDBY
               </div>
             </div>
-
-            <div class="space-y-3">
-              <div class="flex gap-2">
-                <button id="checkExecuteBtn"
-                  class="flex-1 px-4 py-2 rounded bg-primary/20 text-primary border border-primary/40 hover:bg-primary/30 text-xs font-bold transition-all flex items-center justify-center gap-2">
-                  <span class="material-symbols-outlined text-sm">play_arrow</span>
-                  啟動監聽監測 (Start Monitor)
-                </button>
-              </div>
-
-              <div class="flex items-center gap-2 pt-1">
-                <label class="text-[10px] text-slate-400 font-mono flex-1">
-                  MIN BALANCE SECURE (USDT)
-                  <input id="autoStopLimit" type="number" value="1000"
-                    class="w-full mt-1 bg-background-dark border border-surface-border rounded px-2 py-1 text-xs text-white focus:border-danger focus:ring-0" />
-                </label>
-              </div>
-            </div>
-
-            <div class="text-[10px] text-slate-500 border-t border-surface-border/30 pt-2 mt-auto">
-              * 程式將在背景監控走勢，達標即自動交易。低於設定餘額時會自動觸發終止保護。
-            </div>
           </div>
-
-          <!-- Log Card -->
-          <div class="bg-background-dark/80 border border-surface-border rounded-xl p-4 flex flex-col gap-2 relative">
-            <div class="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">Execution Status</div>
-            <div id="executionLog" class="text-xs text-primary font-mono h-14 overflow-hidden mask-fade-bottom">
-              Waiting for user action...
+          <div class="flex items-center gap-8">
+            <div class="text-right">
+              <div class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Account Balance</div>
+              <div id="binanceBalance" class="text-2xl font-black font-mono text-white leading-none">-- <span
+                  class="text-xs font-normal text-slate-500">USDT</span></div>
+              <div id="binanceAssets" class="text-[10px] font-mono text-slate-500 mt-1 uppercase tracking-tighter">
+                Connecting Engine...</div>
             </div>
             <button id="refreshBinanceBtn"
-              class="absolute top-2 right-2 text-slate-500 hover:text-white transition-colors">
-              <span class="material-symbols-outlined text-sm">refresh</span>
+              class="p-3 rounded-2xl bg-white/5 hover:bg-white/10 text-slate-500 hover:text-primary transition-all">
+              <span class="material-symbols-outlined">refresh</span>
+            </button>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start pt-8 border-t border-white/5">
+          <div class="lg:col-span-2 bg-background-dark/50 rounded-2xl p-6 border border-surface-border">
+            <div class="flex items-center justify-between mb-4">
+              <span class="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em]">Execution Log</span>
+            </div>
+            <div id="executionLog"
+              class="h-24 bg-black/40 rounded-xl p-4 font-mono text-xs text-slate-500 overflow-y-auto scrollbar-thin italic">
+              系統待命中... (System Ready)</div>
+          </div>
+          <div class="space-y-4">
+            <div class="bg-background-dark/30 rounded-2xl p-5 border border-surface-border">
+              <label class="text-[10px] text-slate-500 font-bold uppercase tracking-widest block mb-2">止損餘額設定 (Auto Stop
+                USDT)</label>
+              <input id="autoStopLimit" type="number" value="100"
+                class="w-full bg-transparent border-b border-surface-border font-mono text-lg font-bold text-white focus:border-danger transition-all focus:ring-0" />
+            </div>
+            <button id="checkExecuteBtn"
+              class="w-full py-4 rounded-2xl bg-primary/20 text-primary border border-primary/40 hover:bg-primary/30 text-xs font-black uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-2">
+              <span class="material-symbols-outlined text-sm">play_arrow</span> 啟動監聽監測 (Start Monitor)
             </button>
           </div>
         </div>
       </div>
+    </main>
+  </div>
+
+  <!-- Binance Config Modal -->
+  <div id="binanceConfigModal"
+    class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-background-dark/90 backdrop-blur-md hidden transition-all">
+    <div
+      class="bg-surface-dark border border-surface-border rounded-3xl w-full max-w-md p-8 shadow-2xl relative overflow-hidden">
+      <div class="flex items-center justify-between mb-8">
+        <div class="flex items-center gap-4">
+          <div class="size-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary shadow-inner">
+            <span class="material-symbols-outlined text-2xl">api</span>
+          </div>
+          <div>
+            <h2 class="text-2xl font-bold font-display tracking-tight text-white leading-tight">Binance API 設定</h2>
+            <p class="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] font-mono">Channel Configuration
+            </p>
+          </div>
+        </div>
+        <button id="closeBinanceModal"
+          class="p-2 text-slate-400 hover:text-white transition-colors bg-white/5 rounded-lg">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <div class="space-y-4 relative">
+        <div>
+          <label class="block text-[10px] text-slate-500 font-bold uppercase tracking-[0.1em] mb-3 ml-1">選擇系統執行模式
+            (Operational Mode)</label>
+          <div class="grid grid-cols-1 gap-2.5">
+            <button id="modeLiveBtn"
+              class="group flex items-center justify-between px-5 py-4 rounded-2xl border border-surface-border transition-all hover:bg-amber-500/5 hover:border-amber-500/30 text-left">
+              <div class="flex items-center gap-4">
+                <span class="material-symbols-outlined text-amber-500">payments</span>
+                <div class="flex flex-col"><span class="text-sm font-bold text-white leading-none mb-1">正式實盤
+                    (Live)</span><span class="text-[10px] text-slate-500 font-medium">使用真金白銀進行交易</span></div>
+              </div>
+            </button>
+            <button id="modePaperBtn"
+              class="group flex items-center justify-between px-5 py-4 rounded-2xl border border-surface-border transition-all hover:bg-primary/5 hover:border-primary/30 text-left">
+              <div class="flex items-center gap-4">
+                <span class="material-symbols-outlined text-primary">description</span>
+                <div class="flex flex-col"><span class="text-sm font-bold text-white leading-none mb-1">虛擬實盤
+                    (Paper)</span><span class="text-[10px] text-slate-500 font-medium">使用主網行情模擬</span></div>
+              </div>
+            </button>
+            <button id="modeTestBtn"
+              class="group flex items-center justify-between px-5 py-4 rounded-2xl border border-surface-border transition-all hover:bg-secondary/5 hover:border-secondary/30 text-left">
+              <div class="flex items-center gap-4">
+                <span class="material-symbols-outlined text-secondary">science</span>
+                <div class="flex flex-col"><span class="text-sm font-bold text-white leading-none mb-1">測試網
+                    (Testnet)</span><span class="text-[10px] text-slate-500 font-medium font-body">Binance 測試網環境</span>
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
+        <div class="pt-6">
+          <button id="saveBinanceConfig"
+            class="w-full py-4 rounded-2xl bg-primary text-background-dark font-black text-sm uppercase tracking-widest hover:brightness-110 active:scale-95 transition-all">套用模式
+            (Apply)</button>
+        </div>
+      </div>
     </div>
-  </main>
+  </div>
 
   <dialog id="loginModal"
-    class="bg-surface-dark text-white rounded-lg border border-surface-border shadow-neon p-6 w-[420px] max-w-full">
-    <h3 class="text-lg font-bold mb-3">登入</h3>
-    <form id="loginForm" class="space-y-3">
-      <div>
-        <label class="text-xs text-slate-400">Email</label>
+    class="bg-surface-dark text-white rounded-3xl border border-surface-border shadow-2xl p-10 w-[420px] max-w-full backdrop:bg-background-dark/95">
+    <h3
+      class="text-2xl font-black font-display tracking-tight text-center mb-8 uppercase italic border-b border-surface-border pb-4">
+      Auth Required</h3>
+    <form id="loginForm" class="space-y-6">
+      <div class="space-y-1">
+        <label class="text-[10px] text-slate-500 font-bold uppercase tracking-widest ml-1">Administrator Access</label>
         <input id="loginEmail" type="email"
-          class="w-full bg-background-dark border border-surface-border rounded px-3 py-2 text-sm text-white focus:border-primary focus:ring-0"
+          class="w-full bg-background-dark border border-surface-border rounded-2xl px-4 py-4 text-sm text-white focus:border-primary focus:ring-0 font-mono italic"
           value="admin@example.com" required />
       </div>
-      <div>
-        <label class="text-xs text-slate-400">Password</label>
+      <div class="space-y-1">
+        <label class="text-[10px] text-slate-500 font-bold uppercase tracking-widest ml-1">Secure Keyphrase</label>
         <input id="loginPassword" type="password"
-          class="w-full bg-background-dark border border-surface-border rounded px-3 py-2 text-sm text-white focus:border-primary focus:ring-0"
+          class="w-full bg-background-dark border border-surface-border rounded-2xl px-4 py-4 text-sm text-white focus:border-primary focus:ring-0 font-mono tracking-[0.3em]"
           value="password123" required />
       </div>
-      <div class="flex justify-end gap-2 mt-4">
+      <div class="flex gap-3 pt-4">
         <button type="button" id="closeLogin"
-          class="px-3 py-1.5 rounded bg-surface-border text-slate-300 text-xs border border-surface-border hover:border-primary/50">取消</button>
+          class="flex-1 py-4 rounded-2xl bg-surface-border text-slate-400 text-[10px] font-black uppercase tracking-widest hover:bg-white/5 transition-all">Abort</button>
         <button type="submit"
-          class="px-3 py-1.5 rounded bg-primary/80 text-background-dark text-xs font-semibold shadow-neon hover:bg-primary">登入</button>
+          class="flex-[2] py-4 rounded-2xl bg-primary text-background-dark text-xs font-black uppercase tracking-widest shadow-neon-glow hover:brightness-110 active:scale-95 transition-all">Verify</button>
       </div>
     </form>
   </dialog>
 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script type="module" src="./backtest.js"></script>
 </body>
 

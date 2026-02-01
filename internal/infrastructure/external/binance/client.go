@@ -32,6 +32,14 @@ func NewClient(apiKey, apiSecret string, useTestnet bool) *Client {
 	}
 }
 
+func (c *Client) SetBaseURL(useTestnet bool) {
+	if useTestnet {
+		c.baseURL = "https://testnet.binance.vision"
+	} else {
+		c.baseURL = "https://api.binance.com"
+	}
+}
+
 func (c *Client) sign(query string) string {
 	h := hmac.New(sha256.New, []byte(c.apiSecret))
 	h.Write([]byte(query))

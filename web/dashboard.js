@@ -1,4 +1,4 @@
-import { updateExchangeLink } from "./common.js";
+import { updateExchangeLink, initSidebar, initBinanceConfigModal } from "./common.js";
 
 const state = {
   token: localStorage.getItem("aat_token") || "",
@@ -15,6 +15,7 @@ const el = (id) => document.getElementById(id);
 
 function setAlert(message, type = "info") {
   const box = el("alert");
+  if (!box) return; // Robustness
   if (!message) {
     box.classList.add("hidden");
     box.textContent = "";
@@ -79,12 +80,24 @@ function formatDuration(seconds) {
 }
 
 function applyStatus(data) {
-  el("nextRun").textContent = data.next_run ? formatTime(data.next_run).split(" ")[1] || formatTime(data.next_run) : "--";
-  el("retryStrategy").textContent = Array.isArray(data.retry_strategy) ? data.retry_strategy.join(", ") : "--";
-  el("nextRunHuman").textContent = data.next_run ? formatTime(data.next_run) : "";
-  el("syntheticBadge").textContent = data.use_synthetic ? "ACTIVE" : "INACTIVE";
-  el("autoInterval").textContent = data.auto_interval_seconds ? `${Math.round(data.auto_interval_seconds / 60)}m` : "--";
-  el("dataSource").textContent = data.data_source || "--";
+  const nextRun = el("nextRun");
+  if (nextRun) nextRun.textContent = data.next_run ? formatTime(data.next_run).split(" ")[1] || formatTime(data.next_run) : "--";
+
+  const retryStrategy = el("retryStrategy");
+  if (retryStrategy) retryStrategy.textContent = Array.isArray(data.retry_strategy) ? data.retry_strategy.join(", ") : "--";
+
+  const nextRunHuman = el("nextRunHuman");
+  if (nextRunHuman) nextRunHuman.textContent = data.next_run ? formatTime(data.next_run) : "";
+
+  const syntheticBadge = el("syntheticBadge");
+  if (syntheticBadge) syntheticBadge.textContent = data.use_synthetic ? "ACTIVE" : "INACTIVE";
+
+  const autoInterval = el("autoInterval");
+  if (autoInterval) autoInterval.textContent = data.auto_interval_seconds ? `${Math.round(data.auto_interval_seconds / 60)}m` : "--";
+
+  const dataSource = el("dataSource");
+  if (dataSource) dataSource.textContent = data.data_source || "--";
+
   if (data.last_run) applyLastRun(data.last_run);
   applyPermissions();
 }
@@ -94,18 +107,30 @@ function applyLastRun(run) {
   const ingOK = run.ingestion?.success ?? true;
   const anOK = run.analysis?.success ?? true;
   const allOK = ingOK && (!run.analysis?.enabled || anOK);
-  badge.textContent = allOK ? "Success" : "Partial/Error";
-  badge.className = `px-2 py-0.5 rounded text-xs border flex items-center gap-1 ${allOK ? "bg-success/10 text-success border-success/30" : "bg-danger/10 text-danger border-danger/30"}`;
+  if (badge) {
+    badge.textContent = allOK ? "Success" : "Partial/Error";
+    badge.className = `px-2 py-0.5 rounded text-xs border flex items-center gap-1 ${allOK ? "bg-success/10 text-success border-success/30" : "bg-danger/10 text-danger border-danger/30"}`;
+  }
 
-  el("lastStart").textContent = run.start ? formatTime(run.start) : "--";
-  el("lastEnd").textContent = run.end ? formatTime(run.end) : "--";
-  el("lastDuration").textContent = formatDuration(run.duration_seconds || 0);
-  el("lastSucc").textContent = run.analysis?.success_count ?? "--";
-  el("lastFail").textContent = run.analysis?.failure_count ?? (run.failures?.length || 0);
-  const err = run.analysis?.error || run.ingestion?.error || "--";
-  el("lastError").textContent = err || "--";
-  if (run.trading_pair) {
-    el("dataSource").textContent = run.data_source || el("dataSource").textContent;
+  const lastStart = el("lastStart");
+  if (lastStart) lastStart.textContent = run.start ? formatTime(run.start) : "--";
+
+  const lastEnd = el("lastEnd");
+  if (lastEnd) lastEnd.textContent = run.end ? formatTime(run.end) : "--";
+
+  const lastDuration = el("lastDuration");
+  if (lastDuration) lastDuration.textContent = formatDuration(run.duration_seconds || 0);
+
+  const lastSucc = el("lastSucc");
+  if (lastSucc) lastSucc.textContent = run.analysis?.success_count ?? "--";
+
+  const lastFail = el("lastFail");
+  if (lastFail) lastFail.textContent = run.analysis?.failure_count ?? (run.failures?.length || 0);
+
+  const lastError = el("lastError");
+  if (lastError) {
+    const err = run.analysis?.error || run.ingestion?.error || "--";
+    lastError.textContent = err || "--";
   }
 }
 
@@ -203,16 +228,33 @@ async function loadSummary() {
   try {
     console.log("[Dashboard] Loading summary...");
     const res = await api("/api/analysis/summary");
-    el("summaryDate").textContent = res.trade_date || "--";
-    el("summaryPair").textContent = res.trading_pair || "--";
-    el("summaryTrend").textContent = res.trend || "--";
-    el("summaryAdvice").textContent = res.advice || "";
+    const summaryDate = el("summaryDate");
+    if (summaryDate) summaryDate.textContent = res.trade_date || "--";
+
+    const summaryPair = el("summaryPair");
+    if (summaryPair) summaryPair.textContent = res.trading_pair || "--";
+
+    const summaryTrend = el("summaryTrend");
+    if (summaryTrend) summaryTrend.textContent = res.trend || "--";
+
+    const summaryAdvice = el("summaryAdvice");
+    if (summaryAdvice) summaryAdvice.textContent = res.advice || "";
+
     const m = res.metrics || {};
-    el("summaryPrice").textContent = m.close_price ?? "--";
-    el("summaryChange").textContent = m.change_percent != null ? `${(m.change_percent * 100).toFixed(2)}%` : "--";
-    el("summaryReturn5").textContent = m.return_5d != null ? `${(m.return_5d * 100).toFixed(2)}%` : "--";
-    el("summaryVolume").textContent = m.volume_ratio != null ? `${m.volume_ratio.toFixed(2)}x` : "--";
-    el("summaryScore").textContent = m.score != null ? m.score.toFixed(1) : "--";
+    const summaryPrice = el("summaryPrice");
+    if (summaryPrice) summaryPrice.textContent = m.close_price ?? "--";
+
+    const summaryChange = el("summaryChange");
+    if (summaryChange) summaryChange.textContent = m.change_percent != null ? `${(m.change_percent * 100).toFixed(2)}%` : "--";
+
+    const summaryReturn5 = el("summaryReturn5");
+    if (summaryReturn5) summaryReturn5.textContent = m.return_5d != null ? `${(m.return_5d * 100).toFixed(2)}%` : "--";
+
+    const summaryVolume = el("summaryVolume");
+    if (summaryVolume) summaryVolume.textContent = m.volume_ratio != null ? `${m.volume_ratio.toFixed(2)}x` : "--";
+
+    const summaryScore = el("summaryScore");
+    if (summaryScore) summaryScore.textContent = m.score != null ? m.score.toFixed(1) : "--";
   } catch (err) {
     setAlert(`摘要：${err.message}`, "error");
   }
@@ -299,115 +341,142 @@ function logout() {
   console.log("[Auth] Logging out...");
   state.token = "";
   localStorage.removeItem("aat_token");
-  el("loginStatus").textContent = "未登入";
-  el("loginBtn").classList.remove("hidden");
-  el("logoutBtn").classList.add("hidden");
+  const status = el("loginStatus");
+  if (status) status.textContent = "未登入";
+
+  const loginBtn = el("loginBtn");
+  if (loginBtn) loginBtn.classList.remove("hidden");
+
+  const logoutBtn = el("logoutBtn");
+  if (logoutBtn) logoutBtn.classList.add("hidden");
+
   state.role = "";
-  el("roleLabel").textContent = "--";
+  const roleLabel = el("roleLabel");
+  if (roleLabel) roleLabel.textContent = "--";
+
   if (state.pollId) {
     clearInterval(state.pollId);
     state.pollId = null;
   }
-  el("opResult").textContent = "尚未執行";
+  const opResult = el("opResult");
+  if (opResult) opResult.textContent = "尚未執行";
   setAlert("已登出", "info");
 }
 
-function setupClock() {
-  const clock = el("clock");
-  const tick = () => {
-    const now = new Date();
-    clock.textContent = now.toLocaleTimeString("zh-TW", { hour12: false, timeZone: "Asia/Taipei" });
-  };
-  tick();
-  setInterval(tick, 1000);
-}
 
 function setupLoginModal() {
   const dialog = el("loginModal");
-  el("loginBtn").addEventListener("click", () => {
-    dialog.showModal();
-    if (state.lastEmail) el("loginEmail").value = state.lastEmail;
-  });
-  el("closeLogin").addEventListener("click", () => dialog.close());
-  el("loginForm").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    try {
-      await login(el("loginEmail").value, el("loginPassword").value);
-      dialog.close();
-    } catch (err) {
-      setAlert(err.message, "error");
-    }
-  });
-  el("logoutBtn").addEventListener("click", logout);
+  if (!dialog) return;
+
+  const loginBtn = el("loginBtn");
+  if (loginBtn) {
+    loginBtn.addEventListener("click", () => {
+      dialog.showModal();
+      if (state.lastEmail) el("loginEmail").value = state.lastEmail;
+    });
+  }
+
+  const closeLogin = el("closeLogin");
+  if (closeLogin) closeLogin.addEventListener("click", () => dialog.close());
+
+  const loginForm = el("loginForm");
+  if (loginForm) {
+    loginForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      try {
+        await login(el("loginEmail").value, el("loginPassword").value);
+        dialog.close();
+      } catch (err) {
+        setAlert(err.message, "error");
+      }
+    });
+  }
+  const logoutBtn = el("logoutBtn");
+  if (logoutBtn) logoutBtn.addEventListener("click", logout);
 }
 
 function setupActions() {
-  el("rerunBtn").addEventListener("click", async () => {
-    const date = el("rerunDate").value;
-    console.log(`[Action] Rerun ingestion for ${date}`);
-    if (!date) return setAlert("請選擇日期", "error");
-    setBusy("rerunBtn", true, "擷取並分析");
-    try {
-      const res = await api("/api/admin/ingestion/daily", { method: "POST", body: { trade_date: date, run_analysis: true } });
-      setAlert(`已執行 ${date} 擷取+分析`, "success");
-      renderOpResult("單日擷取+分析", res);
-      await loadStatusAndHistory();
-      await Promise.all([loadSummary(), loadAnalysisHistory()]);
-    } catch (err) {
-      setAlert(err.message, "error");
-      renderOpResult("單日擷取+分析", { error: err.message });
-    } finally {
-      setBusy("rerunBtn", false, "擷取並分析");
-    }
-  });
+  const rerunBtn = el("rerunBtn");
+  if (rerunBtn) {
+    rerunBtn.addEventListener("click", async () => {
+      const date = el("rerunDate").value;
+      console.log(`[Action] Rerun ingestion for ${date}`);
+      if (!date) return setAlert("請選擇日期", "error");
+      setBusy("rerunBtn", true, "擷取並分析");
+      try {
+        const res = await api("/api/admin/ingestion/daily", { method: "POST", body: { trade_date: date, run_analysis: true } });
+        setAlert(`已執行 ${date} 擷取+分析`, "success");
+        renderOpResult("單日擷取+分析", res);
+        await loadStatusAndHistory();
+        await Promise.all([loadSummary(), loadAnalysisHistory()]);
+      } catch (err) {
+        setAlert(err.message, "error");
+        renderOpResult("單日擷取+分析", { error: err.message });
+      } finally {
+        setBusy("rerunBtn", false, "擷取並分析");
+      }
+    });
+  }
 
-  el("analysisOnlyBtn").addEventListener("click", async () => {
-    const date = el("rerunDate").value;
-    console.log(`[Action] Run analysis only for ${date}`);
-    if (!date) return setAlert("請選擇日期", "error");
-    setBusy("analysisOnlyBtn", true, "僅分析");
-    try {
-      const res = await api("/api/admin/analysis/daily", { method: "POST", body: { trade_date: date } });
-      setAlert(`已執行 ${date} 單日分析`, "success");
-      renderOpResult("單日分析", res);
-      await loadStatusAndHistory();
-      await Promise.all([loadSummary(), loadAnalysisHistory()]);
-    } catch (err) {
-      setAlert(err.message, "error");
-      renderOpResult("單日分析", { error: err.message });
-    } finally {
-      setBusy("analysisOnlyBtn", false, "僅分析");
-    }
-  });
+  const analysisOnlyBtn = el("analysisOnlyBtn");
+  if (analysisOnlyBtn) {
+    analysisOnlyBtn.addEventListener("click", async () => {
+      const date = el("rerunDate").value;
+      console.log(`[Action] Run analysis only for ${date}`);
+      if (!date) return setAlert("請選擇日期", "error");
+      setBusy("analysisOnlyBtn", true, "僅分析");
+      try {
+        const res = await api("/api/admin/analysis/daily", { method: "POST", body: { trade_date: date } });
+        setAlert(`已執行 ${date} 單日分析`, "success");
+        renderOpResult("單日分析", res);
+        await loadStatusAndHistory();
+        await Promise.all([loadSummary(), loadAnalysisHistory()]);
+      } catch (err) {
+        setAlert(err.message, "error");
+        renderOpResult("單日分析", { error: err.message });
+      } finally {
+        setBusy("analysisOnlyBtn", false, "僅分析");
+      }
+    });
+  }
 
-  el("rangeBtn").addEventListener("click", async () => {
-    const start = el("rangeStart").value;
-    const end = el("rangeEnd").value;
-    console.log(`[Action] Backfill range ${start} ~ ${end}`);
-    if (!start || !end) return setAlert("請選擇起訖日期", "error");
-    setBusy("rangeBtn", true, "回補並分析");
-    try {
-      const res = await api("/api/admin/ingestion/backfill", { method: "POST", body: { start_date: start, end_date: end, run_analysis: true } });
-      setAlert(`已回補 ${start} ~ ${end}`, "success");
-      renderOpResult("區間回補+分析", res);
-      await loadStatusAndHistory();
-      await Promise.all([loadSummary(), loadAnalysisHistory()]);
-    } catch (err) {
-      setAlert(err.message, "error");
-      renderOpResult("區間回補+分析", { error: err.message });
-    } finally {
-      setBusy("rangeBtn", false, "回補並分析");
-    }
-  });
+  const rangeBtn = el("rangeBtn");
+  if (rangeBtn) {
+    rangeBtn.addEventListener("click", async () => {
+      const start = el("rangeStart").value;
+      const end = el("rangeEnd").value;
+      console.log(`[Action] Backfill range ${start} ~ ${end}`);
+      if (!start || !end) return setAlert("請選擇起訖日期", "error");
+      setBusy("rangeBtn", true, "回補並分析");
+      try {
+        const res = await api("/api/admin/ingestion/backfill", { method: "POST", body: { start_date: start, end_date: end, run_analysis: true } });
+        setAlert(`已回補 ${start} ~ ${end}`, "success");
+        renderOpResult("區間回補+分析", res);
+        await loadStatusAndHistory();
+        await Promise.all([loadSummary(), loadAnalysisHistory()]);
+      } catch (err) {
+        setAlert(err.message, "error");
+        renderOpResult("區間回補+分析", { error: err.message });
+      } finally {
+        setBusy("rangeBtn", false, "回補並分析");
+      }
+    });
+  }
 
-  el("refreshSummary").addEventListener("click", () => {
-    loadSummary();
-    loadAnalysisHistory();
-  });
+  const refreshSummary = el("refreshSummary");
+  if (refreshSummary) {
+    refreshSummary.addEventListener("click", () => {
+      loadSummary();
+      loadAnalysisHistory();
+    });
+  }
 
-  el("refreshHistory").addEventListener("click", () => {
-    loadAnalysisHistory();
-  });
+  const refreshHistory = el("refreshHistory");
+  if (refreshHistory) {
+    refreshHistory.addEventListener("click", () => {
+      loadAnalysisHistory();
+    });
+  }
 }
 
 function startPolling() {
@@ -446,17 +515,26 @@ function setBusy(id, busy, labelWhenIdle) {
 
 function bootstrap() {
   updateExchangeLink();
-  setupClock();
+  initSidebar();
+  initBinanceConfigModal();
   setupLoginModal();
   setupActions();
-  el("symbolInput").addEventListener("change", () => {
-    state.symbol = el("symbolInput").value.trim().toUpperCase() || "BTCUSDT";
-    loadAnalysisHistory();
-  });
+  const symbolInput = el("symbolInput");
+  if (symbolInput) {
+    symbolInput.addEventListener("change", () => {
+      state.symbol = symbolInput.value.trim().toUpperCase() || "BTCUSDT";
+      loadAnalysisHistory();
+    });
+  }
   if (state.token) {
-    el("loginStatus").textContent = state.lastEmail ? `已登入：${state.lastEmail}` : "已登入";
-    el("loginBtn").classList.add("hidden");
-    el("logoutBtn").classList.remove("hidden");
+    const status = el("loginStatus");
+    if (status) status.textContent = state.lastEmail ? `已登入：${state.lastEmail}` : "已登入";
+
+    const loginBtn = el("loginBtn");
+    if (loginBtn) loginBtn.classList.add("hidden");
+
+    const logoutBtn = el("logoutBtn");
+    if (logoutBtn) logoutBtn.classList.remove("hidden");
     startPolling();
   }
 }

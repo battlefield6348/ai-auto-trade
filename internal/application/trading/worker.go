@@ -71,8 +71,13 @@ func (w *BackgroundWorker) runOnce() {
 		log.Printf("[Worker] Executing strategy: %s (Slug: %s, Env: %s)", s.Name, s.Slug, s.Env)
 		
 		env := tradingDomain.EnvTest
-		if s.Env == "prod" {
+		switch s.Env {
+		case "prod":
 			env = tradingDomain.EnvProd
+		case "real":
+			env = tradingDomain.EnvReal
+		case "paper":
+			env = tradingDomain.EnvPaper
 		}
 
 		// userID 使用系統預設 admin

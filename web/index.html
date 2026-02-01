@@ -4,14 +4,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>自動化管線與批次管理控制台</title>
+  <title>數據面板 - AI Auto Trade</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
     href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
     rel="stylesheet" />
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script id="tailwind-config">
     tailwind.config = {
       darkMode: "class",
@@ -19,23 +18,17 @@
         extend: {
           colors: {
             primary: "#0ddff2",
-            "primary-dark": "#0abdcf",
             secondary: "#7c3aed",
             "background-dark": "#0A0E1A",
             "surface-dark": "#161b2e",
             "surface-border": "#232d4b",
             success: "#10b981",
-            warning: "#f59e0b",
             danger: "#ef4444",
+            warning: "#f59e0b",
           },
           fontFamily: {
             display: ["Space Grotesk", "sans-serif"],
             body: ["Noto Sans TC", "sans-serif"],
-            mono: ["ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "monospace"],
-          },
-          boxShadow: {
-            neon: "0 0 10px rgba(13, 223, 242, 0.3), 0 0 20px rgba(13, 223, 242, 0.1)",
-            "neon-hover": "0 0 20px rgba(13, 223, 242, 0.6), 0 0 40px rgba(13, 223, 242, 0.2)",
           },
         },
       },
@@ -46,278 +39,408 @@
       font-family: "Space Grotesk", "Noto Sans TC", sans-serif;
     }
 
-    .scrollbar-hide::-webkit-scrollbar {
-      display: none;
+    .sidebar-collapsed {
+      width: 72px !important;
+    }
+
+    .sidebar-collapsed .sidebar-expanded-only {
+      display: none !important;
+    }
+
+    .content-collapsed-padding {
+      padding-left: 72px !important;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar-thumb {
+      background: #232d4b;
+      border-radius: 10px;
     }
   </style>
 </head>
 
-<body
-  class="bg-background-dark text-white min-h-screen flex flex-col antialiased selection:bg-primary selection:text-background-dark">
-  <header class="sticky top-0 z-50 border-b border-surface-border bg-background-dark/80 backdrop-blur-md">
-    <div class="px-6 py-4 flex items-center justify-between">
-      <div class="flex items-center gap-4">
-        <div class="size-8 text-primary flex items-center justify-center rounded bg-primary/10">
+<body class="bg-background-dark text-white min-h-screen flex flex-col antialiased">
+  <!-- Sidebar Start -->
+  <aside id="sidebar"
+    class="fixed top-0 left-0 h-full z-40 bg-[#0E1324] border-r border-surface-border flex flex-col transition-all duration-300 overflow-hidden w-64 lg:translate-x-0 -translate-x-full">
+    <div class="px-6 py-8 flex items-center justify-between">
+      <div class="flex items-center gap-3 sidebar-expanded-only text-primary">
+        <div class="size-8 bg-primary/10 rounded-lg flex items-center justify-center">
           <span class="material-symbols-outlined">hub</span>
         </div>
-        <div>
-          <h1 class="text-xl font-bold tracking-tight text-white uppercase font-display">自動化管線控制台 <span
-              class="text-primary text-sm normal-case ml-2 border border-primary/30 px-2 rounded-full">v2.4</span></h1>
-          <p class="text-xs text-slate-400 font-mono tracking-wider">SYSTEM_ID: AUTO-BTC-BATCH-OPS</p>
+        <div class="flex flex-col">
+          <span class="font-bold font-display tracking-tight text-white leading-none">AI TRADE</span>
+          <span
+            class="text-[10px] text-slate-500 font-mono leading-none tracking-widest mt-1 uppercase">DASHBOARD</span>
         </div>
       </div>
-      <div class="flex items-center gap-4">
-        <div class="hidden md:flex flex-col items-end mr-4 border-r border-surface-border pr-4">
-          <span id="clock" class="text-lg font-bold font-mono leading-none text-primary">--:--:--</span>
-          <span class="text-xs text-slate-400 font-mono">Taipei (UTC+8)</span>
+      <button id="sidebarToggle" class="hidden lg:block p-1.5 hover:bg-white/5 rounded-lg text-slate-400">
+        <span id="sidebarToggleIcon" class="material-symbols-outlined">menu_open</span>
+      </button>
+    </div>
+    <nav class="flex-1 px-3 space-y-1.5 mt-2">
+      <a href="/"
+        class="flex items-center gap-3 px-3 py-3 rounded-xl bg-primary/10 text-primary border border-primary/20 transition-all font-bold">
+        <span class="material-symbols-outlined">dashboard</span>
+        <span class="sidebar-expanded-only text-sm font-bold tracking-tight">數據面板 (Home)</span>
+      </a>
+      <a href="/strategies.html"
+        class="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/5 text-slate-400 hover:text-white transition-all group">
+        <span class="material-symbols-outlined">analytics</span>
+        <span class="sidebar-expanded-only font-medium text-sm">策略管理 (Strategies)</span>
+      </a>
+      <a href="/backtest.html"
+        class="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/5 text-slate-400 hover:text-white transition-all group">
+        <span class="material-symbols-outlined">query_stats</span>
+        <span class="sidebar-expanded-only font-medium text-sm">回測控制台 (Backtest)</span>
+      </a>
+      <a href="/trading.html"
+        class="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/5 text-slate-400 hover:text-white transition-all group">
+        <span class="material-symbols-outlined">rocket_launch</span>
+        <span class="sidebar-expanded-only font-medium text-sm">自動交易 (Trading)</span>
+      </a>
+    </nav>
+    <div class="p-3 border-t border-surface-border space-y-1">
+      <button id="binanceConfigBtn"
+        class="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/5 text-slate-400 hover:text-white transition-all">
+        <span class="material-symbols-outlined text-sm">settings</span>
+        <span class="sidebar-expanded-only font-medium text-sm">API 設定</span>
+      </button>
+      <a id="exchangeLink" href="#" target="_blank"
+        class="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/5 text-slate-400 hover:text-white transition-all">
+        <span class="material-symbols-outlined text-sm">currency_exchange</span>
+        <span class="sidebar-expanded-only font-medium text-sm">前往交易所</span>
+      </a>
+      <div
+        class="sidebar-expanded-only mt-4 px-3 py-2 bg-background-dark/50 rounded-lg border border-surface-border/50">
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Status</span>
+          <span id="roleLabel" class="text-[10px] text-primary">--</span>
         </div>
         <div class="flex items-center gap-2">
-          <a href="/strategies.html"
-            class="px-3 py-1.5 rounded bg-surface-border text-slate-200 text-xs border border-surface-border hover:border-primary/50">策略管理</a>
-          <a href="/backtest.html"
-            class="px-3 py-1.5 rounded bg-surface-border text-slate-200 text-xs border border-surface-border hover:border-primary/50">回測頁</a>
-          <a href="/trading.html"
-            class="px-3 py-1.5 rounded bg-surface-dark-accent border border-primary/30 text-primary text-xs font-bold hover:bg-primary/10 transition-all flex items-center gap-1 shadow-[0_0_10px_rgba(13,223,242,0.2)]">
-            <span class="material-symbols-outlined text-sm">rocket_launch</span>
-            自動交易
-          </a>
-          <!-- Dynamic Exchange Link -->
-          <a id="exchangeLink" href="#" target="_blank"
-            class="px-3 py-1.5 rounded bg-warning/20 text-warning text-xs border border-warning/40 hover:bg-warning/30 transition-all flex items-center gap-1">
-            <span class="material-symbols-outlined text-sm">currency_exchange</span>
-            交易所
-          </a>
-          <span id="loginStatus" class="text-xs text-slate-400">未登入</span>
-          <button id="loginBtn"
-            class="px-3 py-1.5 rounded bg-primary/20 text-primary text-xs border border-primary/40 hover:bg-primary/30">登入</button>
-          <button id="logoutBtn"
-            class="px-3 py-1.5 rounded bg-surface-border text-slate-300 text-xs border border-surface-border hover:border-primary/50 hidden">登出</button>
+          <div class="size-2 rounded-full bg-primary animate-pulse"></div>
+          <span id="loginStatus" class="text-xs text-slate-300 truncate font-mono">未登入</span>
         </div>
       </div>
+      <button id="loginBtn"
+        class="w-full mt-2 flex items-center gap-3 px-3 py-3 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-all font-bold">
+        <span class="material-symbols-outlined">login</span>
+        <span class="sidebar-expanded-only text-sm font-bold">使用者登入</span>
+      </button>
+      <button id="logoutBtn"
+        class="w-full mt-2 hidden items-center gap-3 px-3 py-3 rounded-xl hover:bg-danger/10 text-slate-400 hover:text-danger transition-all">
+        <span class="material-symbols-outlined">logout</span>
+        <span class="sidebar-expanded-only font-medium text-sm">帳號登出</span>
+      </button>
     </div>
+  </aside>
+  <!-- Sidebar End -->
+
+  <div id="content-overlay" class="fixed inset-0 z-30 bg-black/50 hidden lg:hidden"></div>
+  <header
+    class="lg:hidden sticky top-0 z-50 border-b border-surface-border bg-background-dark/80 backdrop-blur-md px-6 py-4 flex items-center justify-between">
+    <button id="mobileToggle" class="p-1 text-primary"><span class="material-symbols-outlined">menu</span></button>
+    <span class="font-bold font-display text-white italic tracking-widest">AI TRADE</span>
+    <div class="w-8"></div>
   </header>
 
-  <main class="flex-1 p-6 md:p-8 max-w-[1600px] mx-auto w-full flex flex-col gap-6">
-    <div id="alert" class="hidden rounded border border-primary/30 bg-primary/10 text-primary px-4 py-3 text-sm"></div>
-
-    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
-      <div class="bg-surface-dark border border-surface-border rounded-lg p-5 flex flex-col relative overflow-hidden">
-        <div class="absolute top-0 right-0 p-3 opacity-10">
-          <span class="material-symbols-outlined text-4xl text-primary">schedule</span>
-        </div>
-        <h3 class="text-slate-400 text-sm font-medium mb-1">排程狀態 (Schedule Status)</h3>
-        <div class="mt-2">
-          <div class="text-sm text-slate-400 mb-1">Next Run</div>
-          <div class="text-2xl font-bold font-mono tracking-tight text-white flex items-center gap-2">
-            <span id="nextRun">--:--</span> <span
-              class="text-xs font-sans text-primary px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20">Taipei</span>
-          </div>
-        </div>
-        <div class="mt-4 pt-3 border-t border-surface-border/50">
-          <div class="flex justify-between items-center text-xs">
-            <span class="text-slate-500">Retry Strategy:</span>
-            <span id="retryStrategy" class="font-mono text-slate-300">--</span>
-          </div>
-          <div class="text-[10px] text-right text-primary mt-1" id="nextRunHuman"></div>
-        </div>
+  <div id="main-content" class="flex-1 transition-all duration-300 lg:pl-64 flex flex-col">
+    <!-- Desktop Horizontal Info Bar -->
+    <div
+      class="hidden lg:flex px-8 py-4 items-center justify-between border-b border-surface-border bg-background-dark/30 backdrop-blur-sm sticky top-0 z-30">
+      <div class="flex items-center gap-2">
+        <span class="material-symbols-outlined text-primary">dashboard</span>
+        <h2 class="text-[10px] font-bold font-display uppercase tracking-[0.2em] text-slate-400">數據面板與管線維運儀表板
+          (Dashboard)</h2>
       </div>
-
-      <div
-        class="lg:col-span-2 bg-surface-dark border border-surface-border rounded-lg p-5 flex flex-col relative overflow-hidden">
-        <div class="flex justify-between items-start mb-4">
-          <h3 class="text-slate-400 text-sm font-medium">最近任務指標 (Latest Task Metrics)</h3>
-          <span id="latestBadge"
-            class="px-2 py-0.5 rounded text-xs bg-slate-500/10 text-slate-300 border border-slate-500/20 flex items-center gap-1">--</span>
-        </div>
-        <div class="grid grid-cols-3 gap-4 font-mono text-sm">
-          <div>
-            <p class="text-slate-500 text-xs">Start / End</p>
-            <p class="text-white mt-1" id="lastStart">--</p>
-            <p class="text-slate-400" id="lastEnd">--</p>
-          </div>
-          <div>
-            <p class="text-slate-500 text-xs">Duration</p>
-            <p class="text-primary mt-1 font-bold" id="lastDuration">--</p>
-          </div>
-          <div>
-            <p class="text-slate-500 text-xs">Success / Fail</p>
-            <div class="flex items-baseline gap-2 mt-1">
-              <span class="text-success font-bold" id="lastSucc">--</span>
-              <span class="text-slate-600">/</span>
-              <span class="text-danger font-bold" id="lastFail">--</span>
-            </div>
-          </div>
-        </div>
-        <div class="mt-auto pt-3 border-t border-surface-border/50 flex items-start gap-2">
-          <span class="material-symbols-outlined text-danger text-sm mt-0.5">error</span>
-          <p class="text-xs text-danger/80 truncate" id="lastError">--</p>
-        </div>
-      </div>
-
-      <div class="bg-surface-dark border border-surface-border rounded-lg p-5 flex flex-col relative overflow-hidden">
-        <div class="absolute top-0 right-0 p-3 opacity-10">
-          <span class="material-symbols-outlined text-4xl text-primary">settings_applications</span>
-        </div>
-        <h3 class="text-slate-400 text-sm font-medium mb-3">資料配置 (Data Config)</h3>
-        <div class="space-y-4">
-          <div class="flex justify-between items-center">
-            <span class="text-sm text-slate-300">Synthetic Mode</span>
-            <div id="syntheticBadge"
-              class="flex items-center gap-2 px-2 py-1 rounded bg-surface-border/50 border border-surface-border text-xs text-slate-400 font-mono">
-              --</div>
-          </div>
-          <div class="flex justify-between items-center">
-            <span class="text-sm text-slate-300">Auto-Interval</span>
-            <span id="autoInterval"
-              class="text-xs font-mono text-primary border border-primary/30 px-2 py-0.5 rounded bg-primary/5">--</span>
-          </div>
-          <div class="flex justify-between items-center">
-            <span class="text-sm text-slate-300">Data Source</span>
-            <span id="dataSource" class="text-xs font-mono text-white">--</span>
-          </div>
+      <div class="flex items-center gap-6">
+        <div id="clock" class="text-xs font-mono text-primary font-bold">00:00:00</div>
+        <div class="h-4 w-px bg-surface-border"></div>
+        <div class="flex items-center gap-2 text-[10px] text-slate-500 uppercase font-bold tracking-widest">
+          <span class="material-symbols-outlined text-xs">info</span>
+          System Online
         </div>
       </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div class="lg:col-span-2 bg-surface-dark border border-surface-border rounded-xl p-6 flex flex-col">
-        <div class="flex items-center justify-between mb-6">
-          <h2 class="text-lg font-bold text-white flex items-center gap-2">
-            <span class="material-symbols-outlined text-primary">build_circle</span>
-            手動操作面板 (Manual Operations)
-          </h2>
+    <main class="flex-1 p-6 lg:p-10 w-full flex flex-col gap-6">
+      <div id="alert" class="hidden rounded border border-primary/30 bg-primary/10 text-primary px-4 py-3 text-sm">
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <!-- Schedule Status -->
+        <div
+          class="bg-surface-dark border border-surface-border rounded-2xl p-6 relative overflow-hidden group shadow-lg">
+          <div class="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+            <span class="material-symbols-outlined text-6xl text-primary">schedule</span>
+          </div>
+          <h3 class="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-4">排程狀態 (Next Run)</h3>
+          <div id="nextRun" class="text-3xl font-black font-mono tracking-tighter text-white">--:--</div>
+          <div id="nextRunHuman" class="text-[10px] text-primary mt-1 font-bold"></div>
+          <div class="mt-4 pt-4 border-t border-surface-border/50">
+            <div class="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">Retry Strategy</div>
+            <div id="retryStrategy" class="text-xs font-mono text-slate-300">--</div>
+          </div>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div class="bg-background-dark/50 rounded-lg p-4 border border-surface-border">
-            <div class="flex justify-between items-start mb-3">
-              <h4 class="text-sm font-bold text-white flex items-center gap-2">
-                <span class="material-symbols-outlined text-sm text-slate-400">calendar_month</span> 單日擷取+分析
-              </h4>
+
+        <!-- Latest Task Metrics -->
+        <div class="lg:col-span-2 bg-surface-dark border border-surface-border rounded-2xl p-6 flex flex-col shadow-lg">
+          <div class="flex justify-between items-start mb-6">
+            <h3 class="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em]">任務指標 (Metrics)</h3>
+            <span id="latestBadge"
+              class="px-2 py-0.5 rounded-full text-[10px] font-black bg-slate-500/10 text-slate-400 border border-slate-500/20 uppercase tracking-widest">--</span>
+          </div>
+          <div class="grid grid-cols-2 md:grid-cols-3 gap-6 font-mono">
+            <div>
+              <p class="text-[10px] text-slate-600 uppercase font-bold tracking-widest mb-1">Execution</p>
+              <p id="lastDuration" class="text-xl font-black text-primary leading-none">--</p>
+              <p id="lastStart" class="text-[10px] text-slate-500 mt-1">--</p>
             </div>
-            <div class="flex gap-2 mb-3">
-              <input id="rerunDate"
-                class="bg-surface-dark border border-surface-border rounded text-xs text-slate-300 px-2 py-1.5 w-full focus:border-primary focus:ring-0"
-                type="date" />
+            <div>
+              <p class="text-[10px] text-slate-600 uppercase font-bold tracking-widest mb-1">Succ / Fail</p>
+              <div class="flex items-baseline gap-2">
+                <span id="lastSucc" class="text-xl font-black text-success leading-none">--</span>
+                <span class="text-slate-700">/</span>
+                <span id="lastFail" class="text-xl font-black text-danger leading-none">--</span>
+              </div>
+              <p id="lastEnd" class="text-[10px] text-slate-500 mt-1">--</p>
             </div>
-            <div class="grid grid-cols-2 gap-2">
-              <button id="rerunBtn"
-                class="w-full py-1.5 rounded bg-surface-border hover:bg-primary/20 hover:text-primary text-xs text-slate-300 transition-colors border border-transparent hover:border-primary/50">擷取並分析</button>
-              <button id="analysisOnlyBtn"
-                class="w-full py-1.5 rounded bg-surface-border hover:bg-secondary/20 hover:text-secondary text-xs text-slate-300 transition-colors border border-transparent hover:border-secondary/50">僅分析</button>
+            <div class="col-span-2 md:col-span-1">
+              <p class="text-[10px] text-slate-600 uppercase font-bold tracking-widest mb-1">Last Error</p>
+              <p id="lastError" class="text-xs font-bold text-slate-400 truncate max-w-full" title="--">--</p>
             </div>
           </div>
-          <div class="bg-background-dark/50 rounded-lg p-4 border border-surface-border">
-            <h4 class="text-sm font-bold text-white flex items-center gap-2 mb-3">
-              <span class="material-symbols-outlined text-sm text-slate-400">candlestick_chart</span> 日期區間回補
+        </div>
+
+        <!-- Data Config -->
+        <div class="bg-surface-dark border border-surface-border rounded-2xl p-6 shadow-lg">
+          <h3 class="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-6">資料配置 (Config)</h3>
+          <div class="space-y-4">
+            <div class="flex justify-between items-center text-xs">
+              <span class="text-slate-500 font-bold uppercase tracking-widest">Synthetic</span>
+              <span id="syntheticBadge" class="font-mono text-white">--</span>
+            </div>
+            <div class="flex justify-between items-center text-xs">
+              <span class="text-slate-500 font-bold uppercase tracking-widest">Interval</span>
+              <span id="autoInterval" class="font-mono text-primary font-bold">--</span>
+            </div>
+            <div class="flex justify-between items-center text-xs">
+              <span class="text-slate-500 font-bold uppercase tracking-widest">Source</span>
+              <span id="dataSource" class="font-mono text-slate-300">--</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Manual Operations -->
+      <div class="bg-surface-dark border border-surface-border rounded-3xl p-8 shadow-2xl relative overflow-hidden">
+        <h2
+          class="text-xl font-black text-white italic border-b border-surface-border pb-6 mb-8 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <span class="material-symbols-outlined text-primary">terminal</span>
+            手動操作面板 (Manual Console)
+          </div>
+          <button id="refreshSummary"
+            class="p-2 hover:bg-white/5 rounded-xl transition-all text-slate-500 hover:text-primary"><span
+              class="material-symbols-outlined">refresh</span></button>
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div
+            class="bg-background-dark/40 rounded-2xl p-6 border border-surface-border group hover:border-primary/50 transition-all">
+            <h4 class="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+              <span class="material-symbols-outlined text-sm">event_repeat</span> 單日重啟
             </h4>
-            <div class="grid grid-cols-2 gap-2 mb-3">
-              <input id="rangeStart"
-                class="bg-surface-dark border border-surface-border rounded text-xs text-slate-300 px-2 py-1.5 w-full focus:border-primary focus:ring-0"
-                type="date" />
-              <input id="rangeEnd"
-                class="bg-surface-dark border border-surface-border rounded text-xs text-slate-300 px-2 py-1.5 w-full focus:border-primary focus:ring-0"
-                type="date" />
+            <input id="rerunDate" type="date"
+              class="w-full bg-surface-dark border border-surface-border rounded-xl px-4 py-2.5 text-sm text-slate-300 focus:border-primary focus:ring-0 mb-4 font-mono transition-all" />
+            <div class="grid grid-cols-2 gap-3">
+              <button id="rerunBtn"
+                class="py-2.5 rounded-xl bg-primary/10 text-primary border border-primary/30 hover:bg-primary hover:text-background-dark text-xs font-black transition-all">擷取分析</button>
+              <button id="analysisOnlyBtn"
+                class="py-2.5 rounded-xl bg-surface-border hover:bg-white/5 text-xs text-slate-300 font-bold transition-all">僅分析</button>
+            </div>
+          </div>
+          <!-- Range Fill -->
+          <div
+            class="bg-background-dark/40 rounded-2xl p-6 border border-surface-border group hover:border-secondary/50 transition-all">
+            <h4 class="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+              <span class="material-symbols-outlined text-sm">date_range</span> 批量回補
+            </h4>
+            <div class="flex gap-2 mb-4">
+              <input id="rangeStart" type="date"
+                class="flex-1 bg-surface-dark border border-surface-border rounded-xl px-3 py-2.5 text-xs text-slate-300 focus:border-secondary focus:ring-0 font-mono transition-all" />
+              <input id="rangeEnd" type="date"
+                class="flex-1 bg-surface-dark border border-surface-border rounded-xl px-3 py-2.5 text-xs text-slate-300 focus:border-secondary focus:ring-0 font-mono transition-all" />
             </div>
             <button id="rangeBtn"
-              class="w-full py-1.5 rounded bg-surface-border hover:bg-primary/20 hover:text-primary text-xs text-slate-300 transition-colors border border-transparent hover:border-primary/50">回補並分析</button>
+              class="w-full py-2.5 rounded-xl bg-secondary/10 text-secondary border border-secondary/30 hover:bg-secondary hover:text-white text-xs font-black transition-all">執行批量分析</button>
+          </div>
+          <!-- Info Row -->
+          <div class="bg-background-dark/40 rounded-2xl p-6 border border-surface-border">
+            <h4 class="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+              <span class="material-symbols-outlined text-sm text-[#24A1DE]">notifications</span> System Status
+            </h4>
+            <div class="space-y-2 text-xs text-slate-500 font-medium">
+              <div class="flex items-center justify-between">
+                <span>Signal Channel:</span>
+                <span class="text-success uppercase font-black font-mono">Online</span>
+              </div>
+              <div id="opResult" class="text-[10px] text-primary/50 font-mono mt-4 italic break-all">Consoling: Idle...
+              </div>
+            </div>
           </div>
         </div>
-        <div id="opResult"
-          class="mt-4 text-xs text-slate-300 border border-surface-border rounded-lg p-3 bg-background-dark/60">尚未執行
-        </div>
       </div>
 
-      <div class="lg:col-span-1 bg-surface-dark border border-surface-border rounded-xl p-6 flex flex-col">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-lg font-bold text-white flex items-center gap-2">
-            <span class="material-symbols-outlined text-[#24A1DE]">send</span>
-            Telegram Notifier
-          </h2>
-        </div>
-        <div class="flex-1 flex flex-col gap-3 text-sm text-slate-300">
-          <div>最近推播：<span id="tgLast">--</span></div>
-          <div>狀態：<span class="text-success">啟用</span></div>
-          <div>Webhook 不另顯示，請直接透過 config.yaml 管控。</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="bg-surface-dark border border-surface-border rounded-xl p-6">
-      <div class="flex items-center justify-between mb-4">
-        <h3 class="text-sm text-slate-400 font-medium">近期執行歷史 (Job History)</h3>
-        <span class="text-xs text-slate-500">最新在前</span>
-      </div>
-      <div id="historyList" class="space-y-3 text-sm"></div>
-    </div>
-
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div class="bg-surface-dark border border-surface-border rounded-xl p-6 flex flex-col gap-3">
-        <div class="flex items-center justify-between">
-          <h3 class="text-sm text-slate-400 font-medium">走勢摘要 (Analysis Summary)</h3>
-          <button id="refreshSummary"
-            class="text-xs px-2 py-1 rounded bg-primary/20 text-primary border border-primary/40 hover:bg-primary/30">重整</button>
-        </div>
-        <div class="text-xs text-slate-400">角色：<span id="roleLabel" class="text-white">--</span></div>
-        <div class="text-xs text-slate-400">日期：<span id="summaryDate" class="text-white">--</span></div>
-        <div class="text-xs text-slate-400">交易對：<span id="summaryPair" class="text-white">--</span></div>
-        <div class="flex items-center gap-2">
-          <span id="summaryTrend" class="text-sm font-bold text-primary">--</span>
-          <span id="summaryAdvice" class="text-xs text-slate-300"></span>
-        </div>
-        <div class="grid grid-cols-2 gap-3 text-sm text-slate-300 font-mono">
-          <div>收盤：<span id="summaryPrice" class="text-white">--</span></div>
-          <div>日漲跌：<span id="summaryChange" class="text-white">--</span></div>
-          <div>近5日：<span id="summaryReturn5" class="text-white">--</span></div>
-          <div>量能倍數：<span id="summaryVolume" class="text-white">--</span></div>
-          <div>分數：<span id="summaryScore" class="text-white">--</span></div>
-        </div>
-      </div>
-      <div class="lg:col-span-2 bg-surface-dark border border-surface-border rounded-xl p-6">
-        <div class="flex items-center justify-between mb-3">
-          <div class="flex items-center gap-3">
-            <h3 class="text-sm text-slate-400 font-medium">近期分析 (最新在前)</h3>
-            <input id="symbolInput"
-              class="bg-surface-border border border-surface-border rounded text-xs text-slate-200 px-2 py-1 focus:border-primary focus:ring-0 w-28"
-              value="BTCUSDT" />
+      <!-- Analysis History Section -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div class="bg-surface-dark border border-surface-border rounded-2xl p-6 flex flex-col gap-4">
+          <h3 class="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em]">分析趨勢摘要 (Daily Trend)</h3>
+          <div class="flex flex-col gap-2 p-4 bg-background-dark/50 rounded-2xl border border-surface-border">
+            <div class="flex items-center justify-between mb-2">
+              <span id="summaryTrend" class="text-3xl font-black text-primary tracking-tighter italic">--</span>
+              <div class="text-right">
+                <div id="summaryPair" class="text-[10px] font-mono text-slate-500">BTCUSDT</div>
+                <div id="summaryDate" class="text-xs font-mono text-slate-300 font-bold tracking-tight">--</div>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-y-3 gap-x-6 text-[11px] text-slate-400 font-mono">
+              <div>PRICE: <span id="summaryPrice" class="text-white font-bold ml-1">--</span></div>
+              <div>SCORE: <span id="summaryScore" class="text-white font-bold ml-1">--</span></div>
+              <div>CHG: <span id="summaryChange" class="text-white font-bold ml-1">--</span></div>
+              <div>5D RET: <span id="summaryReturn5" class="text-white font-bold ml-1 font-sans">--</span></div>
+              <div class="col-span-2">VOL RATIO: <span id="summaryVolume" class="text-white font-bold ml-1">--</span>
+              </div>
+            </div>
           </div>
-          <div class="flex gap-2">
+          <div id="summaryAdvice"
+            class="text-xs text-slate-500 italic leading-relaxed pl-4 border-l-2 border-primary/30 min-h-[4em]">系統分析中...
+          </div>
+        </div>
+        <div class="lg:col-span-2 bg-surface-dark border border-surface-border rounded-3xl p-8 shadow-xl">
+          <div class="flex items-center justify-between mb-8">
+            <div class="flex items-center gap-4">
+              <h3 class="text-lg font-black font-display italic">近期分析軌跡</h3>
+              <input id="symbolInput"
+                class="w-28 bg-background-dark border border-surface-border rounded-full px-4 py-1.5 text-xs text-primary font-black uppercase tracking-widest focus:ring-0 focus:border-primary transition-all"
+                value="BTCUSDT" />
+            </div>
             <button id="refreshHistory"
-              class="text-xs px-2 py-1 rounded bg-primary/20 text-primary border border-primary/40 hover:bg-primary/30">重整</button>
+              class="p-2 hover:bg-white/5 rounded-xl transition-all text-slate-500 hover:text-primary"><span
+                class="material-symbols-outlined">refresh</span></button>
+          </div>
+          <div class="mb-4 grayscale-[0.5] hover:grayscale-0 transition-all h-[180px]">
+            <canvas id="analysisChart"></canvas>
+          </div>
+          <div class="mt-4 border-t border-surface-border/30 pt-4">
+            <div
+              class="flex items-center justify-between text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-3">
+              運行日誌 (Operation Logs)</div>
+            <div id="historyList" class="space-y-2 max-h-[160px] overflow-y-auto scrollbar-thin pr-2">
+              <!-- Job history logs here -->
+            </div>
           </div>
         </div>
-        <div class="mb-4">
-          <canvas id="analysisChart" height="120"></canvas>
-        </div>
-        <div id="analysisList" class="grid md:grid-cols-2 gap-3 text-sm"></div>
       </div>
-    </div>
-  </main>
+    </main>
+  </div>
 
+  <!-- Modals -->
   <dialog id="loginModal"
-    class="bg-surface-dark text-white rounded-lg border border-surface-border shadow-neon p-6 w-[420px] max-w-full">
-    <h3 class="text-lg font-bold mb-3">登入</h3>
-    <form id="loginForm" class="space-y-3">
-      <div>
-        <label class="text-xs text-slate-400">Email</label>
+    class="bg-surface-dark text-white rounded-3xl border border-surface-border shadow-2xl p-10 w-[420px] max-w-full backdrop:bg-background-dark/95">
+    <h3
+      class="text-2xl font-black font-display tracking-tight text-center mb-8 uppercase italic border-b border-surface-border pb-4">
+      Auth Required</h3>
+    <form id="loginForm" class="space-y-6">
+      <div class="space-y-1">
+        <label class="text-[10px] text-slate-500 font-bold uppercase tracking-widest ml-1">Administrator Access</label>
         <input id="loginEmail" type="email"
-          class="w-full bg-background-dark border border-surface-border rounded px-3 py-2 text-sm text-white focus:border-primary focus:ring-0"
+          class="w-full bg-background-dark border border-surface-border rounded-2xl px-4 py-4 text-sm text-white focus:border-primary focus:ring-0 font-mono italic"
           value="admin@example.com" required />
       </div>
-      <div>
-        <label class="text-xs text-slate-400">Password</label>
+      <div class="space-y-1">
+        <label class="text-[10px] text-slate-500 font-bold uppercase tracking-widest ml-1">Secure Keyphrase</label>
         <input id="loginPassword" type="password"
-          class="w-full bg-background-dark border border-surface-border rounded px-3 py-2 text-sm text-white focus:border-primary focus:ring-0"
+          class="w-full bg-background-dark border border-surface-border rounded-2xl px-4 py-4 text-sm text-white focus:border-primary focus:ring-0 font-mono tracking-[0.3em]"
           value="password123" required />
       </div>
-      <div class="flex justify-end gap-2 mt-4">
+      <div class="flex gap-3 pt-4">
         <button type="button" id="closeLogin"
-          class="px-3 py-1.5 rounded bg-surface-border text-slate-300 text-xs border border-surface-border hover:border-primary/50">取消</button>
+          class="flex-1 py-4 rounded-2xl bg-surface-border text-slate-400 text-[10px] font-black uppercase tracking-widest hover:bg-white/5 transition-all">Abort</button>
         <button type="submit"
-          class="px-3 py-1.5 rounded bg-primary/80 text-background-dark text-xs font-semibold shadow-neon hover:bg-primary">登入</button>
+          class="flex-[2] py-4 rounded-2xl bg-primary text-background-dark text-xs font-black uppercase tracking-widest shadow-neon-glow hover:brightness-110 active:scale-95 transition-all">Verify</button>
       </div>
     </form>
   </dialog>
 
+  <div id="binanceConfigModal"
+    class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-background-dark/90 backdrop-blur-md hidden translate-y-0 transition-all">
+    <div
+      class="bg-surface-dark border border-surface-border rounded-3xl w-full max-w-md p-8 shadow-2xl relative overflow-hidden">
+      <div class="flex items-center justify-between mb-8">
+        <div class="flex items-center gap-4">
+          <div class="size-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary shadow-inner">
+            <span class="material-symbols-outlined text-2xl">api</span>
+          </div>
+          <div>
+            <h2 class="text-2xl font-bold font-display tracking-tight text-white leading-tight">Binance API 設定</h2>
+            <p class="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] font-mono">Channel Configuration
+            </p>
+          </div>
+        </div>
+        <button id="closeBinanceModal"
+          class="p-2 text-slate-400 hover:text-white transition-colors bg-white/5 rounded-lg">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <div class="space-y-4 relative">
+        <div>
+          <label class="block text-[10px] text-slate-500 font-bold uppercase tracking-[0.1em] mb-3 ml-1">選擇系統執行模式
+            (Operational Mode)</label>
+          <div class="grid grid-cols-1 gap-2.5">
+            <button id="modeLiveBtn"
+              class="group flex items-center justify-between px-5 py-4 rounded-2xl border border-surface-border transition-all hover:bg-amber-500/5 hover:border-amber-500/30 text-left">
+              <div class="flex items-center gap-4">
+                <span class="material-symbols-outlined text-amber-500">payments</span>
+                <div class="flex flex-col"><span class="text-sm font-bold text-white leading-none mb-1">正式實盤
+                    (Live)</span><span class="text-[10px] text-slate-500 font-medium font-body">使用真金白銀進行交易</span></div>
+              </div>
+            </button>
+            <button id="modePaperBtn"
+              class="group flex items-center justify-between px-5 py-4 rounded-2xl border border-surface-border transition-all hover:bg-primary/5 hover:border-primary/30 text-left">
+              <div class="flex items-center gap-4">
+                <span class="material-symbols-outlined text-primary">description</span>
+                <div class="flex flex-col"><span class="text-sm font-bold text-white leading-none mb-1">虛擬實盤
+                    (Paper)</span><span class="text-[10px] text-slate-500 font-medium font-body">使用實盤價格模擬</span></div>
+              </div>
+            </button>
+            <button id="modeTestBtn"
+              class="group flex items-center justify-between px-5 py-4 rounded-2xl border border-surface-border transition-all hover:bg-secondary/5 hover:border-secondary/30 text-left">
+              <div class="flex items-center gap-4">
+                <span class="material-symbols-outlined text-secondary">science</span>
+                <div class="flex flex-col"><span class="text-sm font-bold text-white leading-none mb-1">測試網
+                    (Testnet)</span><span class="text-[10px] text-slate-500 font-medium font-body">Binance 測試網環境</span>
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
+        <div class="pt-6">
+          <button id="saveBinanceConfig"
+            class="w-full py-4 rounded-2xl bg-primary text-background-dark font-black text-sm uppercase tracking-widest hover:brightness-110 active:scale-95 transition-all">套用模式
+            (Apply)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script type="module" src="./dashboard.js"></script>
 </body>
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"slices"
 	"time"
 
@@ -421,10 +422,24 @@ func (s *Service) handleScoringBuy(ctx context.Context, strat *strategyDomain.Sc
 	if amount <= 0 {
 		amount = 100 // Default 100 USDT
 	}
-	// 執行下單
-	price, executedQty, err := s.ex.PlaceMarketOrderQuote(ctx, strat.BaseSymbol, "buy", amount)
-	if err != nil {
-		return fmt.Errorf("place binance buy order: %w", err)
+	var price float64
+	var executedQty float64
+	var err error
+
+	if env == tradingDomain.EnvPaper {
+		// Paper trading: get real price but don't place real order
+		price, err = s.ex.GetPrice(ctx, strat.BaseSymbol)
+		if err != nil {
+			return fmt.Errorf("paper trade get price: %w", err)
+		}
+		executedQty = amount / price
+		log.Printf("[TRADING] Paper BUY %s at %.2f (Mocked)", strat.BaseSymbol, price)
+	} else {
+		// Real trading (test/prod)
+		price, executedQty, err = s.ex.PlaceMarketOrderQuote(ctx, strat.BaseSymbol, "buy", amount)
+		if err != nil {
+			return fmt.Errorf("place binance buy order: %w", err)
+		}
 	}
 
 	qty := executedQty
@@ -503,11 +518,25 @@ func (s *Service) handleScoringSellCheck(ctx context.Context, strat *strategyDom
 			reason = fmt.Sprintf("觸發策略出場條件 (分數 %.1f >= %.1f)", score, strat.ExitThreshold)
 		}
 	}
-
 	if shouldSell {
-		price, executedQty, err := s.ex.PlaceMarketOrder(ctx, strat.BaseSymbol, "sell", pos.Size)
-		if err != nil {
-			return err
+		var price float64
+		var executedQty float64
+		var err error
+
+		if env == tradingDomain.EnvPaper {
+			// Paper trading
+			price, err = s.ex.GetPrice(ctx, strat.BaseSymbol)
+			if err != nil {
+				return fmt.Errorf("paper trade get price: %w", err)
+			}
+			executedQty = pos.Size
+			log.Printf("[TRADING] Paper SELL %s at %.2f (Mocked)", strat.BaseSymbol, price)
+		} else {
+			// Real trading
+			price, executedQty, err = s.ex.PlaceMarketOrder(ctx, strat.BaseSymbol, "sell", pos.Size)
+			if err != nil {
+				return err
+			}
 		}
 
 		pnl := (price - pos.EntryPrice) * executedQty
@@ -563,9 +592,21 @@ func (s *Service) ClosePositionManually(ctx context.Context, positionID string) 
 		return fmt.Errorf("could not load strategy: %w", err)
 	}
 
-	price, executedQty, err := s.ex.PlaceMarketOrder(ctx, strat.BaseSymbol, "sell", pos.Size)
-	if err != nil {
-		return fmt.Errorf("place market order: %w", err)
+	var price float64
+	var executedQty float64
+
+	if pos.Env == tradingDomain.EnvPaper {
+		price, err = s.ex.GetPrice(ctx, strat.BaseSymbol)
+		if err != nil {
+			return fmt.Errorf("paper trade get price: %w", err)
+		}
+		executedQty = pos.Size
+		log.Printf("[TRADING] Paper Manual SELL %s at %.2f (Mocked)", strat.BaseSymbol, price)
+	} else {
+		price, executedQty, err = s.ex.PlaceMarketOrder(ctx, strat.BaseSymbol, "sell", pos.Size)
+		if err != nil {
+			return fmt.Errorf("place market order: %w", err)
+		}
 	}
 
 	pnl := (price - pos.EntryPrice) * executedQty

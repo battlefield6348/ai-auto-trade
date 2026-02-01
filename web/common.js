@@ -14,7 +14,7 @@ export async function updateExchangeLink() {
         const data = await res.json();
 
         if (data.use_testnet) {
-            link.href = 'https://demo.binance.com/zh-TW/spot';
+            link.href = 'https://demo.binance.com/en/trade/BTC_USDT?type=spot';
             link.innerHTML = '<span class="material-symbols-outlined text-sm">science</span> 模擬交易 (Demo)';
             link.classList.remove('bg-warning/20', 'text-warning', 'border-warning/40', 'hover:bg-warning/30');
             link.classList.add('bg-secondary/20', 'text-secondary', 'border-secondary/40', 'hover:bg-secondary/30');

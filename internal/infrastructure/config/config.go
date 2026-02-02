@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -57,8 +58,8 @@ type TelegramConfig struct {
 }
 
 type BinanceConfig struct {
-	APIKey    string `yaml:"api_key"`
-	APISecret string `yaml:"api_secret"`
+	APIKey     string `yaml:"api_key"`
+	APISecret  string `yaml:"api_secret"`
 	UseTestnet bool   `yaml:"use_testnet"`
 }
 
@@ -77,7 +78,9 @@ func LoadFromFile(path string) (Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return Config{}, fmt.Errorf("parse config yaml: %w", err)
 	}
-	return applyDefaults(cfg), nil
+	cfg = applyDefaults(cfg)
+	cfg = applyEnv(cfg)
+	return cfg, nil
 }
 
 func applyDefaults(cfg Config) Config {
@@ -116,6 +119,45 @@ func applyDefaults(cfg Config) Config {
 	}
 	if cfg.Notifier.Telegram.VolumeRatioMin == 0 {
 		cfg.Notifier.Telegram.VolumeRatioMin = 1.5
+	}
+	return cfg
+}
+
+func applyEnv(cfg Config) Config {
+	if val := os.Getenv("HTTP_ADDR"); val != "" {
+		cfg.HTTP.Addr = val
+	}
+	if val := os.Getenv("DB_DSN"); val != "" {
+		cfg.DB.DSN = val
+	}
+	if val := os.Getenv("AUTH_SECRET"); val != "" {
+		cfg.Auth.Secret = val
+	}
+	if val := os.Getenv("TELEGRAM_TOKEN"); val != "" {
+		cfg.Notifier.Telegram.Token = val
+	}
+	if val := os.Getenv("TELEGRAM_CHAT_ID"); val != "" {
+		if id, err := strconv.ParseInt(val, 10, 64); err == nil {
+			cfg.Notifier.Telegram.ChatID = id
+		}
+	}
+	if val := os.Getenv("TELEGRAM_ENABLED"); val != "" {
+		cfg.Notifier.Telegram.Enabled = (val == "true")
+	}
+	if val := os.Getenv("BINANCE_API_KEY"); val != "" {
+		cfg.Binance.APIKey = val
+	}
+	if val := os.Getenv("BINANCE_API_SECRET"); val != "" {
+		cfg.Binance.APISecret = val
+	}
+	if val := os.Getenv("BINANCE_USE_TESTNET"); val != "" {
+		cfg.Binance.UseTestnet = (val == "true")
+	}
+	if val := os.Getenv("USE_SYNTHETIC"); val != "" {
+		cfg.Ingestion.UseSynthetic = (val == "true")
+	}
+	if val := os.Getenv("AUTO_TRADE_ENABLED"); val != "" {
+		cfg.AutoTrade.Enabled = (val == "true")
 	}
 	return cfg
 }

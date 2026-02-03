@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/joho/godotenv"
 	"gopkg.in/yaml.v3"
 )
 
@@ -70,14 +71,19 @@ type AutoTradeConfig struct {
 
 // LoadFromFile 從 YAML 組態檔載入設定。
 func LoadFromFile(path string) (Config, error) {
+	// 嘗試載入 .env 檔案（如果存在）
+	_ = godotenv.Load()
+
+	var cfg Config
 	data, err := os.ReadFile(path)
-	if err != nil {
+	if err == nil {
+		if err := yaml.Unmarshal(data, &cfg); err != nil {
+			return Config{}, fmt.Errorf("parse config yaml: %w", err)
+		}
+	} else if !os.IsNotExist(err) {
 		return Config{}, fmt.Errorf("read config file: %w", err)
 	}
-	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return Config{}, fmt.Errorf("parse config yaml: %w", err)
-	}
+
 	cfg = applyDefaults(cfg)
 	cfg = applyEnv(cfg)
 	return cfg, nil

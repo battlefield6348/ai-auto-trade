@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -2499,7 +2500,8 @@ func (s *Server) fetchBTCSeries(ctx context.Context, tradeDate time.Time) ([]dat
 		} else {
 			defer resp.Body.Close()
 			if resp.StatusCode != http.StatusOK {
-				lastErr = errors.New("binance response not ok")
+				body, _ := io.ReadAll(resp.Body)
+				lastErr = fmt.Errorf("binance response not ok: status %d, body: %s", resp.StatusCode, string(body))
 			} else {
 				var raw [][]interface{}
 				if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {

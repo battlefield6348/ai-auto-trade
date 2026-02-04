@@ -133,6 +133,9 @@ func applyEnv(cfg Config) Config {
 	if val := os.Getenv("HTTP_ADDR"); val != "" {
 		cfg.HTTP.Addr = val
 	}
+	if val := os.Getenv("PORT"); val != "" {
+		cfg.HTTP.Addr = ":" + val
+	}
 	if val := os.Getenv("DB_DSN"); val != "" {
 		cfg.DB.DSN = val
 	}

@@ -33,6 +33,8 @@ function setAlert(msg, type = "info") {
   box.className = `rounded border px-4 py-3 text-sm ${palette[type] || palette.info}`;
   box.textContent = msg;
   box.classList.remove("hidden");
+  // Scroll to top to ensure user sees the alert
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function authHeaders(requireAuth = true) {
@@ -334,78 +336,85 @@ async function runDbStrategy() {
 }
 
 async function confirmSaveScoringStrategy() {
-  const name = el("newStrategyName").value.trim();
-  const slug = el("newStrategySlug").value.trim();
-  if (!name || !slug) return setAlert("請輸入名稱與代碼", "error");
-
-  const form = readForm();
-  const rules = [];
-  if (el("btUseChange").checked) {
-    rules.push({
-      condition_name: "日漲跌條件",
-      type: "PRICE_RETURN",
-      params: {
-        days: 1,
-        min: (parseFloat(el("btChangeMin").value) || 0) / 100
-      },
-      weight: parseFloat(el("btChangeBonus").value) || 0,
-      rule_type: el("btSideChange").value
-    });
+  const name = el("newStrategyName")?.value.trim();
+  const slug = el("newStrategySlug")?.value.trim();
+  if (!name || !slug) {
+    console.warn("[SaveStrategy] Name or Slug missing");
+    return setAlert("請輸入名稱與代碼", "error");
   }
-  if (el("btUseVolume").checked) {
-    rules.push({
-      condition_name: "量能激增",
-      type: "VOLUME_SURGE",
-      params: {
-        min: parseFloat(el("btVolMin").value) || 0
-      },
-      weight: parseFloat(el("btVolumeBonus").value) || 0,
-      rule_type: el("btSideVolume").value
-    });
-  }
-  if (el("btUseReturn").checked) {
-    rules.push({
-      condition_name: "近5日報酬",
-      type: "PRICE_RETURN",
-      params: {
-        days: 5,
-        min: (parseFloat(el("btRet5Min").value) || 0) / 100
-      },
-      weight: parseFloat(el("btReturnBonus").value) || 0,
-      rule_type: el("btSideReturn").value
-    });
-  }
-  if (el("btUseMa").checked) {
-    rules.push({
-      condition_name: "MA 乖離",
-      type: "MA_DEVIATION",
-      params: {
-        ma: 20,
-        min: (parseFloat(el("btMaGapMin").value) || 0) / 100
-      },
-      weight: parseFloat(el("btMaBonus").value) || 0,
-      rule_type: el("btSideMa").value
-    });
-  }
-
-  const payload = {
-    name: name,
-    slug: slug,
-    threshold: parseFloat(el("btTotalMin").value) || 0,
-    exit_threshold: parseFloat(el("newStrategyExitThreshold").value) || 0,
-    rules: rules
-  };
 
   setBusy("confirmSaveStrategyBtn", true, "儲存中");
   try {
+    const rules = [];
+    if (el("btUseChange").checked) {
+      rules.push({
+        condition_name: "日漲跌條件",
+        type: "PRICE_RETURN",
+        params: {
+          days: 1,
+          min: (parseFloat(el("btChangeMin").value) || 0) / 100
+        },
+        weight: parseFloat(el("btChangeBonus").value) || 0,
+        rule_type: el("btSideChange").value
+      });
+    }
+    if (el("btUseVolume").checked) {
+      rules.push({
+        condition_name: "量能激增",
+        type: "VOLUME_SURGE",
+        params: {
+          min: parseFloat(el("btVolMin").value) || 0
+        },
+        weight: parseFloat(el("btVolumeBonus").value) || 0,
+        rule_type: el("btSideVolume").value
+      });
+    }
+    if (el("btUseReturn").checked) {
+      rules.push({
+        condition_name: "近5日報酬",
+        type: "PRICE_RETURN",
+        params: {
+          days: 5,
+          min: (parseFloat(el("btRet5Min").value) || 0) / 100
+        },
+        weight: parseFloat(el("btReturnBonus").value) || 0,
+        rule_type: el("btSideReturn").value
+      });
+    }
+    if (el("btUseMa").checked) {
+      rules.push({
+        condition_name: "MA 乖離",
+        type: "MA_DEVIATION",
+        params: {
+          ma: 20,
+          min: (parseFloat(el("btMaGapMin").value) || 0) / 100
+        },
+        weight: parseFloat(el("btMaBonus").value) || 0,
+        rule_type: el("btSideMa").value
+      });
+    }
+
+    const payload = {
+      name: name,
+      slug: slug,
+      threshold: parseFloat(el("btTotalMin").value) || 0,
+      exit_threshold: parseFloat(el("newStrategyExitThreshold").value) || 0,
+      rules: rules
+    };
+
+    console.log("[SaveStrategy] Sending payload:", payload);
     await api("/api/analysis/strategies/save-scoring", { method: "POST", body: payload });
     setAlert(`新策略 [${name}] 已成功存入資料庫`, "success");
     el("saveAsStrategyForm").classList.add("hidden");
+
     // Refresh strategy list
     const select = el("btStrategySlug");
-    while (select.options.length > 1) select.remove(1);
+    if (select) {
+      while (select.options.length > 1) select.remove(1);
+    }
     await fetchStrategies();
   } catch (err) {
+    console.error("[SaveStrategy] Failed:", err);
     setAlert(err.message, "error");
   } finally {
     setBusy("confirmSaveStrategyBtn", false, "確認儲存");

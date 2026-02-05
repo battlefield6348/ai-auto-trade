@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 )
 
 type SaveScoringStrategyInput struct {
@@ -36,6 +37,10 @@ func NewSaveScoringStrategyUseCase(db strategyDomain.DBQueryer) *SaveScoringStra
 func (u *SaveScoringStrategyUseCase) Execute(ctx context.Context, input SaveScoringStrategyInput) error {
 	if u.db == nil {
 		return fmt.Errorf("database not available")
+	}
+	// Defensive check for typed nil
+	if reflect.ValueOf(u.db).IsNil() {
+		return fmt.Errorf("database storage not initialized")
 	}
 	// 1. Insert or Update Strategy
 	var strategyID string

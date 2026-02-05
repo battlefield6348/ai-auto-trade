@@ -887,6 +887,10 @@ func (s *Server) handleSlugBacktest(w http.ResponseWriter, r *http.Request) {
 		symbol = "BTCUSDT"
 	}
 
+	if s.scoringBtUC == nil {
+		writeError(w, http.StatusNotFound, errCodeNotFound, "database storage not available")
+		return
+	}
 	res, err := s.scoringBtUC.Execute(r.Context(), body.Slug, symbol, start, end)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
@@ -979,6 +983,10 @@ func (s *Server) handleSaveScoringStrategy(w http.ResponseWriter, r *http.Reques
 	}
 
 	body.UserID = currentUserID(r)
+	if s.saveScoringBtUC == nil {
+		writeError(w, http.StatusNotFound, errCodeNotFound, "database storage not available")
+		return
+	}
 	if err := s.saveScoringBtUC.Execute(r.Context(), body); err != nil {
 		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
 		return

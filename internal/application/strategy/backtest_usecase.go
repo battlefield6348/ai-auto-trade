@@ -3,6 +3,7 @@ package strategy
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sort"
 	"time"
 
@@ -50,6 +51,10 @@ func NewBacktestUseCase(db strategyDomain.DBQueryer, dataProv DataProvider) *Bac
 func (u *BacktestUseCase) Execute(ctx context.Context, slug string, symbol string, start, end time.Time) (*BacktestResult, error) {
 	if u.db == nil {
 		return nil, fmt.Errorf("database not available")
+	}
+	// Defensive check for typed nil
+	if reflect.ValueOf(u.db).IsNil() {
+		return nil, fmt.Errorf("database storage not initialized")
 	}
 	// 1. Load Strategy
 	s, err := strategyDomain.LoadScoringStrategyBySlug(ctx, u.db, slug)

@@ -141,11 +141,13 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 		tradingSvc:    tradingSvc,
 		dataSource:    source,
 		presetStore:   presetStore,
-		scoringBtUC:   appStrategy.NewBacktestUseCase(db, dataRepo),
-		saveScoringBtUC: appStrategy.NewSaveScoringStrategyUseCase(db),
-		binanceClient: binanceClient,
-		defaultEnv:    tradingDomain.EnvTest,
 	}
+	if db != nil {
+		s.scoringBtUC = appStrategy.NewBacktestUseCase(db, dataRepo)
+		s.saveScoringBtUC = appStrategy.NewSaveScoringStrategyUseCase(db)
+	}
+	s.binanceClient = binanceClient
+	s.defaultEnv = tradingDomain.EnvTest
 	if !cfg.Binance.UseTestnet {
 		s.defaultEnv = tradingDomain.EnvProd
 	}

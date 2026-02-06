@@ -158,6 +158,9 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 		if err := seedAuth(ctx, authRepo); err != nil {
 			println("warning: seed auth failed:", err.Error())
 		}
+		if err := seedScoringStrategies(ctx, db); err != nil {
+			println("warning: seed strategies failed:", err.Error())
+		}
 	}
 	s.registerRoutes()
 	if s.tgClient != nil && s.tgConfig.Enabled {

@@ -10,7 +10,8 @@ import (
 	"sort"
 
 	"ai-auto-trade/internal/infrastructure/config"
-	_ "github.com/lib/pq"
+
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 func main() {
@@ -44,7 +45,7 @@ func main() {
 	}
 	sort.Strings(files)
 
-	db, err := sql.Open("postgres", cfg.DB.DSN)
+	db, err := sql.Open("pgx", cfg.DB.DSN)
 	if err != nil {
 		log.Fatalf("連線資料庫失敗: %v", err)
 	}

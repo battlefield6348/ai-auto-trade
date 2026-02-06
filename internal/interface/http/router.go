@@ -34,6 +34,7 @@ type Server struct {
 	mux           *http.ServeMux
 	store         *memory.Store
 	loginUC       *auth.LoginUseCase
+	registerUC    *auth.RegisterUseCase
 	logoutUC      *auth.LogoutUseCase
 	authz         *auth.Authorizer
 	queryUC       *analysis.QueryUseCase
@@ -96,6 +97,7 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 	}
 	tokenSvc := authinfra.NewJWTIssuer(cfg.Auth.Secret, ttl, refreshTTL, sessionStore, authRepo)
 	loginUC := auth.NewLoginUseCase(authRepo, authinfra.BcryptHasher{}, tokenSvc)
+	registerUC := auth.NewRegisterUseCase(authRepo, authinfra.BcryptHasher{})
 	logoutUC := auth.NewLogoutUseCase(tokenSvc)
 	authz := auth.NewAuthorizer(authRepo, memory.OwnerChecker{})
 	queryUC := analysis.NewQueryUseCase(dataRepo)
@@ -124,6 +126,7 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 		mux:           http.NewServeMux(),
 		store:         store,
 		loginUC:       loginUC,
+		registerUC:    registerUC,
 		logoutUC:      logoutUC,
 		authz:         authz,
 		queryUC:       queryUC,
@@ -207,6 +210,7 @@ func (s *Server) registerRoutes() {
 	s.mux.Handle("/api/ping", s.wrapGet(s.handlePing))
 	s.mux.Handle("/api/health", s.wrapGet(s.handleHealth))
 	s.mux.Handle("/api/auth/login", s.wrapPost(s.handleLogin))
+	s.mux.Handle("/api/auth/register", s.wrapPost(s.handleRegister))
 	s.mux.Handle("/api/auth/refresh", s.wrapPost(s.handleRefresh))
 	s.mux.Handle("/api/auth/logout", s.wrapPost(s.handleLogout))
 	s.mux.Handle("/api/admin/ingestion/daily", s.requireAuth(auth.PermIngestionTriggerDaily, s.wrapPost(s.handleIngestionDaily)))

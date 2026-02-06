@@ -60,6 +60,43 @@ LIMIT 1;
 	return u, nil
 }
 
+// Create 建立新使用者並賦予預設角色。
+func (r *AuthRepo) Create(ctx context.Context, u authDomain.User) (string, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+
+	// 1. 建立使用者
+	uid, err := upsertUserTx(ctx, tx, u.Email, u.Name, u.Password)
+	if err != nil {
+		return "", err
+	}
+
+	// 2. 取得或建立使用者角色 ID
+	var roleID string
+	err = tx.QueryRowContext(ctx, "SELECT id FROM roles WHERE name = $1", string(authDomain.RoleUser)).Scan(&roleID)
+	if err != nil {
+		// 若角色不存在則建立一個
+		roleID, err = upsertRoleTx(ctx, tx, string(authDomain.RoleUser))
+		if err != nil {
+			return "", err
+		}
+	}
+
+	// 3. 綁定角色
+	if err := attachRoleTx(ctx, tx, uid, roleID); err != nil {
+		return "", err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return "", err
+	}
+	return uid, nil
+}
+
+
 // SaveSession 寫入 refresh token session。
 func (r *AuthRepo) SaveSession(ctx context.Context, sess authDomain.Session) error {
 	const q = `

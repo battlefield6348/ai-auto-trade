@@ -1,4 +1,4 @@
-import { updateExchangeLink, initBinanceConfigModal, initSidebar } from "./common.js";
+import { updateExchangeLink, initSidebar, initBinanceConfigModal, initAuthModal } from "./common.js";
 
 const state = {
   token: localStorage.getItem("aat_token") || "",
@@ -551,24 +551,18 @@ function logout(silent = false) {
   if (!silent) setAlert("已登出", "info");
 }
 
-function setupLoginModal() {
-  const dialog = el("loginModal");
-  el("loginBtn").addEventListener("click", () => {
-    dialog.showModal();
-    if (state.lastEmail) el("loginEmail").value = state.lastEmail;
+function setupAuth() {
+  initAuthModal((data) => {
+    state.token = data.access_token;
+    state.lastEmail = localStorage.getItem("aat_email");
+
+    // Refresh page to reload strategies and presets for the user
+    window.location.reload();
   });
-  el("closeLogin").addEventListener("click", () => dialog.close());
-  el("loginForm").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    try {
-      await login(el("loginEmail").value, el("loginPassword").value);
-      dialog.close();
-    } catch (err) {
-      setAlert(err.message, "error");
-    }
-  });
+
   el("logoutBtn").addEventListener("click", () => logout());
 }
+
 
 
 
@@ -582,7 +576,8 @@ function bootstrap() {
     window.location.reload();
   };
 
-  setupLoginModal();
+  setupAuth();
+
   el("runBacktestBtn").addEventListener("click", runBacktest);
   el("runDbStrategyBtn").addEventListener("click", runDbStrategy);
   el("saveAsStrategyBtn").addEventListener("click", () => el("saveAsStrategyForm").classList.remove("hidden"));

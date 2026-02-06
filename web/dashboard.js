@@ -1,4 +1,5 @@
-import { updateExchangeLink, initSidebar, initBinanceConfigModal } from "./common.js";
+import { updateExchangeLink, initSidebar, initBinanceConfigModal, initAuthModal } from "./common.js";
+
 
 const state = {
   token: localStorage.getItem("aat_token") || "",
@@ -367,36 +368,24 @@ function logout() {
 }
 
 
-function setupLoginModal() {
-  const dialog = el("loginModal");
-  if (!dialog) return;
+function setupAuth() {
+  initAuthModal((data) => {
+    state.token = data.access_token;
+    state.lastEmail = localStorage.getItem("aat_email");
 
-  const loginBtn = el("loginBtn");
-  if (loginBtn) {
-    loginBtn.addEventListener("click", () => {
-      dialog.showModal();
-      if (state.lastEmail) el("loginEmail").value = state.lastEmail;
-    });
-  }
+    const status = el("loginStatus");
+    if (status) status.textContent = `已登入：${state.lastEmail}`;
 
-  const closeLogin = el("closeLogin");
-  if (closeLogin) closeLogin.addEventListener("click", () => dialog.close());
+    el("loginBtn").classList.add("hidden");
+    el("logoutBtn").classList.remove("hidden");
 
-  const loginForm = el("loginForm");
-  if (loginForm) {
-    loginForm.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      try {
-        await login(el("loginEmail").value, el("loginPassword").value);
-        dialog.close();
-      } catch (err) {
-        setAlert(err.message, "error");
-      }
-    });
-  }
+    startPolling();
+  });
+
   const logoutBtn = el("logoutBtn");
   if (logoutBtn) logoutBtn.addEventListener("click", logout);
 }
+
 
 function setupActions() {
   const rerunBtn = el("rerunBtn");
@@ -520,7 +509,8 @@ function bootstrap() {
   updateExchangeLink();
   initSidebar();
   initBinanceConfigModal();
-  setupLoginModal();
+  setupAuth();
+
   setupActions();
   const symbolInput = el("symbolInput");
   if (symbolInput) {
@@ -544,7 +534,8 @@ function bootstrap() {
 
 bootstrap();
 function applyPermissions() {
-  const restricted = state.role && !["admin", "analyst"].includes(state.role.toLowerCase());
+  const restricted = state.role && !["admin", "analyst", "user"].includes(state.role.toLowerCase());
+
   ["rerunBtn", "analysisOnlyBtn", "rangeBtn"].forEach((id) => {
     const btn = el(id);
     if (!btn) return;

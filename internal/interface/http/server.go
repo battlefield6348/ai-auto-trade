@@ -256,6 +256,32 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+		Name     string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+		return
+	}
+	uid, err := s.registerUC.Execute(r.Context(), auth.RegisterInput{
+		Email:    body.Email,
+		Password: body.Password,
+		Name:     body.Name,
+	})
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"user_id": uid,
+	})
+}
+
 func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie(refreshCookieName)
 	if err != nil || cookie.Value == "" {
@@ -941,7 +967,16 @@ func (s *Server) handleListScoringStrategies(w http.ResponseWriter, r *http.Requ
 		})
 		return
 	}
-	rows, err := s.db.QueryContext(r.Context(), "SELECT id, name, slug, threshold, updated_at FROM strategies WHERE slug IS NOT NULL ORDER BY updated_at DESC")
+	userID := currentUserID(r)
+	// 查詢使用者自己的策略，或者是系統預設策略 (由 admin@example.com 擁有)
+	rows, err := s.db.QueryContext(r.Context(), `
+		SELECT id, name, slug, threshold, updated_at 
+		FROM strategies 
+		WHERE slug IS NOT NULL 
+		AND (user_id = $1 OR user_id = (SELECT id FROM users WHERE email = 'admin@example.com' LIMIT 1))
+		ORDER BY updated_at DESC
+	`, userID)
+
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, errCodeInternal, "failed to query strategies")
 		return

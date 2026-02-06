@@ -80,10 +80,14 @@ func (w *BackgroundWorker) runOnce() {
 			env = tradingDomain.EnvPaper
 		}
 
-		// userID 使用系統預設 admin
-		userID := "00000000-0000-0000-0000-000000000001"
+		// userID 使用策略擁有者的 ID
+		userID := s.UserID
+		if userID == "" {
+			userID = "00000000-0000-0000-0000-000000000001" // Fallback to admin
+		}
 		
 		err := w.svc.ExecuteScoringAutoTrade(ctx, s.Slug, env, userID)
+
 		if err != nil {
 			log.Printf("[Worker] Strategy %s execution failed: %v", s.Slug, err)
 		} else {

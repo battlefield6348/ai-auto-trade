@@ -318,6 +318,43 @@
             </div>
         </div>
     </div>
+    <dialog id="loginModal"
+        class="bg-surface-dark text-white rounded-3xl border border-surface-border shadow-2xl p-10 w-[420px] max-w-full backdrop:bg-background-dark/95">
+        <h3 id="authTitle"
+            class="text-2xl font-black font-display tracking-tight text-center mb-8 uppercase italic border-b border-surface-border pb-4">
+            系統登入 (Login)</h3>
+        <form id="authForm" class="space-y-6">
+            <div id="nameField" class="space-y-1 hidden">
+                <label class="text-[10px] text-slate-500 font-bold uppercase tracking-widest ml-1">Display Name
+                    (Optional)</label>
+                <input id="authName" type="text"
+                    class="w-full bg-background-dark border border-surface-border rounded-2xl px-4 py-4 text-sm text-white focus:border-primary focus:ring-0 font-mono italic"
+                    placeholder="your Name" />
+            </div>
+            <div class="space-y-1">
+                <label class="text-[10px] text-slate-500 font-bold uppercase tracking-widest ml-1">Access Email</label>
+                <input id="authEmail" type="email"
+                    class="w-full bg-background-dark border border-surface-border rounded-2xl px-4 py-4 text-sm text-white focus:border-primary focus:ring-0 font-mono italic"
+                    placeholder="admin@example.com" required />
+            </div>
+            <div class="space-y-1">
+                <label class="text-[10px] text-slate-500 font-bold uppercase tracking-widest ml-1">Secure
+                    Passphrase</label>
+                <input id="authPassword" type="password"
+                    class="w-full bg-background-dark border border-surface-border rounded-2xl px-4 py-4 text-sm text-white focus:border-primary focus:ring-0 font-mono tracking-[0.3em]"
+                    placeholder="password" required />
+            </div>
+            <div class="flex gap-3 pt-4">
+                <button type="button" id="closeAuth"
+                    class="flex-1 py-4 rounded-2xl bg-surface-border text-slate-400 text-[10px] font-black uppercase tracking-widest hover:bg-white/5 transition-all">Abort</button>
+                <button type="submit" id="authSubmit"
+                    class="flex-[2] py-4 rounded-2xl bg-primary text-background-dark text-xs font-black uppercase tracking-widest shadow-neon-glow hover:brightness-110 active:scale-95 transition-all">Verify</button>
+            </div>
+            <p class="text-center text-[10px] text-slate-500 mt-4">
+                <a href="#" id="toggleAuthMode" class="text-primary hover:underline">還沒有帳號？點此註冊 (Register)</a>
+            </p>
+        </form>
+    </dialog>
 
     <script type="module" src="./trading.js"></script>
 </body>

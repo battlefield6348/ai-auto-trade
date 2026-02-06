@@ -142,12 +142,39 @@ func (s *Store) FindByID(ctx context.Context, id string) (authDomain.User, error
 	return u, nil
 }
 
+// Create 建立新使用者並賦予預設角色。
+func (s *Store) Create(ctx context.Context, u authDomain.User) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, user := range s.users {
+		if user.Email == u.Email {
+			return "", fmt.Errorf("user already exists")
+		}
+	}
+
+	id := s.nextID()
+	u.ID = id
+	if u.Role == "" {
+		u.Role = authDomain.RoleUser
+	}
+	u.Status = authDomain.StatusActive
+	s.users[id] = u
+	return id, nil
+}
+
+
 // PasswordHasher impl (plain compare for MVP).
 type PlainHasher struct{}
 
 func (PlainHasher) Compare(hashed, plain string) bool {
 	return hashed == plain
 }
+
+func (PlainHasher) Hash(plain string) (string, error) {
+	return plain, nil
+}
+
 
 // TokenIssuer impl.
 type MemoryTokenIssuer struct {

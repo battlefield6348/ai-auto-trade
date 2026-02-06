@@ -183,3 +183,75 @@ export function initSidebar() {
         setInterval(tick, 1000);
     }
 }
+
+export function initAuthModal(onSuccess) {
+    const dialog = document.getElementById("loginModal");
+    const openBtn = document.getElementById("loginBtn");
+    const closeBtn = document.getElementById("closeAuth");
+    const authForm = document.getElementById("authForm");
+    const toggleMode = document.getElementById("toggleAuthMode");
+    const nameField = document.getElementById("nameField");
+    const authTitle = document.getElementById("authTitle");
+    const authSubmit = document.getElementById("authSubmit");
+
+    if (!dialog || !authForm) return;
+
+    let isRegister = false;
+
+    if (openBtn) openBtn.onclick = () => dialog.showModal();
+    if (closeBtn) closeBtn.onclick = () => dialog.close();
+
+    if (toggleMode) {
+        toggleMode.onclick = (e) => {
+            e.preventDefault();
+            isRegister = !isRegister;
+            if (isRegister) {
+                authTitle.textContent = "建立新帳號 (Register)";
+                nameField.classList.remove("hidden");
+                authSubmit.textContent = "註冊並登入";
+                toggleMode.textContent = "已有帳號？點此登入 (Login)";
+            } else {
+                authTitle.textContent = "系統登入 (Login)";
+                nameField.classList.add("hidden");
+                authSubmit.textContent = "Verify";
+                toggleMode.textContent = "還沒有帳號？點此註冊 (Register)";
+            }
+        };
+    }
+
+    authForm.onsubmit = async (e) => {
+        e.preventDefault();
+        const email = document.getElementById("authEmail").value;
+        const password = document.getElementById("authPassword").value;
+        const name = document.getElementById("authName")?.value;
+
+        try {
+            if (isRegister) {
+                const regRes = await fetch("/api/auth/register", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email, password, name }),
+                });
+                const regData = await regRes.json();
+                if (!regRes.ok) throw new Error(regData.message || regData.error || "註冊失敗");
+            }
+
+            // 無論是登入還是註冊後，都執行登入
+            const res = await fetch("/api/auth/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email, password }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.message || data.error || "登入失敗");
+
+            localStorage.setItem("aat_token", data.access_token);
+            localStorage.setItem("aat_email", email);
+            dialog.close();
+            if (onSuccess) onSuccess(data);
+        } catch (err) {
+            alert(err.message);
+        }
+    };
+}
+

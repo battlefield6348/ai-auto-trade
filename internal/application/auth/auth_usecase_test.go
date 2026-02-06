@@ -28,11 +28,22 @@ func (f fakeUserRepo) FindByID(_ context.Context, _ string) (domain.User, error)
 	return f.user, nil
 }
 
+func (f fakeUserRepo) Create(_ context.Context, _ domain.User) (string, error) {
+	if f.err != nil {
+		return "", f.err
+	}
+	return f.user.ID, nil
+}
+
+
 type fakeHasher struct {
 	match bool
 }
 
 func (f fakeHasher) Compare(_, _ string) bool { return f.match }
+
+func (f fakeHasher) Hash(plain string) (string, error) { return "hashed-" + plain, nil }
+
 
 type fakeTokens struct {
 	pair    domain.TokenPair

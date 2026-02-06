@@ -14,11 +14,13 @@ import (
 type UserRepository interface {
 	FindByEmail(ctx context.Context, email string) (auth.User, error)
 	FindByID(ctx context.Context, id string) (auth.User, error)
+	Create(ctx context.Context, user auth.User) (string, error)
 }
 
 // PasswordHasher 驗證密碼。
 type PasswordHasher interface {
 	Compare(hashed, plain string) bool
+	Hash(plain string) (string, error)
 }
 
 // TokenIssuer 簽發/驗證 token。
@@ -75,12 +77,18 @@ var RolePermissions = map[auth.Role][]Permission{
 		PermAnalysisTriggerDaily,
 	},
 	auth.RoleUser: {
+		PermSystemHealth,
 		PermScreener,
 		PermScreenerUse,
 		PermAnalysisQuery,
 		PermStrategy,
 		PermSubscription,
+		PermIngestionTriggerDaily,
+		PermIngestionTriggerBackfill,
+		PermAnalysisTriggerDaily,
 	},
+
+
 	auth.RoleService: {
 		PermInternalAPI,
 		PermSystemHealth,
@@ -177,6 +185,55 @@ func (uc *LoginUseCase) Execute(ctx context.Context, input LoginInput) (LoginRes
 	out.Token = token
 	return out, nil
 }
+
+// RegisterUseCase 處理註冊邏輯。
+type RegisterUseCase struct {
+	users  UserRepository
+	hasher PasswordHasher
+}
+
+func NewRegisterUseCase(users UserRepository, hasher PasswordHasher) *RegisterUseCase {
+	return &RegisterUseCase{users: users, hasher: hasher}
+}
+
+type RegisterInput struct {
+	Email    string
+	Password string
+	Name     string
+}
+
+func (uc *RegisterUseCase) Execute(ctx context.Context, input RegisterInput) (string, error) {
+	email := strings.TrimSpace(strings.ToLower(input.Email))
+	if email == "" || input.Password == "" {
+		return "", errors.New("email and password required")
+	}
+
+	// 檢查是否已存在
+	_, err := uc.users.FindByEmail(ctx, email)
+	if err == nil {
+		return "", errors.New("user already exists")
+	}
+
+	hashed, err := uc.hasher.Hash(input.Password)
+	if err != nil {
+		return "", fmt.Errorf("hash password: %w", err)
+	}
+
+	name := input.Name
+	if name == "" {
+		name = strings.Split(email, "@")[0]
+	}
+
+	uid, err := uc.users.Create(ctx, auth.User{
+		Email:    email,
+		Password: hashed,
+		Name:     name,
+		Role:     auth.RoleUser,
+		Status:   auth.StatusActive,
+	})
+	return uid, err
+}
+
 
 // LogoutUseCase 處理 refresh token 作廢。
 type LogoutUseCase struct {

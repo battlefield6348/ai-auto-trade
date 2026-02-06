@@ -15,6 +15,7 @@ import (
 // but here we align it with the DB schema requested.
 type ScoringStrategy struct {
 	ID        string         `json:"id" db:"id"`
+	UserID    string         `json:"user_id" db:"user_id"`
 	Name      string         `json:"name" db:"name"`
 	Slug      string         `json:"slug" db:"slug"`
 	BaseSymbol string        `json:"base_symbol" db:"base_symbol"`
@@ -83,14 +84,15 @@ func loadScoringStrategy(ctx context.Context, db DBQueryer, field, value string)
 	// 1. Fetch the base Strategy
 	s := &ScoringStrategy{}
 	strategyQuery := fmt.Sprintf(`
-		SELECT id, name, slug, base_symbol, threshold, exit_threshold, is_active, env, risk_settings, created_at, updated_at
+		SELECT id, user_id, name, slug, base_symbol, threshold, exit_threshold, is_active, env, risk_settings, created_at, updated_at
 		FROM strategies
 		WHERE %s = $1
 	`, field)
 	var riskRaw []byte
 	err := db.QueryRowContext(ctx, strategyQuery, value).Scan(
-		&s.ID, &s.Name, &s.Slug, &s.BaseSymbol, &s.Threshold, &s.ExitThreshold, &s.IsActive, &s.Env, &riskRaw, &s.CreatedAt, &s.UpdatedAt,
+		&s.ID, &s.UserID, &s.Name, &s.Slug, &s.BaseSymbol, &s.Threshold, &s.ExitThreshold, &s.IsActive, &s.Env, &riskRaw, &s.CreatedAt, &s.UpdatedAt,
 	)
+
 	if err == nil && len(riskRaw) > 0 {
 		_ = json.Unmarshal(riskRaw, &s.Risk)
 	}

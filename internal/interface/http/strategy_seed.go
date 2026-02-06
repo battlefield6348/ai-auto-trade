@@ -94,13 +94,20 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 		for _, r := range s.Rules {
 			paramsBytes, _ := json.Marshal(r.Params)
 			var cid string
-			// 這裡利用 0010 建立的唯一索引來避免重複 condition
+			// 1. Check if condition exists
 			err = db.QueryRowContext(ctx, `
-				INSERT INTO conditions (name, type, params)
-				VALUES ($1, $2, $3)
-				ON CONFLICT (name, type, params) DO UPDATE SET name = EXCLUDED.name
-				RETURNING id
+				SELECT id FROM conditions WHERE name = $1 AND type = $2 AND params = $3
 			`, r.Name, r.Type, paramsBytes).Scan(&cid)
+
+			if err == sql.ErrNoRows {
+				// 2. Insert if not exists
+				err = db.QueryRowContext(ctx, `
+					INSERT INTO conditions (name, type, params)
+					VALUES ($1, $2, $3)
+					RETURNING id
+				`, r.Name, r.Type, paramsBytes).Scan(&cid)
+			}
+
 			if err != nil {
 				log.Printf("[Seed] Condition %s failed: %v", r.Name, err)
 				continue
@@ -109,7 +116,9 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 			_, err = db.ExecContext(ctx, `
 				INSERT INTO strategy_rules (strategy_id, condition_id, weight, rule_type)
 				VALUES ($1, $2, $3, 'entry')
+				ON CONFLICT DO NOTHING
 			`, sid, cid, r.Weight)
+
 			if err != nil {
 				log.Printf("[Seed] Link rule %s to %s failed: %v", r.Name, s.Slug, err)
 			}

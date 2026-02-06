@@ -2538,6 +2538,7 @@ func (s *Server) fetchBTCSeries(ctx context.Context, tradeDate time.Time) ([]dat
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		client := &http.Client{Timeout: 10 * time.Second}
 		resp, err := client.Do(req)
+
 		if err != nil {
 			lastErr = err
 		} else {

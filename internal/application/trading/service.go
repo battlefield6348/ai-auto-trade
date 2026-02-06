@@ -361,7 +361,8 @@ func (s *Service) ExecuteScoringAutoTrade(ctx context.Context, slug string, env 
 		return fmt.Errorf("load scoring strategy: %w", err)
 	}
 
-	if strat.Risk.AutoStopMinBalance > 0 {
+	// 1.5 如果是 Paper 模式，略過實體餘額檢查
+	if env != tradingDomain.EnvPaper && strat.Risk.AutoStopMinBalance > 0 {
 		balance, berr := s.ex.GetBalance(ctx, "USDT")
 		if berr == nil && balance < strat.Risk.AutoStopMinBalance {
 			_ = s.repo.SetStatus(ctx, strat.ID, tradingDomain.StatusDraft, env)
@@ -370,6 +371,7 @@ func (s *Service) ExecuteScoringAutoTrade(ctx context.Context, slug string, env 
 			return fmt.Errorf("balance %.2f below limit %.2f", balance, strat.Risk.AutoStopMinBalance)
 		}
 	}
+
 
 	// 2. 獲取最新行情分析 (取得最後 1 天的結果)
 	results, err := s.data.FindHistory(ctx, strat.BaseSymbol, nil, nil, 1, true)

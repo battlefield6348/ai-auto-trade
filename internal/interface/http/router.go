@@ -59,8 +59,11 @@ type Server struct {
 	saveScoringBtUC *appStrategy.SaveScoringStrategyUseCase
 	binanceClient   *binance.Client
 	defaultEnv      tradingDomain.Environment
+
+
 	configMu       sync.Mutex
 }
+
 
 // NewServer 建立 API 伺服器，預設使用記憶體資料存儲；若 db 未來可用，再注入對應 repository。
 func NewServer(cfg config.Config, db *sql.DB) *Server {
@@ -103,6 +106,8 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 	queryUC := analysis.NewQueryUseCase(dataRepo)
 	
 	binanceClient := binance.NewClient(cfg.Binance.APIKey, cfg.Binance.APISecret, cfg.Binance.UseTestnet)
+
+
 	binanceAdapter := binance.NewExchangeAdapter(binanceClient)
 	
 	var tgClient *notify.TelegramClient
@@ -145,6 +150,8 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 		dataSource:    source,
 		presetStore:   presetStore,
 	}
+
+
 	if db != nil {
 		s.scoringBtUC = appStrategy.NewBacktestUseCase(db, dataRepo)
 		s.saveScoringBtUC = appStrategy.NewSaveScoringStrategyUseCase(db)

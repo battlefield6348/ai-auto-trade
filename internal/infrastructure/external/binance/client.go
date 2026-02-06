@@ -32,6 +32,8 @@ func NewClient(apiKey, apiSecret string, useTestnet bool) *Client {
 	}
 }
 
+
+
 func (c *Client) SetBaseURL(useTestnet bool) {
 	if useTestnet {
 		c.baseURL = "https://testnet.binance.vision"

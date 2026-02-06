@@ -64,6 +64,7 @@ type BinanceConfig struct {
 	UseTestnet bool   `yaml:"use_testnet"`
 }
 
+
 type AutoTradeConfig struct {
 	Enabled  bool          `yaml:"enabled"`
 	Interval time.Duration `yaml:"interval"`
@@ -162,6 +163,8 @@ func applyEnv(cfg Config) Config {
 	if val := os.Getenv("BINANCE_USE_TESTNET"); val != "" {
 		cfg.Binance.UseTestnet = (val == "true")
 	}
+
+
 	if val := os.Getenv("USE_SYNTHETIC"); val != "" {
 		cfg.Ingestion.UseSynthetic = (val == "true")
 	}

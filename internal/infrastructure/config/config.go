@@ -165,6 +165,14 @@ func applyEnv(cfg Config) Config {
 	if val := os.Getenv("USE_SYNTHETIC"); val != "" {
 		cfg.Ingestion.UseSynthetic = (val == "true")
 	}
+	if val := os.Getenv("BACKFILL_START_DATE"); val != "" {
+		cfg.Ingestion.BackfillStartDate = val
+	}
+	if val := os.Getenv("AUTO_INTERVAL"); val != "" {
+		if d, err := time.ParseDuration(val); err == nil {
+			cfg.Ingestion.AutoInterval = d
+		}
+	}
 	if val := os.Getenv("AUTO_TRADE_ENABLED"); val != "" {
 		cfg.AutoTrade.Enabled = (val == "true")
 	}

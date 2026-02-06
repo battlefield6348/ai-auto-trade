@@ -21,7 +21,7 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-
+	log.Printf("testing database connection...")
 	pool, err := db.Connect(ctx, cfg.DB)
 	if err != nil {
 		log.Printf("warning: database connection failed, falling back to in-memory store: %v", err)

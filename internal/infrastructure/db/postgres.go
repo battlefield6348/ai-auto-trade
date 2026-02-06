@@ -34,5 +34,13 @@ func Connect(ctx context.Context, cfg config.DBConfig) (*sql.DB, error) {
 		db.Close()
 		return nil, err
 	}
+
+	// Verify responsiveness with a simple query
+	var now time.Time
+	if err := db.QueryRowContext(pingCtx, "SELECT NOW()").Scan(&now); err != nil {
+		db.Close()
+		return nil, err
+	}
+
 	return db, nil
 }

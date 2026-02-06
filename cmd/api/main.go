@@ -24,7 +24,7 @@ func main() {
 	log.Printf("testing database connection...")
 	pool, err := db.Connect(ctx, cfg.DB)
 	if err != nil {
-		log.Printf("warning: database connection failed, falling back to in-memory store: %v", err)
+		log.Fatalf("CRITICAL: database connection failed: %v", err)
 	} else if pool == nil {
 		log.Printf("no DB_DSN provided; running with in-memory store only")
 	} else {

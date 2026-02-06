@@ -1,6 +1,6 @@
 # Binaries
-api
-migrate
+/ai-auto-trade
+/migrate
 *.exe
 *.test
 

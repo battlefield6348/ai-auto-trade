@@ -136,6 +136,7 @@ function applyLastRun(run) {
 
 function applyJobHistory(list) {
   const container = el("historyList");
+  if (!container) return;
   container.innerHTML = "";
   if (!list || list.length === 0) {
     container.innerHTML = '<p class="text-slate-500 text-sm">暫無歷史紀錄</p>';
@@ -266,6 +267,7 @@ async function loadAnalysisHistory() {
     const hist = await api(`/api/analysis/history?symbol=${encodeURIComponent(state.symbol)}&limit=30`);
     const items = hist.items || [];
     const box = el("analysisList");
+    if (!box) return;
     box.innerHTML = "";
     if (items.length === 0) {
       box.innerHTML = '<p class="text-slate-500 text-sm">尚無分析紀錄</p>';
@@ -296,6 +298,7 @@ async function loadAnalysisHistory() {
 function renderChart(items) {
   if (!Array.isArray(items) || items.length === 0 || typeof Chart === "undefined") return;
   const ctx = el("analysisChart");
+  if (!ctx) return;
   const labels = items.map((i) => i.trade_date).reverse();
   const closeData = items.map((i) => i.close_price).reverse();
   const scoreData = items.map((i) => i.score).reverse();

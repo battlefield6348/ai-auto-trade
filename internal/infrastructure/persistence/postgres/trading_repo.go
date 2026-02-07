@@ -203,6 +203,11 @@ FROM strategies
 
 func (r *TradingRepo) SetStatus(ctx context.Context, id string, status tradingDomain.Status, env tradingDomain.Environment) error {
 	isActive := status == tradingDomain.StatusActive
+	if env == "" {
+		const q = `UPDATE strategies SET status=$1, is_active=$2, updated_at=NOW() WHERE id=$3;`
+		_, err := r.db.ExecContext(ctx, q, string(status), isActive, id)
+		return err
+	}
 	const q = `UPDATE strategies SET status=$1, env=$2, is_active=$3, updated_at=NOW() WHERE id=$4;`
 	_, err := r.db.ExecContext(ctx, q, string(status), string(env), isActive, id)
 	return err

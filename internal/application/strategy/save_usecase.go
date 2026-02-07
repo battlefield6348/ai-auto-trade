@@ -42,6 +42,25 @@ func (u *SaveScoringStrategyUseCase) Execute(ctx context.Context, input SaveScor
 	if reflect.ValueOf(u.db).IsNil() {
 		return fmt.Errorf("database storage not initialized")
 	}
+
+	// 0. Validate rules: Must have at least one entry and one exit
+	hasEntry := false
+	hasExit := false
+	for _, r := range input.Rules {
+		if r.RuleType == "entry" || r.RuleType == "" || r.RuleType == "both" {
+			hasEntry = true
+		}
+		if r.RuleType == "exit" || r.RuleType == "both" {
+			hasExit = true
+		}
+	}
+	if !hasEntry {
+		return fmt.Errorf("策略必須包含至少一個進場規則 (entry)")
+	}
+	if !hasExit {
+		return fmt.Errorf("策略必須包含至少一個出場規則 (exit)")
+	}
+
 	// 1. Insert or Update Strategy
 	var strategyID string
 	err := u.db.QueryRowContext(ctx, `

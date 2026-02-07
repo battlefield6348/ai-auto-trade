@@ -45,6 +45,7 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 				{Type: "PRICE_RETURN", Name: "5日漲幅 > 5%", Params: map[string]interface{}{"days": 5.0, "min": 0.05}, Weight: 4.0, RuleType: "entry"},
 				{Type: "VOLUME_SURGE", Name: "成交量倍數 > 1.5", Params: map[string]interface{}{"min": 1.5}, Weight: 3.0, RuleType: "entry"},
 				{Type: "MA_DEVIATION", Name: "價格在20日均線上 (MA20 > 0%)", Params: map[string]interface{}{"ma": 20.0, "min": 0.0}, Weight: 3.0, RuleType: "entry"},
+				{Type: "PRICE_RETURN", Name: "日跌幅 > 3% (止損)", Params: map[string]interface{}{"days": 1.0, "min": -0.03}, Weight: 1.0, RuleType: "exit"},
 			},
 		},
 		{
@@ -60,6 +61,7 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 			}{
 				{Type: "VOLUME_SURGE", Name: "巨大成交量 > 2.0", Params: map[string]interface{}{"min": 2.0}, Weight: 6.0, RuleType: "entry"},
 				{Type: "PRICE_RETURN", Name: "當日收紅 (> 0%)", Params: map[string]interface{}{"days": 1.0, "min": 0.0}, Weight: 4.0, RuleType: "entry"},
+				{Type: "VOLUME_SURGE", Name: "成交量萎縮 (< 0.8)", Params: map[string]interface{}{"min": -0.8}, Weight: 1.0, RuleType: "exit"},
 			},
 		},
 		{
@@ -76,6 +78,7 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 				{Type: "RANGE_POS", Name: "20日股價位階 < 30%", Params: map[string]interface{}{"days": 20.0, "min": 0.3}, Weight: 2.0, RuleType: "entry"},
 				{Type: "PRICE_RETURN", Name: "5日漲幅由負轉正 (> 2%)", Params: map[string]interface{}{"days": 5.0, "min": 0.02}, Weight: 5.0, RuleType: "entry"},
 				{Type: "VOLUME_SURGE", Name: "成交量略微放大 (> 1.2)", Params: map[string]interface{}{"min": 1.2}, Weight: 3.0, RuleType: "entry"},
+				{Type: "RANGE_POS", Name: "股價位階回升至高位 (> 80%)", Params: map[string]interface{}{"days": 20.0, "min": 0.8}, Weight: 1.0, RuleType: "exit"},
 			},
 		},
 		{

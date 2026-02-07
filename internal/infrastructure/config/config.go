@@ -67,7 +67,6 @@ type BinanceConfig struct {
 
 
 type AutoTradeConfig struct {
-	Enabled  bool          `yaml:"enabled"`
 	Interval time.Duration `yaml:"interval"`
 }
 
@@ -179,9 +178,6 @@ func applyEnv(cfg Config) Config {
 		if d, err := time.ParseDuration(val); err == nil {
 			cfg.Ingestion.AutoInterval = d
 		}
-	}
-	if val := os.Getenv("AUTO_TRADE_ENABLED"); val != "" {
-		cfg.AutoTrade.Enabled = (val == "true")
 	}
 	if val := os.Getenv("AUTO_TRADE_INTERVAL"); val != "" {
 		if d, err := time.ParseDuration(val); err == nil {

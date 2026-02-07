@@ -182,7 +182,7 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 	if s.backfillStart != "" {
 		go s.startConfigBackfill()
 	}
-	if cfg.AutoTrade.Enabled {
+	if cfg.AutoTrade.Interval > 0 {
 		worker := trading.NewBackgroundWorker(tradingSvc, cfg.AutoTrade.Interval)
 		worker.Start()
 	}

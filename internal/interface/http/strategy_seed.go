@@ -37,7 +37,7 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 			Slug:          "trend-breakout",
 			Threshold:     7.0,
 			ExitThreshold: 5.0,
-			IsActive:      true,
+			IsActive:      false,
 			Rules: []struct {
 				Type     string
 				Name     string
@@ -56,7 +56,7 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 			Slug:          "volume-surge-pro",
 			Threshold:     6.0,
 			ExitThreshold: 4.0,
-			IsActive:      true,
+			IsActive:      false,
 			Rules: []struct {
 				Type     string
 				Name     string
@@ -74,7 +74,7 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 			Slug:          "low-reversal",
 			Threshold:     6.5,
 			ExitThreshold: 4.0,
-			IsActive:      true,
+			IsActive:      false,
 			Rules: []struct {
 				Type     string
 				Name     string
@@ -93,7 +93,7 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 			Slug:          "auto-tester",
 			Threshold:     0.1,
 			ExitThreshold: 0.1,
-			IsActive:      false, // 線上預設不執行
+			IsActive:      false,
 			Rules: []struct {
 				Type     string
 				Name     string

@@ -240,13 +240,78 @@ function bootstrap() {
         return;
     }
 
-    const envFilter = el("envFilter");
-    if (envFilter) {
-        envFilter.addEventListener("change", (e) => {
-            state.env = e.target.value;
-            refresh();
+    // Initialize Global Environment Selectors
+    const envSelectors = document.querySelectorAll(".env-selector");
+
+    const updateEnvUI = (env) => {
+        state.env = env;
+        // Map 'prod' to 'real' for UI consistency if needed, but here we use 'test', 'paper', 'real' in dataset
+        // The backend expects 'test', 'paper', 'prod' (or 'real' depending on implementation)
+        // Let's check common.js: it sends 'prod', 'paper', 'test'.
+        // My new HTML uses data-env="real", "paper", "test".
+        // Let's align them. Backend likely uses 'prod' or 'real'.
+        // Let's stick to what common.js was sending: 'prod' for live.
+        // So I should update HTML to use 'prod' instead of 'real' or handle mapping.
+
+        envSelectors.forEach(btn => {
+            const btnEnv = btn.dataset.env;
+            if (btnEnv === env || (env === 'prod' && btnEnv === 'real') || (env === 'real' && btnEnv === 'prod')) {
+                btn.classList.add("bg-primary", "text-background-dark");
+                btn.classList.remove("text-slate-500", "hover:bg-white/5");
+            } else {
+                btn.classList.remove("bg-primary", "text-background-dark");
+                btn.classList.add("text-slate-500", "hover:bg-white/5");
+            }
         });
-    }
+    };
+
+    const setBackendEnv = async (env) => {
+        // Map UI 'real' to backend 'prod' if necessary
+        const backendEnv = env === 'real' ? 'prod' : env;
+        try {
+            await api('/api/admin/binance/config', {
+                method: 'POST',
+                body: { active_env: backendEnv }
+            });
+            setAlert(`環境已切換至 ${env}`, "success");
+            updateExchangeLink(); // Update the link in sidebar
+        } catch (err) {
+            setAlert(`切換環境失敗: ${err.message}`, "error");
+        }
+    };
+
+    const updateEnv = (env) => {
+        updateEnvUI(env);
+        setBackendEnv(env);
+        refresh();
+    };
+
+    envSelectors.forEach(btn => {
+        btn.addEventListener("click", () => updateEnv(btn.dataset.env));
+    });
+
+    // Fetch current backend config on load to sync UI
+    const syncWithBackend = async () => {
+        try {
+            const data = await api('/api/admin/binance/config');
+            if (data.success) {
+                // Backend returns 'prod', 'paper', 'test'
+                // Map 'prod' to 'real' for UI state if needed, or just let updateEnvUI handle it
+                let env = data.active_env;
+                if (env === 'prod') env = 'real';
+                updateEnvUI(env);
+                // No need to call setBackendEnv here as we just fetched it
+                refresh();
+            }
+        } catch (err) {
+            console.error("Failed to sync env with backend:", err);
+            // Fallback to default state.env
+            updateEnvUI(state.env);
+            refresh();
+        }
+    };
+
+    syncWithBackend();
 
     const refreshPositionsBtn = el("refreshPositionsBtn");
     if (refreshPositionsBtn) refreshPositionsBtn.addEventListener("click", fetchPositions);

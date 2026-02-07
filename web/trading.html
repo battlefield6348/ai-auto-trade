@@ -156,6 +156,15 @@
                     (Monitor)</h2>
             </div>
             <div class="flex items-center gap-6">
+                <!-- Global Environment Selector -->
+                <div class="flex items-center gap-2 bg-surface-dark border border-surface-border rounded-lg p-1">
+                    <button class="env-selector px-3 py-1 rounded text-[10px] font-bold uppercase transition-all"
+                        data-env="test">Test</button>
+                    <button class="env-selector px-3 py-1 rounded text-[10px] font-bold uppercase transition-all"
+                        data-env="paper">Paper</button>
+                    <button class="env-selector px-3 py-1 rounded text-[10px] font-bold uppercase transition-all"
+                        data-env="real">Live</button>
+                </div>
                 <div id="serverClock" class="text-xs font-mono text-primary font-bold">00:00:00</div>
                 <div class="h-4 w-px bg-surface-border"></div>
                 <div class="flex items-center gap-2 text-[10px] text-slate-500 uppercase font-bold tracking-widest">
@@ -184,12 +193,6 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-3">
-                    <select id="envFilter"
-                        class="bg-surface-dark border border-surface-border rounded-xl px-4 py-2 text-sm text-slate-300 focus:border-primary focus:ring-0 font-mono transition-all">
-                        <option value="test">Testnet (測試網)</option>
-                        <option value="paper">Paper (模擬盤)</option>
-                        <option value="live">Live (實盤)</option>
-                    </select>
                     <button id="refreshPositionsBtn"
                         class="p-2.5 rounded-xl bg-surface-border hover:bg-white/5 transition-all text-slate-400 hover:text-white border border-transparent hover:border-primary/30">
                         <span class="material-symbols-outlined">refresh</span>

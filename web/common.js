@@ -35,96 +35,10 @@ export async function updateExchangeLink() {
 }
 
 export async function initBinanceConfigModal() {
-    const modal = document.getElementById('binanceConfigModal');
+    // Deprecated: Environment configuration is now handled globally in the top bar.
+    // This function is kept to avoid import errors until all references are removed.
     const openBtn = document.getElementById('binanceConfigBtn');
-    const closeBtn = document.getElementById('closeBinanceModal');
-    const saveBtn = document.getElementById('saveBinanceConfig');
-
-    const modeLiveBtn = document.getElementById('modeLiveBtn');
-    const modePaperBtn = document.getElementById('modePaperBtn');
-    const modeTestBtn = document.getElementById('modeTestBtn');
-
-    let currentEnv = 'test'; // default
-
-    if (!modal || !openBtn) return;
-
-    const updateEnvUI = (env) => {
-        currentEnv = env;
-        const buttons = [
-            { el: modeLiveBtn, val: 'prod' },
-            { el: modePaperBtn, val: 'paper' },
-            { el: modeTestBtn, val: 'test' }
-        ];
-
-        buttons.forEach(btn => {
-            if (!btn.el) return;
-            if (btn.val === env) {
-                btn.el.classList.add('bg-primary', 'text-background-dark', 'border-primary');
-                btn.el.classList.remove('border-surface-border', 'text-slate-400');
-            } else {
-                btn.el.classList.remove('bg-primary', 'text-background-dark', 'border-primary');
-                btn.el.classList.add('border-surface-border', 'text-slate-400');
-            }
-        });
-    };
-
-    openBtn.onclick = async () => {
-        modal.classList.remove('hidden');
-        try {
-            const token = localStorage.getItem("aat_token");
-            const headers = {};
-            if (token) headers["Authorization"] = `Bearer ${token}`;
-
-            const res = await fetch('/api/admin/binance/config', { headers });
-            const data = await res.json();
-            if (data.success) {
-                updateEnvUI(data.active_env);
-            }
-        } catch (err) {
-            console.error('Failed to fetch config:', err);
-        }
-    };
-
-    closeBtn.onclick = () => modal.classList.add('hidden');
-    window.onclick = (e) => { if (e.target === modal) modal.classList.add('hidden'); };
-
-    if (modeLiveBtn) modeLiveBtn.onclick = () => updateEnvUI('prod');
-    if (modePaperBtn) modePaperBtn.onclick = () => updateEnvUI('paper');
-    if (modeTestBtn) modeTestBtn.onclick = () => updateEnvUI('test');
-
-    saveBtn.onclick = async () => {
-        const payload = { active_env: currentEnv };
-
-        const token = localStorage.getItem("aat_token");
-        const headers = { 'Content-Type': 'application/json' };
-        if (token) headers["Authorization"] = `Bearer ${token}`;
-
-        saveBtn.disabled = true;
-        saveBtn.innerText = 'Switching...';
-
-        try {
-            const res = await fetch('/api/admin/binance/config', {
-                method: 'POST',
-                headers: headers,
-                body: JSON.stringify(payload)
-            });
-            const data = await res.json().catch(() => ({}));
-            if (res.ok && data.success) {
-                alert('系統執行模式已切換至 ' + currentEnv);
-                modal.classList.add('hidden');
-                updateExchangeLink();
-                if (window.onBinanceConfigUpdate) window.onBinanceConfigUpdate();
-            } else {
-                const errorMsg = data.message || data.error || 'Unknown server error';
-                alert('錯誤 (' + res.status + '): ' + errorMsg);
-            }
-        } catch (err) {
-            alert('切換失敗: ' + err.message);
-        } finally {
-            saveBtn.disabled = false;
-            saveBtn.innerText = '切換並更新連線 (Switch)';
-        }
-    };
+    if (openBtn) openBtn.style.display = 'none'; // Hide the button instead
 }
 
 export function initSidebar() {

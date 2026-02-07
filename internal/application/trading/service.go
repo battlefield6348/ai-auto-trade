@@ -111,6 +111,19 @@ func (s *Service) notify(msg string) {
 	}
 }
 
+func (s *Service) envTag(env tradingDomain.Environment) string {
+	switch env {
+	case tradingDomain.EnvPaper:
+		return "【模擬】"
+	case tradingDomain.EnvTest:
+		return "【測試】"
+	case tradingDomain.EnvProd, tradingDomain.EnvReal:
+		return "【實盤】"
+	default:
+		return fmt.Sprintf("【%s】", env)
+	}
+}
+
 // CreateStrategy 建立新策略並設定預設值。
 func (s *Service) CreateStrategy(ctx context.Context, input tradingDomain.Strategy) (tradingDomain.Strategy, error) {
 	if input.BaseSymbol == "" {
@@ -366,8 +379,8 @@ func (s *Service) ExecuteScoringAutoTrade(ctx context.Context, slug string, env 
 		balance, berr := s.ex.GetBalance(ctx, "USDT")
 		if berr == nil && balance < strat.Risk.AutoStopMinBalance {
 			_ = s.repo.SetStatus(ctx, strat.ID, tradingDomain.StatusDraft, env)
-			s.notify(fmt.Sprintf("⚠️ [AUTO-STOP] 策略 %s 已停止。\n原因：可用餘額 %.2f 低於限制 %.2f。",
-				strat.Name, balance, strat.Risk.AutoStopMinBalance))
+			s.notify(fmt.Sprintf("⚠️ %s [AUTO-STOP] 策略 %s 已停止。\n原因：可用餘額 %.2f 低於限制 %.2f。",
+				s.envTag(env), strat.Name, balance, strat.Risk.AutoStopMinBalance))
 			return fmt.Errorf("balance %.2f below limit %.2f", balance, strat.Risk.AutoStopMinBalance)
 		}
 	}
@@ -471,8 +484,8 @@ func (s *Service) handleScoringBuy(ctx context.Context, strat *strategyDomain.Sc
 	}
 	_ = s.repo.UpsertPosition(ctx, newPos)
 
-	s.notify(fmt.Sprintf("🚀 [AUTO-TRADE] BUY %s\nPrice: %.2f\nAmount: %.2f USDT\nReason: %s",
-		strat.BaseSymbol, price, amount, tRec.Reason))
+	s.notify(fmt.Sprintf("🚀 %s [AUTO-TRADE] BUY %s\nPrice: %.2f\nAmount: %.2f USDT\nReason: %s",
+		s.envTag(env), strat.BaseSymbol, price, amount, tRec.Reason))
 
 	return nil
 }
@@ -562,8 +575,8 @@ func (s *Service) handleScoringSellCheck(ctx context.Context, strat *strategyDom
 
 		_ = s.repo.ClosePosition(ctx, pos.ID, exitDate, price)
 
-		s.notify(fmt.Sprintf("💰 [AUTO-TRADE] SELL %s\nPrice: %.2f (Entry: %.2f)\nPNL: %.2f (%.2f%%)\nReason: %s",
-			strat.BaseSymbol, price, pos.EntryPrice, pnl, pnlPct*100, reason))
+		s.notify(fmt.Sprintf("💰 %s [AUTO-TRADE] SELL %s\nPrice: %.2f (Entry: %.2f)\nPNL: %.2f (%.2f%%)\nReason: %s",
+			s.envTag(env), strat.BaseSymbol, price, pos.EntryPrice, pnl, pnlPct*100, reason))
 	}
 
 	return nil
@@ -632,8 +645,8 @@ func (s *Service) ClosePositionManually(ctx context.Context, positionID string) 
 
 	err = s.repo.ClosePosition(ctx, pos.ID, exitDate, price)
 	if err == nil {
-		s.notify(fmt.Sprintf("✋ [MANUAL] SELL %s\nPrice: %.2f (Entry: %.2f)\nPNL: %.2f (%.2f%%)\nReason: Manual Close",
-			strat.BaseSymbol, price, pos.EntryPrice, pnl, pnlPct*100))
+		s.notify(fmt.Sprintf("✋ %s [MANUAL] SELL %s\nPrice: %.2f (Entry: %.2f)\nPNL: %.2f (%.2f%%)\nReason: Manual Close",
+			s.envTag(pos.Env), strat.BaseSymbol, price, pos.EntryPrice, pnl, pnlPct*100))
 	}
 	return err
 }

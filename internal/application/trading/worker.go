@@ -70,14 +70,20 @@ func (w *BackgroundWorker) runOnce() {
 	for _, s := range strats {
 		log.Printf("[Worker] Executing strategy: %s (Slug: %s, Env: %s)", s.Name, s.Slug, s.Env)
 		
-		env := tradingDomain.EnvTest
+		envs := []tradingDomain.Environment{}
 		switch s.Env {
 		case "prod":
-			env = tradingDomain.EnvProd
+			envs = append(envs, tradingDomain.EnvProd)
 		case "real":
-			env = tradingDomain.EnvReal
+			envs = append(envs, tradingDomain.EnvReal)
 		case "paper":
-			env = tradingDomain.EnvPaper
+			envs = append(envs, tradingDomain.EnvPaper)
+		case "test":
+			envs = append(envs, tradingDomain.EnvTest)
+		case "both":
+			envs = append(envs, tradingDomain.EnvPaper, tradingDomain.EnvTest)
+		default:
+			envs = append(envs, tradingDomain.EnvTest)
 		}
 
 		// userID 使用策略擁有者的 ID
@@ -86,12 +92,14 @@ func (w *BackgroundWorker) runOnce() {
 			userID = "00000000-0000-0000-0000-000000000001" // Fallback to admin
 		}
 		
-		err := w.svc.ExecuteScoringAutoTrade(ctx, s.Slug, env, userID)
-
-		if err != nil {
-			log.Printf("[Worker] Strategy %s execution failed: %v", s.Slug, err)
-		} else {
-			log.Printf("[Worker] Strategy %s execution completed.", s.Slug)
+		for _, env := range envs {
+			err := w.svc.ExecuteScoringAutoTrade(ctx, s.Slug, env, userID)
+			if err != nil {
+				log.Printf("[Worker] Strategy %s (%s) execution failed: %v", s.Slug, env, err)
+			} else {
+				log.Printf("[Worker] Strategy %s (%s) execution completed.", s.Slug, env)
+			}
 		}
 	}
 }
+

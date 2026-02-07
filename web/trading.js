@@ -69,11 +69,8 @@ async function fetchPositions() {
         state.positions = data.positions || [];
 
         // Get unique symbols
-        const symbols = [...new Set(state.positions.map(p => "BTCUSDT"))]; // TODO: positions need symbol
-        // For now we assume BTCUSDT if not provided, or better, we should have it in position
-        // Since our DB schema has strategy_id, we might need strategy details.
-
-        await fetchPrices(["BTCUSDT"]);
+        const symbols = [...new Set(state.positions.map(p => p.symbol || "BTCUSDT"))];
+        await fetchPrices(symbols);
         renderPositions();
     } catch (err) {
         setAlert(err.message, "error");
@@ -106,7 +103,8 @@ function renderPositions() {
     }
 
     state.positions.forEach((p) => {
-        const currentPrice = state.prices["BTCUSDT"] || p.entry_price;
+        const sym = p.symbol || "BTCUSDT";
+        const currentPrice = state.prices[sym] || p.entry_price;
         const pnl = (currentPrice - p.entry_price) * p.size;
         const pnlPct = ((currentPrice / p.entry_price) - 1) * 100;
         const isProfit = pnl >= 0;
@@ -117,7 +115,7 @@ function renderPositions() {
       <div class="flex items-start justify-between mb-4">
         <div>
            <h3 class="font-bold text-lg flex items-center gap-2">
-             BTCUSDT
+             ${p.symbol || "BTCUSDT"}
              <span class="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 uppercase">${p.env}</span>
            </h3>
            <p class="text-xs text-slate-500 font-mono">${p.id.split('-')[0]}</p>
@@ -255,6 +253,36 @@ function bootstrap() {
 
     const refreshTradesBtn = el("refreshTradesBtn");
     if (refreshTradesBtn) refreshTradesBtn.addEventListener("click", fetchTrades);
+
+    const manualBuyBtn = el("manualBuyBtn");
+    if (manualBuyBtn) {
+        manualBuyBtn.addEventListener("click", async () => {
+            const symbol = el("manualSymbol").value.trim().toUpperCase();
+            const amount = parseFloat(el("manualAmount").value);
+            if (!symbol || isNaN(amount) || amount <= 0) {
+                setAlert("請輸入正確的交易對與金額", "error");
+                return;
+            }
+
+            if (!confirm(`確定要手動買入 ${amount} USDT 的 ${symbol} (${state.env}) 嗎？`)) return;
+
+            manualBuyBtn.disabled = true;
+            manualBuyBtn.textContent = "執行中...";
+            try {
+                await api("/api/admin/trades/manual-buy", {
+                    method: "POST",
+                    body: { symbol, amount, env: state.env }
+                });
+                setAlert("手動買入成功", "success");
+                refresh();
+            } catch (err) {
+                setAlert(err.message, "error");
+            } finally {
+                manualBuyBtn.disabled = false;
+                manualBuyBtn.textContent = "立即買入 (Market Buy)";
+            }
+        });
+    }
 
     const logoutBtn = el("logoutBtn");
     if (logoutBtn) {

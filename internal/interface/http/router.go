@@ -246,6 +246,7 @@ func (s *Server) registerRoutes() {
 	s.mux.Handle("/api/admin/strategies/execute/", s.requireAuth(auth.PermStrategy, http.HandlerFunc(s.handleStrategyExecute)))
 	s.mux.Handle("/api/admin/strategies/", s.requireAuth(auth.PermStrategy, http.HandlerFunc(s.handleStrategyRoute)))
 	s.mux.Handle("/api/admin/trades", s.requireAuth(auth.PermStrategy, s.wrapGet(s.handleListTrades)))
+	s.mux.Handle("/api/admin/trades/manual-buy", s.requireAuth(auth.PermStrategy, s.wrapPost(s.handleManualBuy)))
 	s.mux.Handle("/api/admin/positions", s.requireAuth(auth.PermStrategy, s.wrapGet(s.handleListPositions)))
 	s.mux.Handle("/api/admin/positions/", s.requireAuth(auth.PermStrategy, http.HandlerFunc(s.handlePositionRoute)))
 	s.mux.Handle("/api/admin/binance/account", s.requireAuth(auth.PermStrategy, s.wrapGet(s.handleBinanceAccount)))

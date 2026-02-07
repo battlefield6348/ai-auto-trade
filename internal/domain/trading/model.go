@@ -178,7 +178,8 @@ type BacktestRecord struct {
 // TradeRecord 實際或紙本交易紀錄。
 type TradeRecord struct {
 	ID              string      `json:"id"`
-	StrategyID      string      `json:"strategy_id"`
+	StrategyID      string      `json:"strategy_id,omitempty"`
+	Symbol          string      `json:"symbol"`
 	StrategyVersion int         `json:"strategy_version"`
 	Env             Environment `json:"env"`
 	Side            string      `json:"side"`
@@ -204,7 +205,8 @@ type TradeFilter struct {
 // Position 表示當前持倉。
 type Position struct {
 	ID         string      `json:"id"`
-	StrategyID string      `json:"strategy_id"`
+	StrategyID string      `json:"strategy_id,omitempty"`
+	Symbol     string      `json:"symbol"`
 	Env        Environment `json:"env"`
 	EntryDate  time.Time   `json:"entry_date"`
 	EntryPrice float64     `json:"entry_price"`

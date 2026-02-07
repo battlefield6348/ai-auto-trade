@@ -1650,6 +1650,36 @@ func (s *Server) handleListTrades(w http.ResponseWriter, r *http.Request) {
 		"trades":  trades,
 	})
 }
+func (s *Server) handleManualBuy(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Symbol string  `json:"symbol"`
+		Amount float64 `json:"amount"`
+		Env    string  `json:"env"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+		return
+	}
+	if body.Symbol == "" || body.Amount <= 0 {
+		writeError(w, http.StatusBadRequest, errCodeBadRequest, "symbol and amount are required")
+		return
+	}
+	env := tradingDomain.Environment(body.Env)
+	if env == "" {
+		env = tradingDomain.EnvTest
+	}
+	userID := currentUserID(r)
+
+	if err := s.tradingSvc.ExecuteManualBuy(r.Context(), body.Symbol, body.Amount, env, userID); err != nil {
+		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+	})
+}
+
 
 func (s *Server) handleListPositions(w http.ResponseWriter, r *http.Request) {
 	positions, err := s.tradingSvc.ListPositions(r.Context())

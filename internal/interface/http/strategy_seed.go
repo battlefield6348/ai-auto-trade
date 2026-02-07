@@ -88,23 +88,6 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 				{Type: "RANGE_POS", Name: "股價位階回升至高位 (> 80%)", Params: map[string]interface{}{"days": 20.0, "min": 0.8}, Weight: 1.0, RuleType: "exit"},
 			},
 		},
-		{
-			Name:          "系統功能測試 (Auto-Tester)",
-			Slug:          "auto-tester",
-			Threshold:     0.1,
-			ExitThreshold: 0.1,
-			IsActive:      false,
-			Rules: []struct {
-				Type     string
-				Name     string
-				Params   map[string]interface{}
-				Weight   float64
-				RuleType string
-			}{
-				{Type: "PRICE_RETURN", Name: "始終買入 (Entry)", Params: map[string]interface{}{"days": 1.0, "min": -1.0}, Weight: 1.0, RuleType: "entry"},
-				{Type: "VOLUME_SURGE", Name: "始終賣出 (Exit)", Params: map[string]interface{}{"min": -1.0}, Weight: 1.0, RuleType: "exit"},
-			},
-		},
 	}
 
 	for _, s := range strategies {

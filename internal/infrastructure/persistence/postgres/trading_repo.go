@@ -281,11 +281,16 @@ LIMIT 50;
 // SaveTrade 寫入交易紀錄。
 func (r *TradingRepo) SaveTrade(ctx context.Context, trade tradingDomain.TradeRecord) error {
 	const q = `
-INSERT INTO strategy_trades (strategy_id, strategy_version, env, side, entry_date, entry_price, exit_date, exit_price, pnl_usdt, pnl_pct, hold_days, reason, params_snapshot)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13);
+INSERT INTO strategy_trades (strategy_id, strategy_version, env, symbol, side, entry_date, entry_price, exit_date, exit_price, pnl_usdt, pnl_pct, hold_days, reason, params_snapshot)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14);
 `
+	var sid interface{} = trade.StrategyID
+	if trade.StrategyID == "" || trade.StrategyID == "manual" {
+		sid = nil
+	}
+
 	_, err := r.db.ExecContext(ctx, q,
-		trade.StrategyID, trade.StrategyVersion, string(trade.Env), trade.Side, trade.EntryDate, trade.EntryPrice,
+		sid, trade.StrategyVersion, string(trade.Env), trade.Symbol, trade.Side, trade.EntryDate, trade.EntryPrice,
 		trade.ExitDate, trade.ExitPrice, trade.PNL, trade.PNLPct, trade.HoldDays, trade.Reason, nil,
 	)
 	return err
@@ -294,14 +299,18 @@ VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13);
 // ListTrades 查詢交易紀錄。
 func (r *TradingRepo) ListTrades(ctx context.Context, filter tradingDomain.TradeFilter) ([]tradingDomain.TradeRecord, error) {
 	q := `
-SELECT id, strategy_id, strategy_version, env, side, entry_date, entry_price, exit_date, exit_price, pnl_usdt, pnl_pct, hold_days, reason, created_at
+SELECT id, strategy_id, strategy_version, env, symbol, side, entry_date, entry_price, exit_date, exit_price, pnl_usdt, pnl_pct, hold_days, reason, created_at
 FROM strategy_trades
 `
 	conds := []string{}
 	args := []interface{}{}
 	if filter.StrategyID != "" {
-		conds = append(conds, fmt.Sprintf("strategy_id = $%d", len(args)+1))
-		args = append(args, filter.StrategyID)
+		if filter.StrategyID == "manual" {
+			conds = append(conds, "strategy_id IS NULL")
+		} else {
+			conds = append(conds, fmt.Sprintf("strategy_id = $%d", len(args)+1))
+			args = append(args, filter.StrategyID)
+		}
 	}
 	if filter.Env != "" {
 		conds = append(conds, fmt.Sprintf("env = $%d", len(args)+1))
@@ -330,11 +339,17 @@ FROM strategy_trades
 	for rows.Next() {
 		var rec tradingDomain.TradeRecord
 		var env, side string
+		var sid sql.NullString
 		if err := rows.Scan(
-			&rec.ID, &rec.StrategyID, &rec.StrategyVersion, &env, &side,
+			&rec.ID, &sid, &rec.StrategyVersion, &env, &rec.Symbol, &side,
 			&rec.EntryDate, &rec.EntryPrice, &rec.ExitDate, &rec.ExitPrice, &rec.PNL, &rec.PNLPct, &rec.HoldDays, &rec.Reason, &rec.CreatedAt,
 		); err != nil {
 			return nil, err
+		}
+		if sid.Valid {
+			rec.StrategyID = sid.String
+		} else {
+			rec.StrategyID = "manual"
 		}
 		rec.Env = tradingDomain.Environment(env)
 		rec.Side = side
@@ -345,23 +360,36 @@ FROM strategy_trades
 
 // GetOpenPosition 取得當前持倉。
 func (r *TradingRepo) GetOpenPosition(ctx context.Context, strategyID string, env tradingDomain.Environment) (*tradingDomain.Position, error) {
-	const q = `
-SELECT id, strategy_id, env, entry_date, entry_price, size, stop_loss, take_profit, status, updated_at
+	q := `
+SELECT id, strategy_id, env, symbol, entry_date, entry_price, size, stop_loss, take_profit, status, updated_at
 FROM strategy_positions
-WHERE strategy_id=$1 AND env=$2 AND status='open'
-LIMIT 1;
-`
+WHERE `
+	args := []interface{}{string(env)}
+	if strategyID == "manual" {
+		q += "strategy_id IS NULL AND env=$1 AND status='open'"
+	} else {
+		q += "strategy_id=$2 AND env=$1 AND status='open'"
+		args = append(args, strategyID)
+	}
+	q += " LIMIT 1;"
+
 	var p tradingDomain.Position
 	var envStr, status string
+	var sid sql.NullString
 	var stop, tp sql.NullFloat64
-	err := r.db.QueryRowContext(ctx, q, strategyID, string(env)).Scan(
-		&p.ID, &p.StrategyID, &envStr, &p.EntryDate, &p.EntryPrice, &p.Size, &stop, &tp, &status, &p.UpdatedAt,
+	err := r.db.QueryRowContext(ctx, q, args...).Scan(
+		&p.ID, &sid, &envStr, &p.Symbol, &p.EntryDate, &p.EntryPrice, &p.Size, &stop, &tp, &status, &p.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
+	}
+	if sid.Valid {
+		p.StrategyID = sid.String
+	} else {
+		p.StrategyID = "manual"
 	}
 	p.Env = tradingDomain.Environment(envStr)
 	p.Status = status
@@ -377,7 +405,7 @@ LIMIT 1;
 // ListOpenPositions 列出所有未平倉。
 func (r *TradingRepo) ListOpenPositions(ctx context.Context) ([]tradingDomain.Position, error) {
 	const q = `
-SELECT id, strategy_id, env, entry_date, entry_price, size, stop_loss, take_profit, status, updated_at
+SELECT id, strategy_id, env, symbol, entry_date, entry_price, size, stop_loss, take_profit, status, updated_at
 FROM strategy_positions
 WHERE status='open'
 ORDER BY updated_at DESC
@@ -393,9 +421,15 @@ LIMIT 200;
 	for rows.Next() {
 		var p tradingDomain.Position
 		var envStr, status string
+		var sid sql.NullString
 		var stop, tp sql.NullFloat64
-		if err := rows.Scan(&p.ID, &p.StrategyID, &envStr, &p.EntryDate, &p.EntryPrice, &p.Size, &stop, &tp, &status, &p.UpdatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &sid, &envStr, &p.Symbol, &p.EntryDate, &p.EntryPrice, &p.Size, &stop, &tp, &status, &p.UpdatedAt); err != nil {
 			return nil, err
+		}
+		if sid.Valid {
+			p.StrategyID = sid.String
+		} else {
+			p.StrategyID = "manual"
 		}
 		p.Env = tradingDomain.Environment(envStr)
 		p.Status = status
@@ -411,14 +445,20 @@ LIMIT 200;
 }
 
 func (r *TradingRepo) GetPosition(ctx context.Context, id string) (*tradingDomain.Position, error) {
-	const q = `SELECT id, strategy_id, env, entry_date, entry_price, size, stop_loss, take_profit, status, updated_at FROM strategy_positions WHERE id = $1`
+	const q = `SELECT id, strategy_id, env, symbol, entry_date, entry_price, size, stop_loss, take_profit, status, updated_at FROM strategy_positions WHERE id = $1`
 	var p tradingDomain.Position
 	var sl, tp sql.NullFloat64
+	var sid sql.NullString
 	err := r.db.QueryRowContext(ctx, q, id).Scan(
-		&p.ID, &p.StrategyID, &p.Env, &p.EntryDate, &p.EntryPrice, &p.Size, &sl, &tp, &p.Status, &p.UpdatedAt,
+		&p.ID, &sid, &p.Env, &p.Symbol, &p.EntryDate, &p.EntryPrice, &p.Size, &sl, &tp, &p.Status, &p.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
+	}
+	if sid.Valid {
+		p.StrategyID = sid.String
+	} else {
+		p.StrategyID = "manual"
 	}
 	if sl.Valid {
 		v := sl.Float64
@@ -433,12 +473,17 @@ func (r *TradingRepo) GetPosition(ctx context.Context, id string) (*tradingDomai
 
 // UpsertPosition 新增或更新持倉。
 func (r *TradingRepo) UpsertPosition(ctx context.Context, p tradingDomain.Position) error {
+	var sid interface{} = p.StrategyID
+	if p.StrategyID == "" || p.StrategyID == "manual" {
+		sid = nil
+	}
+
 	if p.ID == "" {
 		const q = `
-INSERT INTO strategy_positions (strategy_id, env, entry_date, entry_price, size, stop_loss, take_profit, status)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8);
+INSERT INTO strategy_positions (strategy_id, env, symbol, entry_date, entry_price, size, stop_loss, take_profit, status)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9);
 `
-		_, err := r.db.ExecContext(ctx, q, p.StrategyID, string(p.Env), p.EntryDate, p.EntryPrice, p.Size, p.StopLoss, p.TakeProfit, p.Status)
+		_, err := r.db.ExecContext(ctx, q, sid, string(p.Env), p.Symbol, p.EntryDate, p.EntryPrice, p.Size, p.StopLoss, p.TakeProfit, p.Status)
 		return err
 	}
 	const q = `

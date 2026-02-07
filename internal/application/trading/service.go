@@ -346,9 +346,10 @@ func (s *Service) RunOnce(ctx context.Context, id string, env tradingDomain.Envi
 		hold := t.HoldDays
 		trades = append(trades, tradingDomain.TradeRecord{
 			StrategyID:      strategy.ID,
+			Symbol:          strategy.BaseSymbol,
 			StrategyVersion: strategy.Version,
 			Env:             env,
-			Side:            "buy",
+			Side:            "sell",
 			EntryDate:       t.EntryDate,
 			EntryPrice:      t.EntryPrice,
 			ExitDate:        &t.ExitDate,
@@ -462,6 +463,7 @@ func (s *Service) handleScoringBuy(ctx context.Context, strat *strategyDomain.Sc
 	// 記錄交易
 	tRec := tradingDomain.TradeRecord{
 		StrategyID:      strat.ID,
+		Symbol:          strat.BaseSymbol,
 		StrategyVersion: 1,
 		Env:             env,
 		Side:            "buy",
@@ -475,6 +477,7 @@ func (s *Service) handleScoringBuy(ctx context.Context, strat *strategyDomain.Sc
 	// 建立持倉
 	newPos := tradingDomain.Position{
 		StrategyID: strat.ID,
+		Symbol:     strat.BaseSymbol,
 		Env:        env,
 		EntryDate:  s.now(),
 		EntryPrice: price,
@@ -560,6 +563,7 @@ func (s *Service) handleScoringSellCheck(ctx context.Context, strat *strategyDom
 		exitDate := s.now()
 		_ = s.repo.SaveTrade(ctx, tradingDomain.TradeRecord{
 			StrategyID:      strat.ID,
+			Symbol:          strat.BaseSymbol,
 			StrategyVersion: 1,
 			Env:             env,
 			Side:            "sell",
@@ -586,6 +590,70 @@ func (s *Service) GetExchangePrice(ctx context.Context, symbol string) (float64,
 	return s.ex.GetPrice(ctx, symbol)
 }
 
+func (s *Service) ExecuteManualBuy(ctx context.Context, symbol string, amount float64, env tradingDomain.Environment, userID string) error {
+	var price float64
+	var executedQty float64
+	var err error
+
+	if env == tradingDomain.EnvPaper {
+		price, err = s.ex.GetPrice(ctx, symbol)
+		if err != nil {
+			return fmt.Errorf("manual paper buy get price: %w", err)
+		}
+		executedQty = amount / price
+		log.Printf("[MANUAL] Paper BUY %s at %.2f (Mocked)", symbol, price)
+	} else {
+		price, executedQty, err = s.ex.PlaceMarketOrderQuote(ctx, symbol, "buy", amount)
+		if err != nil {
+			return fmt.Errorf("manual real buy order: %w", err)
+		}
+	}
+
+	// 紀錄交易
+	tRec := tradingDomain.TradeRecord{
+		StrategyID:      "manual", // 手動執行
+		Symbol:          symbol,
+		StrategyVersion: 1,
+		Env:             env,
+		Side:            "buy",
+		EntryDate:       s.now(),
+		EntryPrice:      price,
+		Reason:          "Manual Entry",
+		CreatedAt:       s.now(),
+	}
+	_ = s.repo.SaveTrade(ctx, tRec)
+
+	// 建立持倉 (或是併入現有持倉，這裡先採簡單邏輯：每個手動買入都是獨立倉位或是更新現有)
+	// 為了簡化，手動買入的 strategy_id 固定為 "manual"
+	existing, _ := s.repo.GetOpenPosition(ctx, "manual", env)
+	if existing != nil {
+		// 平均價格與累積數量
+		newTotalQty := existing.Size + executedQty
+		newAvgPrice := (existing.EntryPrice*existing.Size + price*executedQty) / newTotalQty
+		existing.Size = newTotalQty
+		existing.EntryPrice = newAvgPrice
+		existing.UpdatedAt = s.now()
+		_ = s.repo.UpsertPosition(ctx, *existing)
+	} else {
+		newPos := tradingDomain.Position{
+			StrategyID: "manual",
+			Symbol:     symbol,
+			Env:        env,
+			EntryDate:  s.now(),
+			EntryPrice: price,
+			Size:       executedQty,
+			Status:     "open",
+			UpdatedAt:  s.now(),
+		}
+		_ = s.repo.UpsertPosition(ctx, newPos)
+	}
+
+	s.notify(fmt.Sprintf("🚀 %s [MANUAL] BUY %s\nPrice: %.2f\nAmount: %.2f USDT\nReason: Manual Entry",
+		s.envTag(env), symbol, price, amount))
+
+	return nil
+}
+
 func (s *Service) ExecuteManualBacktestBuy(ctx context.Context, symbol string, amount float64) (float64, float64, error) {
 	price, executedQty, err := s.ex.PlaceMarketOrderQuote(ctx, symbol, "buy", amount)
 	return price, executedQty, err
@@ -601,24 +669,28 @@ func (s *Service) ClosePositionManually(ctx context.Context, positionID string) 
 		return fmt.Errorf("position already closed")
 	}
 
-	strat, err := s.repo.LoadScoringStrategyByID(ctx, pos.StrategyID)
-	if err != nil {
-		// Fallback if not scoring strategy
-		return fmt.Errorf("could not load strategy: %w", err)
+	symbol := pos.Symbol
+	if symbol == "" {
+		strat, err := s.repo.LoadScoringStrategyByID(ctx, pos.StrategyID)
+		if err == nil {
+			symbol = strat.BaseSymbol
+		} else {
+			symbol = "BTCUSDT" // Fallback
+		}
 	}
 
 	var price float64
 	var executedQty float64
 
 	if pos.Env == tradingDomain.EnvPaper {
-		price, err = s.ex.GetPrice(ctx, strat.BaseSymbol)
+		price, err = s.ex.GetPrice(ctx, symbol)
 		if err != nil {
 			return fmt.Errorf("paper trade get price: %w", err)
 		}
 		executedQty = pos.Size
-		log.Printf("[TRADING] Paper Manual SELL %s at %.2f (Mocked)", strat.BaseSymbol, price)
+		log.Printf("[TRADING] Paper Manual SELL %s at %.2f (Mocked)", symbol, price)
 	} else {
-		price, executedQty, err = s.ex.PlaceMarketOrder(ctx, strat.BaseSymbol, "sell", pos.Size)
+		price, executedQty, err = s.ex.PlaceMarketOrder(ctx, symbol, "sell", pos.Size)
 		if err != nil {
 			return fmt.Errorf("place market order: %w", err)
 		}
@@ -630,6 +702,7 @@ func (s *Service) ClosePositionManually(ctx context.Context, positionID string) 
 	exitDate := s.now()
 	_ = s.repo.SaveTrade(ctx, tradingDomain.TradeRecord{
 		StrategyID:      pos.StrategyID,
+		Symbol:          symbol,
 		StrategyVersion: 1,
 		Env:             pos.Env,
 		Side:            "sell",
@@ -646,7 +719,7 @@ func (s *Service) ClosePositionManually(ctx context.Context, positionID string) 
 	err = s.repo.ClosePosition(ctx, pos.ID, exitDate, price)
 	if err == nil {
 		s.notify(fmt.Sprintf("✋ %s [MANUAL] SELL %s\nPrice: %.2f (Entry: %.2f)\nPNL: %.2f (%.2f%%)\nReason: Manual Close",
-			s.envTag(pos.Env), strat.BaseSymbol, price, pos.EntryPrice, pnl, pnlPct*100))
+			s.envTag(pos.Env), symbol, price, pos.EntryPrice, pnl, pnlPct*100))
 	}
 	return err
 }

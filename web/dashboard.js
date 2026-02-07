@@ -1,4 +1,4 @@
-import { updateExchangeLink, initSidebar, initBinanceConfigModal, initAuthModal } from "./common.js";
+import { updateExchangeLink, initSidebar, initBinanceConfigModal, initAuthModal, initGlobalEnvSelector } from "./common.js";
 
 
 const state = {
@@ -510,6 +510,16 @@ function bootstrap() {
   initSidebar();
   initBinanceConfigModal();
   setupAuth();
+
+  // Initialize Global Environment Selectors
+  initGlobalEnvSelector((env) => {
+    // Reload dashboard data when env changes if needed, 
+    // though dashboard currently is mostly global / not strictly env-partitioned for historical data analysis?
+    // Actually dashboard jobs status might not be env specific, but later it might be.
+    // For now just logging or simple refresh is fine.
+    console.log("Environment changed to:", env);
+    startPolling(); // Refresh data
+  });
 
   setupActions();
   const symbolInput = el("symbolInput");

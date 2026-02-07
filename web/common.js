@@ -169,3 +169,75 @@ export function initAuthModal(onSuccess) {
     };
 }
 
+export async function initGlobalEnvSelector(onEnvChange) {
+    const envSelectors = document.querySelectorAll(".env-selector");
+    if (envSelectors.length === 0) return;
+
+    const token = localStorage.getItem("aat_token");
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const updateEnvUI = (activeEnv) => {
+        let env = activeEnv;
+        if (env === 'prod') env = 'real';
+
+        envSelectors.forEach(btn => {
+            const btnEnv = btn.dataset.env;
+            const isMatch = (btnEnv === env) ||
+                (env === 'prod' && btnEnv === 'real') ||
+                (env === 'real' && btnEnv === 'prod');
+
+            if (isMatch) {
+                btn.classList.add("bg-primary", "text-background-dark");
+                btn.classList.remove("text-slate-500", "hover:bg-white/5");
+            } else {
+                btn.classList.remove("bg-primary", "text-background-dark");
+                btn.classList.add("text-slate-500", "hover:bg-white/5");
+            }
+        });
+    };
+
+    const setBackendEnv = async (env) => {
+        const backendEnv = env === 'real' ? 'prod' : env;
+
+        // Optimistic UI update
+        updateEnvUI(backendEnv);
+
+        try {
+            await fetch('/api/admin/binance/config', {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify({ active_env: backendEnv })
+            });
+            updateExchangeLink();
+            if (onEnvChange) onEnvChange(backendEnv);
+        } catch (err) {
+            console.error("Failed to set env:", err);
+            // Revert UI if needed? Or just show error
+        }
+    };
+
+    envSelectors.forEach(btn => {
+        // Remove old listeners to be safe (though this runs once usually)
+        const newBtn = btn.cloneNode(true);
+        btn.parentNode.replaceChild(newBtn, btn);
+        newBtn.addEventListener("click", () => setBackendEnv(newBtn.dataset.env));
+    });
+
+    // Re-select because we replaced nodes
+    const refreshedSelectors = document.querySelectorAll(".env-selector");
+
+    // Sync with backend on load
+    try {
+        const res = await fetch('/api/admin/binance/config', {
+            headers: token ? { "Authorization": `Bearer ${token}` } : {}
+        });
+        const data = await res.json();
+        if (data.success) {
+            updateEnvUI(data.active_env);
+            if (onEnvChange) onEnvChange(data.active_env);
+        }
+    } catch (err) {
+        console.error("Failed to sync env:", err);
+    }
+}

@@ -161,6 +161,15 @@
           (Dashboard)</h2>
       </div>
       <div class="flex items-center gap-6">
+        <!-- Global Environment Selector -->
+        <div class="flex items-center gap-2 bg-surface-dark border border-surface-border rounded-lg p-1">
+          <button class="env-selector px-3 py-1 rounded text-[10px] font-bold uppercase transition-all"
+            data-env="test">Test</button>
+          <button class="env-selector px-3 py-1 rounded text-[10px] font-bold uppercase transition-all"
+            data-env="paper">Paper</button>
+          <button class="env-selector px-3 py-1 rounded text-[10px] font-bold uppercase transition-all"
+            data-env="real">Live</button>
+        </div>
         <div id="clock" class="text-xs font-mono text-primary font-bold">00:00:00</div>
         <div class="h-4 w-px bg-surface-border"></div>
         <div class="flex items-center gap-2 text-[10px] text-slate-500 uppercase font-bold tracking-widest">

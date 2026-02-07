@@ -23,6 +23,7 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 		Slug          string
 		Threshold     float64
 		ExitThreshold float64
+		IsActive      bool
 		Rules         []struct {
 			Type     string
 			Name     string
@@ -32,9 +33,11 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 		}
 	}{
 		{
-			Name:      "趨勢突破策略 (Trend Breakout)",
-			Slug:      "trend-breakout",
-			Threshold: 7.0,
+			Name:          "趨勢突破策略 (Trend Breakout)",
+			Slug:          "trend-breakout",
+			Threshold:     7.0,
+			ExitThreshold: 5.0,
+			IsActive:      true,
 			Rules: []struct {
 				Type     string
 				Name     string
@@ -49,9 +52,11 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 			},
 		},
 		{
-			Name:      "強勢放量策略 (High Volume Surge)",
-			Slug:      "volume-surge-pro",
-			Threshold: 6.0,
+			Name:          "強勢放量策略 (High Volume Surge)",
+			Slug:          "volume-surge-pro",
+			Threshold:     6.0,
+			ExitThreshold: 4.0,
+			IsActive:      true,
 			Rules: []struct {
 				Type     string
 				Name     string
@@ -65,9 +70,11 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 			},
 		},
 		{
-			Name:      "低檔轉強策略 (Reversal at Low)",
-			Slug:      "low-reversal",
-			Threshold: 6.5,
+			Name:          "低檔轉強策略 (Reversal at Low)",
+			Slug:          "low-reversal",
+			Threshold:     6.5,
+			ExitThreshold: 4.0,
+			IsActive:      true,
 			Rules: []struct {
 				Type     string
 				Name     string
@@ -86,6 +93,7 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 			Slug:          "auto-tester",
 			Threshold:     0.1,
 			ExitThreshold: 0.1,
+			IsActive:      false, // 線上預設不執行
 			Rules: []struct {
 				Type     string
 				Name     string
@@ -99,16 +107,15 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 		},
 	}
 
-
-
 	for _, s := range strategies {
 		var sid string
 		err = db.QueryRowContext(ctx, `
 			INSERT INTO strategies (user_id, name, slug, threshold, exit_threshold, is_active, env, updated_at)
-			VALUES ($1, $2, $3, $4, $5, true, 'both', NOW())
+			VALUES ($1, $2, $3, $4, $5, $6, 'both', NOW())
 			ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, threshold = EXCLUDED.threshold, exit_threshold = EXCLUDED.exit_threshold, updated_at = NOW()
 			RETURNING id
-		`, adminID, s.Name, s.Slug, s.Threshold, s.ExitThreshold).Scan(&sid)
+		`, adminID, s.Name, s.Slug, s.Threshold, s.ExitThreshold, s.IsActive).Scan(&sid)
+
 		if err != nil {
 			log.Printf("[Seed] Strategy %s insert failed: %v", s.Slug, err)
 			continue

@@ -52,6 +52,7 @@ type TelegramConfig struct {
 	Enabled        bool          `yaml:"enabled"`
 	Token          string        `yaml:"token"`
 	ChatID         int64         `yaml:"chat_id"`
+	AppTag         string        `yaml:"app_tag"` // 用於區分不同機器的訊息
 	Interval       time.Duration `yaml:"interval"`
 	StrongLimit    int           `yaml:"strong_limit"`
 	ScoreMin       float64       `yaml:"score_min"`
@@ -154,6 +155,9 @@ func applyEnv(cfg Config) Config {
 	if val := os.Getenv("TELEGRAM_ENABLED"); val != "" {
 		cfg.Notifier.Telegram.Enabled = (val == "true")
 	}
+	if val := os.Getenv("TELEGRAM_APP_TAG"); val != "" {
+		cfg.Notifier.Telegram.AppTag = val
+	}
 	if val := os.Getenv("BINANCE_API_KEY"); val != "" {
 		cfg.Binance.APIKey = val
 	}
@@ -178,6 +182,11 @@ func applyEnv(cfg Config) Config {
 	}
 	if val := os.Getenv("AUTO_TRADE_ENABLED"); val != "" {
 		cfg.AutoTrade.Enabled = (val == "true")
+	}
+	if val := os.Getenv("AUTO_TRADE_INTERVAL"); val != "" {
+		if d, err := time.ParseDuration(val); err == nil {
+			cfg.AutoTrade.Interval = d
+		}
 	}
 	return cfg
 }

@@ -112,7 +112,7 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 	
 	var tgClient *notify.TelegramClient
 	if cfg.Notifier.Telegram.Enabled && cfg.Notifier.Telegram.Token != "" && cfg.Notifier.Telegram.ChatID != 0 {
-		tgClient = notify.NewTelegramClient(cfg.Notifier.Telegram.Token, cfg.Notifier.Telegram.ChatID)
+		tgClient = notify.NewTelegramClient(cfg.Notifier.Telegram.Token, cfg.Notifier.Telegram.ChatID, cfg.Notifier.Telegram.AppTag)
 	}
 
 	var tgNotifier trading.Notifier

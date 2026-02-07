@@ -14,13 +14,15 @@ import (
 type TelegramClient struct {
 	token      string
 	chatID     int64
+	prefix     string
 	httpClient *http.Client
 }
 
-func NewTelegramClient(token string, chatID int64) *TelegramClient {
+func NewTelegramClient(token string, chatID int64, prefix string) *TelegramClient {
 	return &TelegramClient{
 		token:  token,
 		chatID: chatID,
+		prefix: prefix,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
@@ -36,9 +38,14 @@ func (c *TelegramClient) SendMessage(ctx context.Context, text string) error {
 		return fmt.Errorf("telegram token or chat_id missing")
 	}
 
+	fullText := text
+	if c.prefix != "" {
+		fullText = fmt.Sprintf("[%s] %s", c.prefix, text)
+	}
+
 	payload := map[string]interface{}{
 		"chat_id": c.chatID,
-		"text":    text,
+		"text":    fullText,
 	}
 	body, _ := json.Marshal(payload)
 

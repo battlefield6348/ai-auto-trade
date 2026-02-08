@@ -1,4 +1,4 @@
-import { updateExchangeLink, initSidebar, initBinanceConfigModal, initAuthModal } from "./common.js";
+import { updateExchangeLink, initSidebar, initBinanceConfigModal, initAuthModal, initGlobalEnvSelector } from "./common.js";
 
 const state = {
   token: localStorage.getItem("aat_token") || "",
@@ -581,6 +581,10 @@ function bootstrap() {
   updateExchangeLink();
   initSidebar();
   initBinanceConfigModal();
+  initGlobalEnvSelector((env) => {
+    console.log("[Backtest] Env switched to:", env);
+    // You can add logic here if backtest needs to react to env change
+  });
 
   window.onBinanceConfigUpdate = () => {
     // Refresh page or update data

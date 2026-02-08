@@ -1177,10 +1177,10 @@ func normalizeHorizons(values []int) []int {
 }
 
 func calcBacktestScore(res analysisDomain.DailyAnalysisResult, req analysisBacktestRequest) (float64, map[string]float64) {
-	total := req.Weights.Score * res.Score
+	total := req.Weights.Score * (res.Score / 100.0)
 	components := make(map[string]float64)
 	if req.Weights.Score != 0 {
-		components["score"] = req.Weights.Score * res.Score
+		components["score"] = req.Weights.Score * (res.Score / 100.0)
 	}
 
 	if req.Flags.UseChange && res.ChangeRate >= req.Thresholds.ChangeMin {

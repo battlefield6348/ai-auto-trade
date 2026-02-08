@@ -132,7 +132,7 @@ function updateMaxScore() {
   const returnBonus = el("btUseReturn").checked ? parse("btReturnBonus") : 0;
   const maBonus = el("btUseMa").checked ? parse("btMaBonus") : 0;
 
-  const max = (scoreWeight * 100) + changeBonus + volumeBonus + returnBonus + maBonus;
+  const max = scoreWeight + changeBonus + volumeBonus + returnBonus + maBonus;
   const display = el("maxPossibleScore");
   if (display) display.textContent = max.toFixed(1);
 }
@@ -457,7 +457,13 @@ async function loadStrategyDetails(slug) {
       const cfg = {
         thresholds: { total_min: s.threshold },
         exit_threshold: s.exit_threshold || 10,
-        weights: { score: 0 },
+        weights: {
+          score: 0,
+          change_bonus: 0,
+          volume_bonus: 0,
+          return_bonus: 0,
+          ma_bonus: 0
+        },
         flags: {
           use_change: false,
           use_volume: false,

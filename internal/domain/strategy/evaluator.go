@@ -15,6 +15,7 @@ var EvaluatorRegistry = map[string]ConditionEvaluator{
 	"VOLUME_SURGE": evalVolumeSurge,
 	"MA_DEVIATION": evalMADeviation,
 	"RANGE_POS":    evalRangePos,
+	"BASE_SCORE":   evalBaseScore,
 }
 
 // evalPriceReturn computes score based on price return over N days.
@@ -97,6 +98,14 @@ func evalRangePos(params map[string]interface{}, data analysis.DailyAnalysisResu
 	}
 	// Legacy continuous scoring
 	return (*data.RangePos20 - 0.5) * 10, nil
+}
+
+// evalBaseScore extracts the pre-calculated score from analysis result.
+// Params: none required, but maybe weighting.
+func evalBaseScore(params map[string]interface{}, data analysis.DailyAnalysisResult) (float64, error) {
+	// data.Score is 0-100? No, it's float64. Is it normalized?
+	// Assuming data.Score is 0-100.
+	return data.Score / 100.0, nil
 }
 
 // CalculateScore executes all rules in a strategy (defaults to EntryRules) and returns the total score.

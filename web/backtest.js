@@ -187,35 +187,95 @@ function renderResult(res) {
     resetCharts();
     return;
   }
+  const summary = res.summary || {};
   const stats = res.stats || {};
   const rows = [];
   rows.push(`<div class="text-xs text-slate-400">交易對：${res.symbol || ""}</div>`);
-  rows.push(`<div>期間：${res.start_date || "--"} ~ ${res.end_date || "--"} | 命中 ${res.total_events ?? 0} 筆</div>`);
+  rows.push(`<div>期間：${res.start_date || "--"} ~ ${res.end_date || "--"}</div>`);
+
+  if (summary.total_trades !== undefined) {
+    rows.push(`
+      <div class="grid grid-cols-2 gap-4 mt-4 p-4 bg-primary/5 rounded-xl border border-primary/20">
+        <div>
+          <div class="text-[10px] text-slate-500 uppercase font-bold">總交易次數</div>
+          <div class="text-xl font-black text-white">${summary.total_trades} 次</div>
+        </div>
+        <div>
+          <div class="text-[10px] text-slate-500 uppercase font-bold">累積收益率</div>
+          <div class="text-xl font-black ${summary.total_return >= 0 ? 'text-success' : 'text-error'}">${summary.total_return.toFixed(2)}%</div>
+        </div>
+        <div>
+          <div class="text-[10px] text-slate-500 uppercase font-bold">勝率</div>
+          <div class="text-xl font-black text-white">${summary.win_rate?.toFixed(1) || 0}%</div>
+        </div>
+      </div>
+    `);
+  }
+
   if (stats.returns) {
-    rows.push(`<div class="mt-1 text-slate-400">報酬統計：</div>`);
+    rows.push(`<div class="mt-4 text-[10px] text-slate-500 uppercase font-bold">統計預估：</div>`);
     const items = Object.entries(stats.returns).map(
-      ([k, v]) => `${k}: 報酬 ${(v.avg_return * 100).toFixed(2)}% / 勝率 ${(v.win_rate * 100).toFixed(1)}%`
+      ([k, v]) => `<span class="text-xs text-slate-300">${k}: ${(v.avg_return * 100).toFixed(2)}% (${(v.win_rate * 100).toFixed(1)}%)</span>`
     );
-    rows.push(`<div>${items.join(" ｜ ")}</div>`);
+    rows.push(`<div class="flex flex-wrap gap-x-4 gap-y-1">${items.join("")}</div>`);
   }
   box.innerHTML = rows.join("");
 
   if (list) {
-    (res.events || []).slice(0, 20).forEach((ev) => {
-      const div = document.createElement("div");
-      div.className = "border border-surface-border rounded-lg p-3 bg-background-dark/50";
-      div.innerHTML = `
-        <div class="flex justify-between text-xs text-slate-400">
-          <span>${ev.trade_date || "--"}</span>
-          <span>${ev.trading_pair || ""}</span>
-        </div>
-        <div class="text-sm text-white mt-1 font-mono">收盤 ${ev.close_price}</div>
-        <div class="text-xs text-slate-300">日漲跌：${ev.change_percent != null ? (ev.change_percent * 100).toFixed(2) + "%" : "--"}</div>
-        <div class="text-xs text-slate-300">量能倍數：${ev.volume_ratio != null ? ev.volume_ratio.toFixed(2) + "x" : "--"}</div>
-        <div class="text-xs text-primary">總分：${ev.total_score != null ? ev.total_score.toFixed(1) : "--"}</div>
-      `;
-      list.appendChild(div);
-    });
+    list.innerHTML = "";
+    const trades = res.trades || [];
+    if (trades.length > 0) {
+      // Show Simulation Trades
+      const h3 = document.createElement("h3");
+      h3.className = "text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-4 mt-6";
+      h3.textContent = "交易明細 (Trades)";
+      list.appendChild(h3);
+
+      trades.forEach((t) => {
+        const div = document.createElement("div");
+        div.className = "border border-surface-border rounded-lg p-3 bg-background-dark/50 hover:border-primary/50 transition-all";
+        div.innerHTML = `
+          <div class="flex justify-between items-start mb-2">
+            <div class="flex flex-col">
+              <span class="text-[10px] text-slate-500 font-bold uppercase">Entry</span>
+              <span class="text-xs text-white font-mono">${t.entry_date}</span>
+            </div>
+            <div class="flex flex-col items-end">
+              <span class="text-[10px] text-slate-500 font-bold uppercase">Exit</span>
+              <span class="text-xs text-white font-mono">${t.exit_date}</span>
+            </div>
+          </div>
+          <div class="flex justify-between items-center bg-black/20 p-2 rounded">
+             <div class="text-xs font-mono text-slate-400">@ ${t.entry_price.toFixed(1)}</div>
+             <div class="material-symbols-outlined text-xs text-slate-600">arrow_forward</div>
+             <div class="text-xs font-mono text-slate-400">@ ${t.exit_price.toFixed(1)}</div>
+          </div>
+          <div class="flex justify-between items-center mt-2">
+            <span class="text-[10px] text-slate-400">${t.reason || ""}</span>
+            <span class="text-sm font-black ${t.pnl_pct >= 0 ? 'text-success' : 'text-error'}">
+              ${t.pnl_pct >= 0 ? '+' : ''}${(t.pnl_pct * 100).toFixed(2)}%
+            </span>
+          </div>
+        `;
+        list.appendChild(div);
+      });
+    } else {
+      // Fallback to Events if no trades
+      const hits = (res.events || []);
+      hits.slice(0, 20).forEach((ev) => {
+        const div = document.createElement("div");
+        div.className = "border border-surface-border rounded-lg p-3 bg-background-dark/50";
+        div.innerHTML = `
+          <div class="flex justify-between text-xs text-slate-400">
+            <span>${ev.trade_date || "--"}</span>
+            <span>命中</span>
+          </div>
+          <div class="text-sm text-white mt-1 font-mono">收盤 ${ev.close_price}</div>
+          <div class="text-xs text-primary">總分：${ev.total_score != null ? ev.total_score.toFixed(1) : "--"}</div>
+        `;
+        list.appendChild(div);
+      });
+    }
   }
 
   renderCharts(res.events || []);

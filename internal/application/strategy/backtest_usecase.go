@@ -18,15 +18,33 @@ type BacktestResult struct {
 	TotalEvents int                      `json:"total_events"`
 	Events      []BacktestEvent          `json:"events"`
 	Stats       map[string]BacktestStats `json:"stats"`
+	Trades      []BacktestTrade          `json:"trades"`
+	Summary     SimulationSummary       `json:"summary"`
+}
+
+type BacktestTrade struct {
+	EntryDate  string  `json:"entry_date"`
+	EntryPrice float64 `json:"entry_price"`
+	ExitDate   string  `json:"exit_date"`
+	ExitPrice  float64 `json:"exit_price"`
+	PnL        float64 `json:"pnl"`
+	PnLPct     float64 `json:"pnl_pct"`
+	Reason     string  `json:"reason"`
+}
+
+type SimulationSummary struct {
+	TotalTrades int     `json:"total_trades"`
+	TotalReturn float64 `json:"total_return"`
+	WinRate     float64 `json:"win_rate"`
 }
 
 type BacktestEvent struct {
-	TradeDate     string             `json:"trade_date"`
-	ClosePrice    float64            `json:"close_price"`
-	ChangePercent float64            `json:"change_percent"`
-	TotalScore    float64            `json:"total_score"`
-	IsTriggered   bool               `json:"is_triggered"`
-	Return5d      *float64           `json:"return_5d"`
+	TradeDate      string             `json:"trade_date"`
+	ClosePrice     float64            `json:"close_price"`
+	ChangePercent  float64            `json:"change_percent"`
+	TotalScore     float64            `json:"total_score"`
+	IsTriggered    bool               `json:"is_triggered"`
+	Return5d       *float64           `json:"return_5d"`
 	ForwardReturns map[string]float64 `json:"forward_returns,omitempty"`
 }
 
@@ -75,33 +93,72 @@ func (u *BacktestUseCase) Execute(ctx context.Context, slug string, symbol strin
 	var events []BacktestEvent
 	retStats := make(map[int][]float64)
 
+	// Simulation state
+	var trades []BacktestTrade
+	var currentPosition *BacktestTrade
+	totalReturn := 1.0
+
 	for idx, res := range history {
 		triggered, score, err := s.IsTriggered(res)
 		if err != nil {
 			continue
 		}
 
-		if !triggered {
-			continue
+		// Always record the event if it's triggered (for charts)
+		if triggered {
+			forward := calculateForwardReturns(history, idx, horizons)
+			for _, h := range horizons {
+				if val, ok := forward[fmt.Sprintf("d%d", h)]; ok {
+					retStats[h] = append(retStats[h], val)
+				}
+			}
+			events = append(events, BacktestEvent{
+				TradeDate:      res.TradeDate.Format("2006-01-02"),
+				ClosePrice:     res.Close,
+				ChangePercent:  res.ChangeRate,
+				TotalScore:     score,
+				IsTriggered:    triggered,
+				Return5d:       res.Return5,
+				ForwardReturns: forward,
+			})
 		}
 
-		// Calculate forward returns (simulated "what if we bought here")
-		forward := calculateForwardReturns(history, idx, horizons)
-		for _, h := range horizons {
-			if val, ok := forward[fmt.Sprintf("d%d", h)]; ok {
-				retStats[h] = append(retStats[h], val)
+		// Simulation Logic
+		if currentPosition == nil {
+			if triggered {
+				// Open position at next day open (approximated by current close for simplicity, or we could use next day open if available)
+				// For simplicity in this backtester, we use current close as entry price.
+				currentPosition = &BacktestTrade{
+					EntryDate:  res.TradeDate.Format("2006-01-02"),
+					EntryPrice: res.Close,
+				}
+			}
+		} else {
+			// Check Exit
+			exitTriggered, exitScore, _ := s.IsExitTriggered(res)
+			
+			// Also auto-exit if entry score drops below 50% of threshold (builtin protection)
+			if !exitTriggered {
+				if score < (s.Threshold * 0.5) {
+					exitTriggered = true
+					reason := fmt.Sprintf("AI信號轉弱 (%.1f < %.1f)", score, s.Threshold*0.5)
+					currentPosition.Reason = reason
+				}
+			} else {
+				currentPosition.Reason = fmt.Sprintf("觸發策略出場條件 (%.1f)", exitScore)
+			}
+
+			if exitTriggered {
+				currentPosition.ExitDate = res.TradeDate.Format("2006-01-02")
+				currentPosition.ExitPrice = res.Close
+				currentPosition.PnL = currentPosition.ExitPrice - currentPosition.EntryPrice
+				currentPosition.PnLPct = (currentPosition.ExitPrice / currentPosition.EntryPrice) - 1.0
+				
+				trades = append(trades, *currentPosition)
+				totalReturn *= (1.0 + currentPosition.PnLPct)
+				currentPosition = nil
 			}
 		}
-
-		events = append(events, BacktestEvent{
-			TradeDate:      res.TradeDate.Format("2006-01-02"),
-			ClosePrice:     res.Close,
-			ChangePercent:  res.ChangeRate,
-			TotalScore:     score,
-			IsTriggered:    triggered,
-			Return5d:       res.Return5,
-			ForwardReturns: forward,
-		})
 	}
 
 	// 3. Summarize Stats
@@ -124,6 +181,20 @@ func (u *BacktestUseCase) Execute(ctx context.Context, slug string, symbol strin
 		}
 	}
 
+	summary := SimulationSummary{
+		TotalTrades: len(trades),
+		TotalReturn: (totalReturn - 1.0) * 100, // as percentage
+	}
+	if len(trades) > 0 {
+		wins := 0
+		for _, t := range trades {
+			if t.PnLPct > 0 {
+				wins++
+			}
+		}
+		summary.WinRate = float64(wins) / float64(len(trades)) * 100
+	}
+
 	return &BacktestResult{
 		Symbol:      symbol,
 		StartDate:   start.Format("2006-01-02"),
@@ -131,6 +202,8 @@ func (u *BacktestUseCase) Execute(ctx context.Context, slug string, symbol strin
 		TotalEvents: len(events),
 		Events:      events,
 		Stats:       stats,
+		Trades:      trades,
+		Summary:     summary,
 	}, nil
 }
 

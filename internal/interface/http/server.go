@@ -821,34 +821,87 @@ func (s *Server) handleAnalysisBacktest(w http.ResponseWriter, r *http.Request) 
 
 	events := make([]analysisBacktestEvent, 0, len(history))
 	retStats := make(map[int][]float64)
+
+	// Simulation state
+	type backtestTrade struct {
+		EntryDate  string  `json:"entry_date"`
+		EntryPrice float64 `json:"entry_price"`
+		ExitDate   string  `json:"exit_date"`
+		ExitPrice  float64 `json:"exit_price"`
+		PnL        float64 `json:"pnl"`
+		PnLPct     float64 `json:"pnl_pct"`
+		Reason     string  `json:"reason"`
+	}
+	var trades []backtestTrade
+	var currentPosition *backtestTrade
+	totalReturn := 1.0
+
 	for idx, res := range history {
 		total, comps := calcBacktestScore(res, input.req)
-		if total < input.req.Thresholds.TotalMin {
-			continue
+		triggered := total >= input.req.Thresholds.TotalMin
+
+		if triggered {
+			forward := calcForwardReturns(history, idx, input.horizons)
+			for _, h := range input.horizons {
+				key := fmt.Sprintf("d%d", h)
+				if val, ok := forward[key]; ok {
+					retStats[h] = append(retStats[h], val)
+				}
+			}
+			ev := analysisBacktestEvent{
+				TradingPair:   res.Symbol,
+				TradeDate:     res.TradeDate.Format("2006-01-02"),
+				ClosePrice:    res.Close,
+				ChangePercent: res.ChangeRate,
+				Return5d:      res.Return5,
+				MaGap:         res.Deviation20,
+				VolumeRatio:   res.VolumeMultiple,
+				Score:         res.Score,
+				TotalScore:    total,
+				Components:    comps,
+			}
+			if len(forward) > 0 {
+				ev.ForwardReturns = forward
+			}
+			events = append(events, ev)
 		}
-		forward := calcForwardReturns(history, idx, input.horizons)
-		for _, h := range input.horizons {
-			key := fmt.Sprintf("d%d", h)
-			if val, ok := forward[key]; ok {
-				retStats[h] = append(retStats[h], val)
+
+		// Simulation Logic
+		if currentPosition == nil {
+			if triggered {
+				currentPosition = &backtestTrade{
+					EntryDate:  res.TradeDate.Format("2006-01-02"),
+					EntryPrice: res.Close,
+				}
+			}
+		} else {
+			// Auto-exit if total score drops below 50% of threshold
+			if total < (input.req.Thresholds.TotalMin * 0.5) {
+				currentPosition.ExitDate = res.TradeDate.Format("2006-01-02")
+				currentPosition.ExitPrice = res.Close
+				currentPosition.PnL = currentPosition.ExitPrice - currentPosition.EntryPrice
+				currentPosition.PnLPct = (currentPosition.ExitPrice / currentPosition.EntryPrice) - 1.0
+				currentPosition.Reason = fmt.Sprintf("AI信號轉弱 (%.1f < %.1f)", total, input.req.Thresholds.TotalMin*0.5)
+				
+				trades = append(trades, *currentPosition)
+				totalReturn *= (1.0 + currentPosition.PnLPct)
+				currentPosition = nil
 			}
 		}
-		ev := analysisBacktestEvent{
-			TradingPair:   res.Symbol,
-			TradeDate:     res.TradeDate.Format("2006-01-02"),
-			ClosePrice:    res.Close,
-			ChangePercent: res.ChangeRate,
-			Return5d:      res.Return5,
-			MaGap:         res.Deviation20,
-			VolumeRatio:   res.VolumeMultiple,
-			Score:         res.Score,
-			TotalScore:    total,
-			Components:    comps,
+	}
+
+	summary := map[string]interface{}{
+		"total_trades": len(trades),
+		"total_return": (totalReturn - 1.0) * 100,
+	}
+	if len(trades) > 0 {
+		wins := 0
+		for _, t := range trades {
+			if t.PnLPct > 0 {
+				wins++
+			}
 		}
-		if len(forward) > 0 {
-			ev.ForwardReturns = forward
-		}
-		events = append(events, ev)
+		summary["win_rate"] = float64(wins) / float64(len(trades)) * 100
 	}
 
 	stats := make(map[string]backtestReturnStat)
@@ -878,6 +931,8 @@ func (s *Server) handleAnalysisBacktest(w http.ResponseWriter, r *http.Request) 
 		"total_events": len(events),
 		"config":       input.req,
 		"events":       events,
+		"trades":       trades,
+		"summary":      summary,
 		"stats": map[string]interface{}{
 			"returns": stats,
 		},

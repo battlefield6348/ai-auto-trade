@@ -394,6 +394,15 @@ async function confirmSaveScoringStrategy() {
       });
     }
 
+    // Always include Base AI Score rule
+    rules.push({
+      condition_name: "Base AI Score",
+      type: "BASE_SCORE",
+      params: {},
+      weight: parseFloat(el("btScoreWeight").value) || 0,
+      rule_type: "entry"
+    });
+
     const payload = {
       name: name,
       slug: slug,
@@ -481,6 +490,8 @@ async function loadStrategyDetails(slug) {
           cfg.thresholds.ma_gap_min = Math.abs(params.min * 100);
           cfg.flags.use_ma = true;
           el("btSideMa").value = side;
+        } else if (type === "BASE_SCORE") {
+          cfg.weights.score = r.weight;
         }
       });
       if (el("newStrategyExitThreshold")) el("newStrategyExitThreshold").value = cfg.exit_threshold;

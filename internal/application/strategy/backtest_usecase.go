@@ -162,6 +162,20 @@ func (u *BacktestUseCase) Execute(ctx context.Context, slug string, symbol strin
 			}
 		}
 	}
+	
+	// Force close last position if still open at end of data
+	if currentPosition != nil && len(history) > 0 {
+		last := history[len(history)-1]
+		currentPosition.ExitDate = last.TradeDate.Format("2006-01-02")
+		currentPosition.ExitPrice = last.Close
+		currentPosition.PnL = currentPosition.ExitPrice - currentPosition.EntryPrice
+		currentPosition.PnLPct = (currentPosition.ExitPrice / currentPosition.EntryPrice) - 1.0
+		currentPosition.Reason = "回測結束前尚未出場 (Simulation End)"
+		
+		trades = append(trades, *currentPosition)
+		totalReturn *= (1.0 + currentPosition.PnLPct)
+		currentPosition = nil
+	}
 
 	// 3. Summarize Stats
 	stats := make(map[string]BacktestStats)

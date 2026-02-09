@@ -2,6 +2,21 @@
  * Common utilities for AI Auto Trade Web Console
  */
 
+export function guardRoute() {
+    // Check if current page is login.html to avoid infinite redirect
+    if (window.location.pathname.endsWith('/login.html')) {
+        return;
+    }
+
+    const token = localStorage.getItem("aat_token");
+    if (!token) {
+        console.warn("[Auth] No token found, redirecting to login...");
+        window.location.href = "/login.html";
+        return true;
+    }
+    return false;
+}
+
 export async function updateExchangeLink() {
     const link = document.getElementById('exchangeLink');
     if (!link) return;
@@ -96,6 +111,23 @@ export function initSidebar() {
         tick();
         setInterval(tick, 1000);
     }
+
+    // Auth State UI Update
+    const token = localStorage.getItem("aat_token");
+    const email = localStorage.getItem("aat_email");
+    const loginBtn = document.getElementById("loginBtn");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const loginStatus = document.getElementById("loginStatus");
+
+    if (token) {
+        if (loginBtn) loginBtn.classList.add("hidden");
+        if (logoutBtn) logoutBtn.classList.remove("hidden");
+        if (loginStatus) loginStatus.textContent = email || "已登入";
+    } else {
+        if (loginBtn) loginBtn.classList.remove("hidden");
+        if (logoutBtn) logoutBtn.classList.add("hidden");
+        if (loginStatus) loginStatus.textContent = "未登入";
+    }
 }
 
 export function initAuthModal(onSuccess) {
@@ -167,6 +199,15 @@ export function initAuthModal(onSuccess) {
             alert(err.message);
         }
     };
+
+    const logoutBtn = document.getElementById("logoutBtn");
+    if (logoutBtn) {
+        logoutBtn.onclick = () => {
+            localStorage.removeItem("aat_token");
+            localStorage.removeItem("aat_email");
+            window.location.href = "/login.html";
+        };
+    }
 }
 
 export async function initGlobalEnvSelector(onEnvChange) {

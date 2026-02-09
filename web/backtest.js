@@ -88,6 +88,7 @@ function readForm() {
     },
     thresholds: {
       total_min: parse("btTotalMin", 60),
+      exit_min: parse("btExitMin", 10),
       change_min: parse("btChangeMin", 0.5) / 100,
       volume_ratio_min: parse("btVolMin", 1.2),
       return5_min: parse("btRet5Min", 1) / 100,
@@ -153,6 +154,7 @@ function fillForm(cfg) {
 
   if (cfg.thresholds) {
     if (cfg.thresholds.total_min !== undefined) el("btTotalMin").value = cfg.thresholds.total_min;
+    if (cfg.thresholds.exit_min !== undefined) el("btExitMin").value = cfg.thresholds.exit_min;
     if (cfg.thresholds.change_min !== undefined) el("btChangeMin").value = cfg.thresholds.change_min * 100;
     if (cfg.thresholds.volume_ratio_min !== undefined) el("btVolMin").value = cfg.thresholds.volume_ratio_min;
     if (cfg.thresholds.return5_min !== undefined) el("btRet5Min").value = cfg.thresholds.return5_min * 100;
@@ -261,7 +263,7 @@ function renderResult(res) {
       });
     } else {
       // Fallback to Events if no trades
-      const hits = (res.events || []);
+      const hits = (res.events || []).filter(e => e.is_triggered);
       hits.slice(0, 20).forEach((ev) => {
         const div = document.createElement("div");
         div.className = "border border-surface-border rounded-lg p-3 bg-background-dark/50";
@@ -291,6 +293,9 @@ function renderCharts(events) {
     return v == null ? null : v * 100;
   });
 
+  const radii = sorted.map((e) => (e.is_triggered ? 5 : 0));
+  const pointBg = sorted.map((e) => (e.is_triggered ? "#facc15" : "transparent"));
+
   if (state.btScoreChart) state.btScoreChart.destroy();
   if (state.btReturnChart) state.btReturnChart.destroy();
 
@@ -302,8 +307,27 @@ function renderCharts(events) {
       data: {
         labels,
         datasets: [
-          { label: "總分", data: scoreData, borderColor: "#7c3aed", backgroundColor: "rgba(124,58,237,0.2)", yAxisID: "y1" },
-          { label: "收盤", data: closeData, borderColor: "#0ddff2", backgroundColor: "rgba(13,223,242,0.15)", yAxisID: "y" },
+          {
+            label: "總分",
+            data: scoreData,
+            borderColor: "#7c3aed",
+            backgroundColor: "rgba(124,58,237,0.2)",
+            yAxisID: "y1",
+            pointRadius: radii,
+            pointBackgroundColor: pointBg,
+            pointBorderColor: "#7c3aed",
+            pointHoverRadius: 7,
+            tension: 0.1
+          },
+          {
+            label: "收盤",
+            data: closeData,
+            borderColor: "#0ddff2",
+            backgroundColor: "rgba(13,223,242,0.15)",
+            yAxisID: "y",
+            pointRadius: 0,
+            tension: 0.1
+          },
         ],
       },
       options: {
@@ -515,8 +539,10 @@ async function loadStrategyDetails(slug) {
     if (res.strategy) {
       const s = res.strategy;
       const cfg = {
-        thresholds: { total_min: s.threshold },
-        exit_threshold: s.exit_threshold || 10,
+        thresholds: {
+          total_min: s.threshold,
+          exit_min: s.exit_threshold || 10
+        },
         weights: {
           score: 0,
           change_bonus: 0,
@@ -691,7 +717,7 @@ function bootstrap() {
 
   // Auto-trigger on all inputs
   [
-    "btSymbol", "btStart", "btEnd", "btTotalMin", "btScoreWeight",
+    "btSymbol", "btStart", "btEnd", "btTotalMin", "btExitMin", "btScoreWeight",
     "btChangeBonus", "btVolumeBonus", "btReturnBonus", "btMaBonus",
     "btChangeMin", "btVolMin", "btRet5Min", "btMaGapMin", "btHorizons"
   ].forEach(id => {

@@ -104,26 +104,28 @@ func (u *BacktestUseCase) Execute(ctx context.Context, slug string, symbol strin
 			continue
 		}
 
-		// Always record the event if it's triggered (for charts)
+		// Record all events for accurate charting
+		var forward map[string]float64
 		if triggered {
-			forward := calculateForwardReturns(history, idx, horizons)
+			forward = calculateForwardReturns(history, idx, horizons)
 			for _, h := range horizons {
 				if val, ok := forward[fmt.Sprintf("d%d", h)]; ok {
 					retStats[h] = append(retStats[h], val)
 				}
 			}
-			events = append(events, BacktestEvent{
-				TradeDate:      res.TradeDate.Format("2006-01-02"),
-				ClosePrice:     res.Close,
-				ChangePercent:  res.ChangeRate,
-				TotalScore:     score,
-				IsTriggered:    triggered,
-				Return5d:       res.Return5,
-				ForwardReturns: forward,
-			})
 		}
 
-		// Simulation Logic
+		events = append(events, BacktestEvent{
+			TradeDate:      res.TradeDate.Format("2006-01-02"),
+			ClosePrice:     res.Close,
+			ChangePercent:  res.ChangeRate,
+			TotalScore:     score,
+			IsTriggered:    triggered,
+			Return5d:       res.Return5,
+			ForwardReturns: forward,
+		})
+
+		// Simulation Logic (Sequential)
 		if currentPosition == nil {
 			if triggered {
 				// Open position at next day open (approximated by current close for simplicity, or we could use next day open if available)

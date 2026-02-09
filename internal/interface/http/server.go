@@ -766,10 +766,14 @@ func (s *Server) handleAnalysisSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 以最高分數的交易對作為當前趨勢參考
+	// 以 5 日收益率最高的交易對作為當前趨勢參考 (最高收益資料)
 	best := out.Results[0]
 	for _, r := range out.Results {
-		if r.Score > best.Score {
+		if r.Return5 != nil && best.Return5 != nil {
+			if *r.Return5 > *best.Return5 {
+				best = r
+			}
+		} else if r.Score > best.Score {
 			best = r
 		}
 	}
@@ -890,8 +894,12 @@ func (s *Server) handleAnalysisBacktest(w http.ResponseWriter, r *http.Request) 
 			if total < exitThreshold {
 				currentPosition.ExitDate = res.TradeDate.Format("2006-01-02")
 				currentPosition.ExitPrice = res.Close
-				currentPosition.PnL = currentPosition.ExitPrice - currentPosition.EntryPrice
-				currentPosition.PnLPct = (currentPosition.ExitPrice / currentPosition.EntryPrice) - 1.0
+				
+				// Apply 0.1% slippage/fee on exit
+				exitPriceWithFee := currentPosition.ExitPrice * 0.999
+				
+				currentPosition.PnL = exitPriceWithFee - currentPosition.EntryPrice
+				currentPosition.PnLPct = (exitPriceWithFee / currentPosition.EntryPrice) - 1.0
 				currentPosition.Reason = fmt.Sprintf("AI信號轉弱 (%.1f < %.1f)", total, exitThreshold)
 				
 				trades = append(trades, *currentPosition)
@@ -899,6 +907,20 @@ func (s *Server) handleAnalysisBacktest(w http.ResponseWriter, r *http.Request) 
 				currentPosition = nil
 			}
 		}
+	}
+	
+	// Force close last position if still open at end of data (apply fee)
+	if currentPosition != nil && len(history) > 0 {
+		last := history[len(history)-1]
+		currentPosition.ExitDate = last.TradeDate.Format("2006-01-02")
+		currentPosition.ExitPrice = last.Close * 0.999 // Fee
+		currentPosition.PnL = currentPosition.ExitPrice - currentPosition.EntryPrice
+		currentPosition.PnLPct = (currentPosition.ExitPrice / currentPosition.EntryPrice) - 1.0
+		currentPosition.Reason = "回測結束前尚未出場 (Simulation End)"
+		
+		trades = append(trades, *currentPosition)
+		totalReturn *= (1.0 + currentPosition.PnLPct)
+		currentPosition = nil
 	}
 
 	summary := map[string]interface{}{
@@ -1036,7 +1058,7 @@ func (s *Server) handleListScoringStrategies(w http.ResponseWriter, r *http.Requ
 	userID := currentUserID(r)
 	// 查詢使用者自己的策略，或者是系統預設策略 (由 admin@example.com 擁有)
 	rows, err := s.db.QueryContext(r.Context(), `
-		SELECT id, name, slug, threshold, updated_at 
+		SELECT id, name, slug, threshold, env, is_active, updated_at 
 		FROM strategies 
 		WHERE slug IS NOT NULL 
 		AND (user_id = $1 OR user_id = (SELECT id FROM users WHERE email = 'admin@example.com' LIMIT 1))
@@ -1054,12 +1076,15 @@ func (s *Server) handleListScoringStrategies(w http.ResponseWriter, r *http.Requ
 		Name      string    `json:"name"`
 		Slug      string    `json:"slug"`
 		Threshold float64   `json:"threshold"`
+		Env       string    `json:"env"`
+		IsActive  bool      `json:"active"` // Map to 'active' for frontend compatibility
 		UpdatedAt time.Time `json:"updated_at"`
 	}
 	var list []item
 	for rows.Next() {
 		var i item
-		if err := rows.Scan(&i.ID, &i.Name, &i.Slug, &i.Threshold, &i.UpdatedAt); err != nil {
+		if err := rows.Scan(&i.ID, &i.Name, &i.Slug, &i.Threshold, &i.Env, &i.IsActive, &i.UpdatedAt); err != nil {
+			log.Printf("scan strategy error: %v", err)
 			continue
 		}
 		list = append(list, i)

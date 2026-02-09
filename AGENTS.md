@@ -7,11 +7,17 @@
 - 優先完成可運作的資料擷取、分析、推播與管理介面功能。
 - 避免引入多餘依賴或複雜度，維持 MVP 可用性。
 
-## 啟動方式
+## 啟動方式 (僅限使用者手動執行)
 - 使用 `config.yaml` 作為唯一設定來源。
 - 啟動資料庫與 Swagger：`docker compose up -d`
 - 啟動 API：`go run ./cmd/api/main.go`
 - 若 DB Volume 已存在需重跑 migration：`docker compose exec db psql -U ai -d ai_auto_trade -f /docker-entrypoint-initdb.d/0001_init.sql`
+
+## AI 行為限制
+- **嚴禁自行啟動服務**：AI 在修復或開發過程中，**不得**在後台啟動 API 服務（如 `go run`）或資料庫。啟動與重啟服務的權限完全保留給使用者。AI 僅負責：
+    - 修改程式碼邏輯與樣式。
+    - 更新開發指南與技術文件。
+    - 透過日誌分析問題，但不直接干預運行狀態。
 
 ## 開發原則
 - 優先修正錯誤與阻斷流程的問題，再處理體驗與優化。

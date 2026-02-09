@@ -72,29 +72,6 @@ function renderTable() {
     if (empty) empty.classList.add("hidden");
 
     state.strategies.forEach((s) => {
-        // Filter by env? Or just show all? 
-        // User requested: "切換環境按鈕...要在其他地方也要依靠那個環境設定啊"
-        // So we should probably filter by env.
-        // Strategies in DB have 'env' column. 
-        // If s.env matches state.env (handling prod/real mapping), show it.
-        // Or show 'both'.
-        const currentEnv = state.env === 'prod' ? 'real' : state.env; // Map to UI
-        const stratEnv = s.env === 'prod' ? 'real' : s.env;
-
-        // Show if strict match or 'both' or if user wants to see all?
-        // Usually filtering is good.
-        // Let's filter: show if stratEnv == currentEnv or stratEnv == 'both'
-        // But wait, what if I want to manage test strategies while in test mode? Yes.
-
-        let isVisible = false;
-        if (stratEnv === 'both') isVisible = true;
-        // active_env 'prod' map to 'real' in UI
-        if (state.env === 'real' && (stratEnv === 'prod' || stratEnv === 'real')) isVisible = true;
-        if (state.env === 'paper' && stratEnv === 'paper') isVisible = true;
-        if (state.env === 'test' && stratEnv === 'test') isVisible = true;
-
-        if (!isVisible) return; // Skip
-
         const date = new Date(s.updated_at).toLocaleString();
         const tr = document.createElement("tr");
         tr.className = "hover:bg-white/5 transition-colors group";

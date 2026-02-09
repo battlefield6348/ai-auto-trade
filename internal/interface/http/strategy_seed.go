@@ -88,6 +88,41 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 				{Type: "RANGE_POS", Name: "股價位階回升至高位 (> 80%)", Params: map[string]interface{}{"days": 20.0, "min": 0.8}, Weight: 1.0, RuleType: "exit"},
 			},
 		},
+		{
+			Name:          "AI Opt Strategy 2026-02-08 (PROD)",
+			Slug:          "opt-prod-080334-rsi40",
+			Threshold:     80.0,
+			ExitThreshold: 10.0,
+			IsActive:      false,
+			Rules: []struct {
+				Type     string
+				Name     string
+				Params   map[string]interface{}
+				Weight   float64
+				RuleType string
+			}{
+				{Type: "BASE_SCORE", Name: "AI Core Score", Params: map[string]interface{}{}, Weight: 100.0, RuleType: "entry"},
+				{Type: "PRICE_RETURN", Name: "Daily Change Bonus", Params: map[string]interface{}{"days": 1.0, "min": -0.03}, Weight: 15.0, RuleType: "entry"},
+				{Type: "VOLUME_SURGE", Name: "Volume Surge Bonus", Params: map[string]interface{}{"min": -0.8}, Weight: 15.0, RuleType: "entry"},
+			},
+		},
+		{
+			Name:          "AI Opt Strategy 2026-02-08 (RSI < 40)",
+			Slug:          "opt-080324-rsi40",
+			Threshold:     80.0,
+			ExitThreshold: 50.0,
+			IsActive:      false,
+			Rules: []struct {
+				Type     string
+				Name     string
+				Params   map[string]interface{}
+				Weight   float64
+				RuleType string
+			}{
+				{Type: "BASE_SCORE", Name: "AI Core Score", Params: map[string]interface{}{}, Weight: 100.0, RuleType: "entry"},
+				{Type: "MA_DEVIATION", Name: "Trend Follow", Params: map[string]interface{}{"ma": 200.0, "min": 0.0}, Weight: 30.0, RuleType: "entry"},
+			},
+		},
 	}
 
 	for _, s := range strategies {

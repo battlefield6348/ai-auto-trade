@@ -204,7 +204,7 @@ function renderResult(res) {
         </div>
         <div>
           <div class="text-[10px] text-slate-500 uppercase font-bold">累積收益率</div>
-          <div class="text-xl font-black ${summary.total_return >= 0 ? 'text-success' : 'text-error'}">${summary.total_return.toFixed(2)}%</div>
+          <div class="text-xl font-black ${summary.total_return >= 0 ? 'text-success' : 'text-danger'}">${summary.total_return.toFixed(2)}%</div>
         </div>
         <div>
           <div class="text-[10px] text-slate-500 uppercase font-bold">勝率</div>
@@ -476,7 +476,9 @@ async function confirmSaveScoringStrategy() {
 
     console.log("[SaveStrategy] Sending payload:", payload);
     await api("/api/analysis/strategies/save-scoring", { method: "POST", body: payload });
-    setAlert(`新策略 [${name}] 已成功存入資料庫`, "success");
+
+    const isUpdate = el("newStrategySlug").disabled;
+    setAlert(`策略 [${name}] 已${isUpdate ? '更新' : '成功存入資料庫'}`, "success");
     el("saveAsStrategyForm").classList.add("hidden");
 
     // Refresh strategy list
@@ -563,9 +565,28 @@ async function loadStrategyDetails(slug) {
           el("btSideMa").value = side;
         } else if (type === "BASE_SCORE") {
           cfg.weights.score = r.weight;
+        } else if (type === "RANGE_POS") {
+          // If we had a UI field for Range Pos, we would fill it here.
+          // For now just ensuring it doesn't break.
+          console.warn("Unhandled rule type in UI mapping:", type);
+        } else {
+          // Fallback for unknown types (like rsi_oversold) - add to score to keep Max Score accurate
+          console.log("Adding unknown rule weight to score for visualization:", type, r.weight);
+          cfg.weights.score += r.weight;
         }
       });
       if (el("newStrategyExitThreshold")) el("newStrategyExitThreshold").value = cfg.exit_threshold;
+
+      // Pre-fill Save Form for Editing
+      if (el("newStrategyName")) el("newStrategyName").value = s.name;
+      if (el("newStrategySlug")) {
+        el("newStrategySlug").value = s.slug;
+        el("newStrategySlug").disabled = true; // Slug is the unique key, don't change while editing
+        el("newStrategySlug").classList.add("opacity-50", "cursor-not-allowed");
+      }
+      if (el("saveFormTitle")) el("saveFormTitle").textContent = "更新現有策略 (Update Strategy)";
+      if (el("confirmSaveStrategyBtn")) el("confirmSaveStrategyBtn").textContent = "確認並更新 (Update)";
+
       fillForm(cfg);
       setAlert(`已載入策略: ${s.name}，上方的回測條件已更新`, "success");
       // Trigger a run with new parameters
@@ -665,7 +686,19 @@ function bootstrap() {
   setupAuth();
 
   el("runBacktestBtn").addEventListener("click", () => runBacktest());
-  el("saveAsStrategyBtn").addEventListener("click", () => el("saveAsStrategyForm").classList.remove("hidden"));
+  el("saveAsStrategyBtn").addEventListener("click", () => {
+    const form = el("saveAsStrategyForm");
+    form.classList.remove("hidden");
+
+    // If we're not specifically in "editing mode" (slug in URL), ensure form is clean
+    const params = new URLSearchParams(window.location.search);
+    if (!params.get("slug")) {
+      el("newStrategySlug").disabled = false;
+      el("newStrategySlug").classList.remove("opacity-50", "cursor-not-allowed");
+      el("saveFormTitle").textContent = "儲存為全新策略 (Save New)";
+      el("confirmSaveStrategyBtn").textContent = "確認儲存 (Save)";
+    }
+  });
   el("cancelSaveStrategyBtn").addEventListener("click", () => el("saveAsStrategyForm").classList.add("hidden"));
   el("confirmSaveStrategyBtn").addEventListener("click", confirmSaveScoringStrategy);
   el("savePresetBtn").addEventListener("click", savePreset);

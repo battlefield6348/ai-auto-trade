@@ -30,19 +30,16 @@ export async function updateExchangeLink() {
 
         if (data.use_testnet) {
             link.href = 'https://testnet.binance.vision/';
-            link.innerHTML = '<span class="material-symbols-outlined text-sm">science</span> 測試帳戶 (Testnet)';
             link.classList.remove('bg-warning/20', 'text-warning', 'border-warning/40', 'hover:bg-warning/30');
-            link.classList.add('bg-secondary/20', 'text-secondary', 'border-secondary/40', 'hover:bg-secondary/30');
+            link.classList.add('bg-secondary/10', 'text-secondary', 'border-secondary/20', 'hover:bg-secondary/20');
         } else if (data.active_env === 'paper') {
             link.href = 'https://www.binance.com/zh-TW/trade/BTC_USDT?type=spot';
-            link.innerHTML = '<span class="material-symbols-outlined text-sm">description</span> 模擬實盤 (Paper Mode)';
             link.classList.remove('bg-secondary/20', 'text-secondary', 'border-secondary/40', 'hover:bg-secondary/30', 'bg-warning/20', 'text-warning', 'border-warning/40');
-            link.classList.add('bg-primary/20', 'text-primary', 'border-primary/40', 'hover:bg-primary/30');
+            link.classList.add('bg-primary/10', 'text-primary', 'border-primary/20', 'hover:bg-primary/20');
         } else {
             link.href = 'https://www.binance.com/zh-TW/trade/BTC_USDT?type=spot';
-            link.innerHTML = '<span class="material-symbols-outlined text-sm">currency_exchange</span> 正式交易所';
             link.classList.remove('bg-secondary/20', 'text-secondary', 'border-secondary/40', 'hover:bg-secondary/30', 'bg-primary/20', 'text-primary', 'border-primary/40');
-            link.classList.add('bg-warning/20', 'text-warning', 'border-warning/40', 'hover:bg-warning/30');
+            link.classList.add('bg-warning/10', 'text-warning', 'border-warning/20', 'hover:bg-warning/20');
         }
     } catch (err) {
         console.error('Failed to update exchange link:', err);
@@ -224,16 +221,30 @@ export async function initGlobalEnvSelector(onEnvChange) {
 
         envSelectors.forEach(btn => {
             const btnEnv = btn.dataset.env;
-            const isMatch = (btnEnv === env) ||
-                (env === 'prod' && btnEnv === 'real') ||
-                (env === 'real' && btnEnv === 'prod');
+            const isMatch = (btnEnv === env);
+
+            // Reset classes
+            btn.classList.remove("bg-white", "bg-secondary", "bg-primary", "bg-warning", "text-background-dark", "text-white", "shadow-sm", "shadow-neon-glow", "ring-2", "ring-white/20");
+            btn.classList.add("text-slate-500", "hover:bg-white/5");
 
             if (isMatch) {
-                btn.classList.add("bg-primary", "text-background-dark");
                 btn.classList.remove("text-slate-500", "hover:bg-white/5");
+
+                if (btnEnv === 'test') {
+                    btn.classList.add("bg-secondary", "text-white", "shadow-neon-glow-cyan");
+                    btn.innerHTML = `<span class="flex items-center gap-1"><span class="size-1.5 rounded-full bg-white animate-pulse"></span> TEST</span>`;
+                } else if (btnEnv === 'paper') {
+                    btn.classList.add("bg-primary", "text-background-dark", "shadow-neon-glow");
+                    btn.innerHTML = `<span class="flex items-center gap-1"><span class="size-1.5 rounded-full bg-background-dark animate-pulse"></span> PAPER</span>`;
+                } else if (btnEnv === 'real') {
+                    btn.classList.add("bg-warning", "text-background-dark", "shadow-neon-glow-warning");
+                    btn.innerHTML = `<span class="flex items-center gap-1"><span class="size-1.5 rounded-full bg-background-dark animate-pulse"></span> LIVE</span>`;
+                }
             } else {
-                btn.classList.remove("bg-primary", "text-background-dark");
-                btn.classList.add("text-slate-500", "hover:bg-white/5");
+                // Restore static labels for inactive buttons
+                if (btnEnv === 'test') btn.textContent = 'Test';
+                if (btnEnv === 'paper') btn.textContent = 'Paper';
+                if (btnEnv === 'real') btn.textContent = 'Live';
             }
         });
     };

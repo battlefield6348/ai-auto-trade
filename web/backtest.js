@@ -395,29 +395,8 @@ async function runBacktest(isAuto = false) {
 
 const debouncedRunBacktest = debounce(() => runBacktest(true), 400);
 
-async function runDbStrategy() {
-  const slug = el("btStrategySlug").value;
-  if (!slug) return setAlert("請選擇一個策略", "error");
-  const payload = {
-    slug: slug,
-    symbol: (el("btSymbol").value || "BTCUSDT").trim().toUpperCase(),
-    start_date: el("btStart").value,
-    end_date: el("btEnd").value,
-  };
-  if (!payload.start_date || !payload.end_date) return setAlert("請選擇回測起訖日", "error");
+// runDbStrategy removed, now unified into runBacktest
 
-  setBusy("runDbStrategyBtn", true, "執行中");
-  try {
-    const res = await api("/api/analysis/backtest/slug", { method: "POST", body: payload });
-    renderResult(res.result);
-    setAlert(`策略 [${slug}] 回測完成`, "success");
-  } catch (err) {
-    setAlert(err.message, "error");
-    renderResult({ error: err.message });
-  } finally {
-    setBusy("runDbStrategyBtn", false, "執行資料庫策略回測");
-  }
-}
 
 async function confirmSaveScoringStrategy() {
   const name = el("newStrategyName")?.value.trim();
@@ -685,8 +664,7 @@ function bootstrap() {
 
   setupAuth();
 
-  el("runBacktestBtn").addEventListener("click", runBacktest);
-  el("runDbStrategyBtn").addEventListener("click", runDbStrategy);
+  el("runBacktestBtn").addEventListener("click", () => runBacktest());
   el("saveAsStrategyBtn").addEventListener("click", () => el("saveAsStrategyForm").classList.remove("hidden"));
   el("cancelSaveStrategyBtn").addEventListener("click", () => el("saveAsStrategyForm").classList.add("hidden"));
   el("confirmSaveStrategyBtn").addEventListener("click", confirmSaveScoringStrategy);

@@ -212,7 +212,15 @@
               <p class="text-xs text-slate-500 font-mono tracking-widest mt-1">SIMULATION ENGINE v4.0</p>
             </div>
           </div>
-          <div class="flex flex-wrap gap-3">
+          <div class="flex flex-wrap items-center gap-3">
+            <div
+              class="flex items-center gap-2 bg-background-dark/50 border border-surface-border rounded-2xl px-4 py-1.5 min-w-[200px]">
+              <span class="material-symbols-outlined text-primary text-sm">database</span>
+              <select id="btStrategySlug"
+                class="bg-transparent border-0 text-sm font-bold text-white focus:ring-0 transition-all uppercase font-mono w-full cursor-pointer">
+                <option value="">-- 手動模式 (Manual) --</option>
+              </select>
+            </div>
             <button id="runBacktestBtn"
               class="px-6 py-3 rounded-2xl bg-primary text-background-dark font-black text-sm uppercase tracking-widest shadow-neon-glow hover:brightness-110 active:scale-95 transition-all flex items-center gap-2">
               <span class="material-symbols-outlined text-sm">play_arrow</span> 執行回測 (Run)
@@ -394,24 +402,7 @@
         </div>
       </div>
 
-      <!-- Strategy Database Selection -->
-      <div id="dbStrategySection" class="bg-surface-dark border border-surface-border rounded-3xl p-8 shadow-xl">
-        <div class="flex items-center justify-between mb-6">
-          <h3 class="text-lg font-black italic flex items-center gap-3">
-            <span class="material-symbols-outlined text-primary">database</span> 資料庫策略載入 (Load from DB)
-          </h3>
-        </div>
-        <div class="flex flex-col md:flex-row gap-4">
-          <select id="btStrategySlug"
-            class="flex-1 bg-background-dark border border-surface-border rounded-2xl px-6 py-4 text-white font-bold focus:border-primary focus:ring-0 transition-all uppercase font-mono">
-            <option value="">-- 選取已存策略 (Select Protocol) --</option>
-          </select>
-          <button id="runDbStrategyBtn"
-            class="px-8 py-4 rounded-2xl bg-surface-border text-slate-300 font-black text-sm uppercase tracking-widest hover:bg-white/5 border border-transparent hover:border-primary/30 transition-all">
-            執行資料庫策略回測
-          </button>
-        </div>
-      </div>
+      <!-- Save Strategy Form (Hidden by default) -->
 
       <!-- Save Strategy Form (Hidden by default) -->
       <div id="saveAsStrategyForm"

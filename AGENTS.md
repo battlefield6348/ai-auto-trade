@@ -25,16 +25,19 @@
 ## 功能現況（摘要）
 - 自動管線：`ingestion.auto_interval` 會定期跑日 K 擷取與分析。
 - Telegram 推播：`notifier.telegram` 會定期推送最新摘要與強勢交易對。
-- Ingestion：`ingestion.use_synthetic` 控制是否使用合成日 K（true=合成，false=實際取 Binance）。
-- Auth：預設帳號 `admin/analyst/user@example.com`，密碼皆 `password123`。
+- Ingestion：`ingestion.use_synthetic` 控制是否使用合成日 K。
+- Auth：新增獨立登入頁面 (`/web/login.html`) 與全站路由守衛 (Auth Guard)。
+- 回測控制台：整合手動參數與資料庫策略載入。支援連續交易模擬、績效統計與數據可視化（含完整時間軸與命中點標註）。
+- 環境切換：頂部導覽列支援全站同步切換 Test/Paper/Live 執行模式。
 
 ## 主要 API（摘要）
-- 登入：`POST /api/auth/login`
-- 手動擷取：`POST /api/admin/ingestion/daily`
-- 手動分析：`POST /api/admin/analysis/daily`
-- 走勢摘要：`GET /api/analysis/summary`
-- 排程狀態：`GET /api/admin/jobs/status`
-- 排程歷史：`GET /api/admin/jobs/history`
+- 身份與授權：`POST /api/auth/login`, `POST /api/auth/register`
+- 回測分析：`POST /api/analysis/backtest` (手動), `POST /api/analysis/backtest/slug` (策略)
+- 策略重溫：`GET /api/analysis/strategies`, `POST /api/analysis/strategies/save-scoring`
+- 執行概況：`GET /api/analysis/summary`
+- 環境配置：`GET/POST /api/admin/binance/config`
+- 任務監控：`GET /api/admin/jobs/status`, `GET /api/admin/jobs/history`
+- 模擬交易：`POST /api/admin/trading/order` (手動下單)
 
 ## 交付規範
 - 變更需更新 `README.md`（若涉及使用方式或設定）。

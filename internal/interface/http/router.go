@@ -217,7 +217,7 @@ func (s *Server) registerRoutes() {
 	s.mux.Handle("/api/ping", s.wrapGet(s.handlePing))
 	s.mux.Handle("/api/health", s.wrapGet(s.handleHealth))
 	s.mux.Handle("/api/auth/login", s.wrapPost(s.handleLogin))
-	s.mux.Handle("/api/auth/register", s.wrapPost(s.handleRegister))
+	// s.mux.Handle("/api/auth/register", s.wrapPost(s.handleRegister)) // Registration disabled for single-user mode
 	s.mux.Handle("/api/auth/refresh", s.wrapPost(s.handleRefresh))
 	s.mux.Handle("/api/auth/logout", s.wrapPost(s.handleLogout))
 	s.mux.Handle("/api/admin/ingestion/daily", s.requireAuth(auth.PermIngestionTriggerDaily, s.wrapPost(s.handleIngestionDaily)))

@@ -139,47 +139,21 @@ export function initAuthModal(onSuccess) {
 
     if (!dialog || !authForm) return;
 
-    let isRegister = false;
+    // Remove registration elements
+    if (toggleMode) toggleMode.style.display = 'none';
+    if (nameField) nameField.style.display = 'none';
+    if (authTitle) authTitle.textContent = "系統登入 (Login)";
+    if (authSubmit) authSubmit.textContent = "Verify";
 
     if (openBtn) openBtn.onclick = () => dialog.showModal();
     if (closeBtn) closeBtn.onclick = () => dialog.close();
-
-    if (toggleMode) {
-        toggleMode.onclick = (e) => {
-            e.preventDefault();
-            isRegister = !isRegister;
-            if (isRegister) {
-                authTitle.textContent = "建立新帳號 (Register)";
-                nameField.classList.remove("hidden");
-                authSubmit.textContent = "註冊並登入";
-                toggleMode.textContent = "已有帳號？點此登入 (Login)";
-            } else {
-                authTitle.textContent = "系統登入 (Login)";
-                nameField.classList.add("hidden");
-                authSubmit.textContent = "Verify";
-                toggleMode.textContent = "還沒有帳號？點此註冊 (Register)";
-            }
-        };
-    }
 
     authForm.onsubmit = async (e) => {
         e.preventDefault();
         const email = document.getElementById("authEmail").value;
         const password = document.getElementById("authPassword").value;
-        const name = document.getElementById("authName")?.value;
 
         try {
-            if (isRegister) {
-                const regRes = await fetch("/api/auth/register", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ email, password, name }),
-                });
-                const regData = await regRes.json();
-                if (!regRes.ok) throw new Error(regData.message || regData.error || "註冊失敗");
-            }
-
-            // 無論是登入還是註冊後，都執行登入
             const res = await fetch("/api/auth/login", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },

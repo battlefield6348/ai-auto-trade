@@ -116,6 +116,7 @@ func (s *ScoringStrategy) CalculateScore(data analysis.DailyAnalysisResult) (flo
 // CalculateScoreForRules executes a specific set of rules and returns the total score.
 func (s *ScoringStrategy) CalculateScoreForRules(rules []StrategyRule, data analysis.DailyAnalysisResult) (float64, error) {
 	totalScore := 0.0
+	totalWeight := 0.0
 
 	for _, rule := range rules {
 		evaluator, ok := EvaluatorRegistry[rule.Condition.Type]
@@ -133,7 +134,12 @@ func (s *ScoringStrategy) CalculateScoreForRules(rules []StrategyRule, data anal
 			return 0, fmt.Errorf("evaluation error for rule %s: %w", rule.Condition.Type, err)
 		}
 
+		totalWeight += rule.Weight
 		totalScore += contribution * rule.Weight
+	}
+
+	if totalWeight > 0 {
+		return (totalScore / totalWeight) * 100.0, nil
 	}
 
 	return totalScore, nil

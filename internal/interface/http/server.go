@@ -1287,6 +1287,7 @@ func normalizeHorizons(values []int) []int {
 
 func calcBacktestScore(res analysisDomain.DailyAnalysisResult, req analysisBacktestRequest, targetSide string) (float64, map[string]float64) {
 	total := 0.0
+	totalWeight := 0.0
 	components := make(map[string]float64)
 
 	// Helper to check if a condition's side matches the target
@@ -1303,6 +1304,7 @@ func calcBacktestScore(res analysisDomain.DailyAnalysisResult, req analysisBackt
 		scoreSide = "both"
 	}
 	if matchSide(scoreSide) {
+		totalWeight += req.Weights.Score
 		val := req.Weights.Score * (res.Score / 100.0)
 		total += val
 		if val != 0 {
@@ -1311,15 +1313,19 @@ func calcBacktestScore(res analysisDomain.DailyAnalysisResult, req analysisBackt
 	}
 
 	// Change Bonus
-	if req.Flags.UseChange && matchSide(req.Sides.Change) && res.ChangeRate >= req.Thresholds.ChangeMin {
-		total += req.Weights.ChangeBonus
-		if req.Weights.ChangeBonus != 0 {
-			components["change"] = req.Weights.ChangeBonus
+	if req.Flags.UseChange && matchSide(req.Sides.Change) {
+		totalWeight += req.Weights.ChangeBonus
+		if res.ChangeRate >= req.Thresholds.ChangeMin {
+			total += req.Weights.ChangeBonus
+			if req.Weights.ChangeBonus != 0 {
+				components["change"] = req.Weights.ChangeBonus
+			}
 		}
 	}
 
 	// Volume Bonus
 	if req.Flags.UseVolume && matchSide(req.Sides.Volume) {
+		totalWeight += req.Weights.VolumeBonus
 		vol := 0.0
 		if res.VolumeMultiple != nil {
 			vol = *res.VolumeMultiple
@@ -1334,6 +1340,7 @@ func calcBacktestScore(res analysisDomain.DailyAnalysisResult, req analysisBackt
 
 	// Return Bonus
 	if req.Flags.UseReturn && matchSide(req.Sides.Return) {
+		totalWeight += req.Weights.ReturnBonus
 		ret := 0.0
 		if res.Return5 != nil {
 			ret = *res.Return5
@@ -1348,6 +1355,7 @@ func calcBacktestScore(res analysisDomain.DailyAnalysisResult, req analysisBackt
 
 	// MA Bonus
 	if req.Flags.UseMa && matchSide(req.Sides.Ma) {
+		totalWeight += req.Weights.MaBonus
 		gap := 0.0
 		if res.Deviation20 != nil {
 			gap = *res.Deviation20
@@ -1358,6 +1366,15 @@ func calcBacktestScore(res analysisDomain.DailyAnalysisResult, req analysisBackt
 				components["ma"] = req.Weights.MaBonus
 			}
 		}
+	}
+
+	if totalWeight > 0 {
+		normalizedTotal := (total / totalWeight) * 100.0
+		// Also normalize components for display
+		for k, v := range components {
+			components[k] = (v / totalWeight) * 100.0
+		}
+		return normalizedTotal, components
 	}
 
 	return total, components

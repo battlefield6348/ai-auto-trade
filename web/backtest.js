@@ -137,15 +137,15 @@ function updateMaxScore() {
   const getSide = (id) => el(id)?.value || "both";
   const isEntry = (id) => ["entry", "both"].includes(getSide(id));
 
-  let max = 0;
-  if (isEntry("btSideScore")) max += parse("btScoreWeight");
-  if (el("btUseChange").checked && isEntry("btSideChange")) max += parse("btChangeBonus");
-  if (el("btUseVolume").checked && isEntry("btSideVolume")) max += parse("btVolumeBonus");
-  if (el("btUseReturn").checked && isEntry("btSideReturn")) max += parse("btReturnBonus");
-  if (el("btUseMa").checked && isEntry("btSideMa")) max += parse("btMaBonus");
+  let totalWeight = 0;
+  if (isEntry("btSideScore")) totalWeight += parse("btScoreWeight");
+  if (el("btUseChange").checked && isEntry("btSideChange")) totalWeight += parse("btChangeBonus");
+  if (el("btUseVolume").checked && isEntry("btSideVolume")) totalWeight += parse("btVolumeBonus");
+  if (el("btUseReturn").checked && isEntry("btSideReturn")) totalWeight += parse("btReturnBonus");
+  if (el("btUseMa").checked && isEntry("btSideMa")) totalWeight += parse("btMaBonus");
 
   const display = el("maxPossibleScore");
-  if (display) display.textContent = max.toFixed(1);
+  if (display) display.textContent = totalWeight > 0 ? "100.0" : "0.0";
 }
 
 function fillForm(cfg) {

@@ -193,25 +193,32 @@ export async function initGlobalEnvSelector(onEnvChange) {
         let env = activeEnv;
         if (env === 'prod') env = 'real';
 
-        envSelectors.forEach(btn => {
+        // Re-query targets to avoid stale references after replacement
+        const currentSelectors = document.querySelectorAll(".env-selector");
+
+        currentSelectors.forEach(btn => {
             const btnEnv = btn.dataset.env;
             const isMatch = (btnEnv === env);
 
             // Reset classes
-            btn.classList.remove("bg-white", "bg-secondary", "bg-primary", "bg-warning", "text-background-dark", "text-white", "shadow-sm", "shadow-neon-glow", "ring-2", "ring-white/20");
+            btn.classList.remove(
+                "bg-white", "bg-secondary", "bg-primary", "bg-warning",
+                "text-background-dark", "text-white", "shadow-sm", "shadow-neon-glow",
+                "shadow-neon-glow-cyan", "shadow-neon-glow-warning", "ring-2", "ring-white/20"
+            );
             btn.classList.add("text-slate-500", "hover:bg-white/5");
 
             if (isMatch) {
                 btn.classList.remove("text-slate-500", "hover:bg-white/5");
 
                 if (btnEnv === 'test') {
-                    btn.classList.add("bg-secondary", "text-white", "shadow-neon-glow-cyan");
+                    btn.classList.add("bg-secondary", "text-white", "shadow-neon-glow-cyan", "ring-1", "ring-white/30");
                     btn.innerHTML = `<span class="flex items-center gap-1"><span class="size-1.5 rounded-full bg-white animate-pulse"></span> TEST</span>`;
                 } else if (btnEnv === 'paper') {
-                    btn.classList.add("bg-primary", "text-background-dark", "shadow-neon-glow");
+                    btn.classList.add("bg-primary", "text-background-dark", "shadow-neon-glow", "ring-1", "ring-primary/50");
                     btn.innerHTML = `<span class="flex items-center gap-1"><span class="size-1.5 rounded-full bg-background-dark animate-pulse"></span> PAPER</span>`;
                 } else if (btnEnv === 'real') {
-                    btn.classList.add("bg-warning", "text-background-dark", "shadow-neon-glow-warning");
+                    btn.classList.add("bg-warning", "text-background-dark", "shadow-neon-glow-warning", "ring-1", "ring-warning/50");
                     btn.innerHTML = `<span class="flex items-center gap-1"><span class="size-1.5 rounded-full bg-background-dark animate-pulse"></span> LIVE</span>`;
                 }
             } else {

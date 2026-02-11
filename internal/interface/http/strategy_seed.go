@@ -89,11 +89,11 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 			},
 		},
 		{
-			Name:          "AI Opt Strategy 2026-02-08 (PROD)",
-			Slug:          "opt-prod-080334-rsi40",
-			Threshold:     80.0,
-			ExitThreshold: 10.0,
-			IsActive:      false,
+			Name:          "AI Max-Return Strategy (PROD)",
+			Slug:          "ai-max-profit-2026",
+			Threshold:     70.0,
+			ExitThreshold: 42.0,
+			IsActive:      true,
 			Rules: []struct {
 				Type     string
 				Name     string
@@ -101,9 +101,7 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 				Weight   float64
 				RuleType string
 			}{
-				{Type: "BASE_SCORE", Name: "AI Core Score", Params: map[string]interface{}{}, Weight: 100.0, RuleType: "entry"},
-				{Type: "PRICE_RETURN", Name: "Daily Change Bonus", Params: map[string]interface{}{"days": 1.0, "min": -0.03}, Weight: 15.0, RuleType: "entry"},
-				{Type: "VOLUME_SURGE", Name: "Volume Surge Bonus", Params: map[string]interface{}{"min": -0.8}, Weight: 15.0, RuleType: "entry"},
+				{Type: "BASE_SCORE", Name: "AI Core Score", Params: map[string]interface{}{}, Weight: 100.0, RuleType: "both"},
 			},
 		},
 		{

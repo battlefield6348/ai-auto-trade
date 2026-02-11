@@ -83,9 +83,6 @@ var RolePermissions = map[auth.Role][]Permission{
 		PermAnalysisQuery,
 		PermStrategy,
 		PermSubscription,
-		PermIngestionTriggerDaily,
-		PermIngestionTriggerBackfill,
-		PermAnalysisTriggerDaily,
 	},
 
 

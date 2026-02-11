@@ -139,6 +139,7 @@ type analysisBacktestRequest struct {
 	Weights    backtestWeights    `json:"weights"`
 	Thresholds backtestThresholds `json:"thresholds"`
 	Flags      backtestFlags      `json:"flags"`
+	Sides      backtestSides      `json:"sides"`
 	Horizons   []int              `json:"horizons"`
 }
 
@@ -148,6 +149,14 @@ type backtestWeights struct {
 	VolumeBonus float64 `json:"volume_bonus"`
 	ReturnBonus float64 `json:"return_bonus"`
 	MaBonus     float64 `json:"ma_bonus"`
+}
+
+type backtestSides struct {
+	Score  string `json:"score"` // "entry", "exit", "both"
+	Change string `json:"change"`
+	Volume string `json:"volume"`
+	Return string `json:"return"`
+	Ma     string `json:"ma"`
 }
 
 type backtestThresholds struct {
@@ -176,8 +185,11 @@ type analysisBacktestEvent struct {
 	VolumeRatio    *float64           `json:"volume_ratio,omitempty"`
 	Score          float64            `json:"score"`
 	TotalScore     float64            `json:"total_score"`
+	EntryScore     float64            `json:"entry_score"`
+	ExitScore      float64            `json:"exit_score"`
 	IsTriggered    bool               `json:"is_triggered"`
 	Components     map[string]float64 `json:"components,omitempty"`
+	ExitComponents map[string]float64 `json:"exit_components,omitempty"`
 	ForwardReturns map[string]float64 `json:"forward_returns,omitempty"`
 }
 
@@ -843,8 +855,10 @@ func (s *Server) handleAnalysisBacktest(w http.ResponseWriter, r *http.Request) 
 	totalReturn := 1.0
 
 	for idx, res := range history {
-		total, comps := calcBacktestScore(res, input.req)
-		triggered := total >= input.req.Thresholds.TotalMin
+		entryTotal, entryComps := calcBacktestScore(res, input.req, "entry")
+		exitTotal, exitComps := calcBacktestScore(res, input.req, "exit")
+		
+		triggered := entryTotal >= input.req.Thresholds.TotalMin
 
 		// Calculate forward returns for statistics (only for triggered events to maintain density)
 		var forward map[string]float64
@@ -859,17 +873,20 @@ func (s *Server) handleAnalysisBacktest(w http.ResponseWriter, r *http.Request) 
 		}
 
 		ev := analysisBacktestEvent{
-			TradingPair:   res.Symbol,
-			TradeDate:     res.TradeDate.Format("2006-01-02"),
-			ClosePrice:    res.Close,
-			ChangePercent: res.ChangeRate,
-			Return5d:      res.Return5,
-			MaGap:         res.Deviation20,
-			VolumeRatio:   res.VolumeMultiple,
-			Score:         res.Score,
-			TotalScore:    total,
-			IsTriggered:   triggered,
-			Components:    comps,
+			TradingPair:    res.Symbol,
+			TradeDate:      res.TradeDate.Format("2006-01-02"),
+			ClosePrice:     res.Close,
+			ChangePercent:  res.ChangeRate,
+			Return5d:       res.Return5,
+			MaGap:          res.Deviation20,
+			VolumeRatio:    res.VolumeMultiple,
+			Score:          res.Score,
+			TotalScore:     entryTotal,
+			EntryScore:     entryTotal,
+			ExitScore:      exitTotal,
+			IsTriggered:    triggered,
+			Components:     entryComps,
+			ExitComponents: exitComps,
 		}
 		if len(forward) > 0 {
 			ev.ForwardReturns = forward
@@ -891,7 +908,8 @@ func (s *Server) handleAnalysisBacktest(w http.ResponseWriter, r *http.Request) 
 				exitThreshold = input.req.Thresholds.TotalMin * 0.5
 			}
 
-			if total < exitThreshold {
+			// User requirement: Exit if ExitScore < ExitThreshold
+			if exitTotal < exitThreshold {
 				currentPosition.ExitDate = res.TradeDate.Format("2006-01-02")
 				currentPosition.ExitPrice = res.Close
 				
@@ -900,7 +918,7 @@ func (s *Server) handleAnalysisBacktest(w http.ResponseWriter, r *http.Request) 
 				
 				currentPosition.PnL = exitPriceWithFee - currentPosition.EntryPrice
 				currentPosition.PnLPct = (exitPriceWithFee / currentPosition.EntryPrice) - 1.0
-				currentPosition.Reason = fmt.Sprintf("AI信號轉弱 (%.1f < %.1f)", total, exitThreshold)
+				currentPosition.Reason = fmt.Sprintf("AI信號轉弱 (%.1f < %.1f)", exitTotal, exitThreshold)
 				
 				trades = append(trades, *currentPosition)
 				totalReturn *= (1.0 + currentPosition.PnLPct)
@@ -1267,21 +1285,41 @@ func normalizeHorizons(values []int) []int {
 	return out
 }
 
-func calcBacktestScore(res analysisDomain.DailyAnalysisResult, req analysisBacktestRequest) (float64, map[string]float64) {
-	total := req.Weights.Score * (res.Score / 100.0)
+func calcBacktestScore(res analysisDomain.DailyAnalysisResult, req analysisBacktestRequest, targetSide string) (float64, map[string]float64) {
+	total := 0.0
 	components := make(map[string]float64)
-	if req.Weights.Score != 0 {
-		components["score"] = req.Weights.Score * (res.Score / 100.0)
+
+	// Helper to check if a condition's side matches the target
+	matchSide := func(condSide string) bool {
+		if condSide == "" {
+			condSide = "both" // default
+		}
+		return condSide == "both" || condSide == targetSide
 	}
 
-	if req.Flags.UseChange && res.ChangeRate >= req.Thresholds.ChangeMin {
+	// AI Core Score
+	scoreSide := req.Sides.Score
+	if scoreSide == "" {
+		scoreSide = "both"
+	}
+	if matchSide(scoreSide) {
+		val := req.Weights.Score * (res.Score / 100.0)
+		total += val
+		if val != 0 {
+			components["score"] = val
+		}
+	}
+
+	// Change Bonus
+	if req.Flags.UseChange && matchSide(req.Sides.Change) && res.ChangeRate >= req.Thresholds.ChangeMin {
 		total += req.Weights.ChangeBonus
 		if req.Weights.ChangeBonus != 0 {
 			components["change"] = req.Weights.ChangeBonus
 		}
 	}
 
-	if req.Flags.UseVolume {
+	// Volume Bonus
+	if req.Flags.UseVolume && matchSide(req.Sides.Volume) {
 		vol := 0.0
 		if res.VolumeMultiple != nil {
 			vol = *res.VolumeMultiple
@@ -1294,7 +1332,8 @@ func calcBacktestScore(res analysisDomain.DailyAnalysisResult, req analysisBackt
 		}
 	}
 
-	if req.Flags.UseReturn {
+	// Return Bonus
+	if req.Flags.UseReturn && matchSide(req.Sides.Return) {
 		ret := 0.0
 		if res.Return5 != nil {
 			ret = *res.Return5
@@ -1307,7 +1346,8 @@ func calcBacktestScore(res analysisDomain.DailyAnalysisResult, req analysisBackt
 		}
 	}
 
-	if req.Flags.UseMa {
+	// MA Bonus
+	if req.Flags.UseMa && matchSide(req.Sides.Ma) {
 		gap := 0.0
 		if res.Deviation20 != nil {
 			gap = *res.Deviation20

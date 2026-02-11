@@ -43,6 +43,8 @@ type BacktestEvent struct {
 	ClosePrice     float64            `json:"close_price"`
 	ChangePercent  float64            `json:"change_percent"`
 	TotalScore     float64            `json:"total_score"`
+	EntryScore     float64            `json:"entry_score"`
+	ExitScore      float64            `json:"exit_score"`
 	IsTriggered    bool               `json:"is_triggered"`
 	Return5d       *float64           `json:"return_5d"`
 	ForwardReturns map[string]float64 `json:"forward_returns,omitempty"`
@@ -104,6 +106,8 @@ func (u *BacktestUseCase) Execute(ctx context.Context, slug string, symbol strin
 			continue
 		}
 
+		exitScore, _ := s.CalculateScoreForRules(s.ExitRules, res)
+		
 		// Record all events for accurate charting
 		var forward map[string]float64
 		if triggered {
@@ -120,6 +124,8 @@ func (u *BacktestUseCase) Execute(ctx context.Context, slug string, symbol strin
 			ClosePrice:     res.Close,
 			ChangePercent:  res.ChangeRate,
 			TotalScore:     score,
+			EntryScore:     score,
+			ExitScore:      exitScore,
 			IsTriggered:    triggered,
 			Return5d:       res.Return5,
 			ForwardReturns: forward,
@@ -137,7 +143,7 @@ func (u *BacktestUseCase) Execute(ctx context.Context, slug string, symbol strin
 			}
 		} else {
 			// Check Exit
-			exitTriggered, exitScore, _ := s.IsExitTriggered(res)
+			exitTriggered := exitScore < s.ExitThreshold
 			
 			// Also auto-exit if entry score drops below 50% of threshold (builtin protection)
 			if !exitTriggered {
@@ -147,14 +153,18 @@ func (u *BacktestUseCase) Execute(ctx context.Context, slug string, symbol strin
 					currentPosition.Reason = reason
 				}
 			} else {
-				currentPosition.Reason = fmt.Sprintf("觸發策略出場條件 (%.1f)", exitScore)
+				currentPosition.Reason = fmt.Sprintf("AI信號轉弱 (%.1f < %.1f)", exitScore, s.ExitThreshold)
 			}
 
 			if exitTriggered {
 				currentPosition.ExitDate = res.TradeDate.Format("2006-01-02")
 				currentPosition.ExitPrice = res.Close
-				currentPosition.PnL = currentPosition.ExitPrice - currentPosition.EntryPrice
-				currentPosition.PnLPct = (currentPosition.ExitPrice / currentPosition.EntryPrice) - 1.0
+				
+				// Apply 0.1% slippage/fee on exit
+				exitPriceWithFee := currentPosition.ExitPrice * 0.999
+				
+				currentPosition.PnL = exitPriceWithFee - currentPosition.EntryPrice
+				currentPosition.PnLPct = (exitPriceWithFee / currentPosition.EntryPrice) - 1.0
 				
 				trades = append(trades, *currentPosition)
 				totalReturn *= (1.0 + currentPosition.PnLPct)

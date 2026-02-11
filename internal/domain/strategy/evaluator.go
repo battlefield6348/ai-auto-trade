@@ -157,6 +157,6 @@ func (s *ScoringStrategy) IsExitTriggered(data analysis.DailyAnalysisResult) (bo
 	if err != nil {
 		return false, 0, err
 	}
-	// Note: Exit can be based on a separate ExitThreshold
-	return score >= s.ExitThreshold, score, nil
+	// Note: User requires exit when score drops below threshold
+	return score < s.ExitThreshold, score, nil
 }

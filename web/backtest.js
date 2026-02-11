@@ -100,6 +100,13 @@ function readForm() {
       use_return: el("btUseReturn").checked,
       use_ma: el("btUseMa").checked,
     },
+    sides: {
+      score: el("btSideScore").value,
+      change: el("btSideChange").value,
+      volume: el("btSideVolume").value,
+      return: el("btSideReturn").value,
+      ma: el("btSideMa").value,
+    },
     horizons: horizons.length ? horizons : [3, 5, 10],
   };
 }
@@ -127,13 +134,16 @@ function updateVisibility() {
 
 function updateMaxScore() {
   const parse = (id) => parseFloat(el(id)?.value) || 0;
-  const scoreWeight = parse("btScoreWeight");
-  const changeBonus = el("btUseChange").checked ? parse("btChangeBonus") : 0;
-  const volumeBonus = el("btUseVolume").checked ? parse("btVolumeBonus") : 0;
-  const returnBonus = el("btUseReturn").checked ? parse("btReturnBonus") : 0;
-  const maBonus = el("btUseMa").checked ? parse("btMaBonus") : 0;
+  const getSide = (id) => el(id)?.value || "both";
+  const isEntry = (id) => ["entry", "both"].includes(getSide(id));
 
-  const max = scoreWeight + changeBonus + volumeBonus + returnBonus + maBonus;
+  let max = 0;
+  if (isEntry("btSideScore")) max += parse("btScoreWeight");
+  if (el("btUseChange").checked && isEntry("btSideChange")) max += parse("btChangeBonus");
+  if (el("btUseVolume").checked && isEntry("btSideVolume")) max += parse("btVolumeBonus");
+  if (el("btUseReturn").checked && isEntry("btSideReturn")) max += parse("btReturnBonus");
+  if (el("btUseMa").checked && isEntry("btSideMa")) max += parse("btMaBonus");
+
   const display = el("maxPossibleScore");
   if (display) display.textContent = max.toFixed(1);
 }
@@ -150,6 +160,13 @@ function fillForm(cfg) {
     if (cfg.weights.volume_bonus !== undefined) el("btVolumeBonus").value = cfg.weights.volume_bonus;
     if (cfg.weights.return_bonus !== undefined) el("btReturnBonus").value = cfg.weights.return_bonus;
     if (cfg.weights.ma_bonus !== undefined) el("btMaBonus").value = cfg.weights.ma_bonus;
+  }
+  if (cfg.sides) {
+    if (cfg.sides.score) el("btSideScore").value = cfg.sides.score;
+    if (cfg.sides.change) el("btSideChange").value = cfg.sides.change;
+    if (cfg.sides.volume) el("btSideVolume").value = cfg.sides.volume;
+    if (cfg.sides.return) el("btSideReturn").value = cfg.sides.return;
+    if (cfg.sides.ma) el("btSideMa").value = cfg.sides.ma;
   }
 
   if (cfg.thresholds) {
@@ -409,6 +426,13 @@ async function confirmSaveScoringStrategy() {
   setBusy("confirmSaveStrategyBtn", true, "儲存中");
   try {
     const rules = [];
+    rules.push({
+      condition_name: "AI Core Score",
+      type: "BASE_SCORE",
+      params: {},
+      weight: parseFloat(el("btScoreWeight").value) || 0,
+      rule_type: el("btSideScore").value
+    });
     if (el("btUseChange").checked) {
       rules.push({
         condition_name: "日漲跌條件",
@@ -565,6 +589,7 @@ async function loadStrategyDetails(slug) {
           el("btSideMa").value = side;
         } else if (type === "BASE_SCORE") {
           cfg.weights.score = r.weight;
+          el("btSideScore").value = side;
         } else if (type === "RANGE_POS") {
           // If we had a UI field for Range Pos, we would fill it here.
           // For now just ensuring it doesn't break.
@@ -730,7 +755,8 @@ function bootstrap() {
   [
     "btSymbol", "btStart", "btEnd", "btTotalMin", "btExitMin", "btScoreWeight",
     "btChangeBonus", "btVolumeBonus", "btReturnBonus", "btMaBonus",
-    "btChangeMin", "btVolMin", "btRet5Min", "btMaGapMin", "btHorizons"
+    "btChangeMin", "btVolMin", "btRet5Min", "btMaGapMin", "btHorizons",
+    "btSideScore", "btSideChange", "btSideVolume", "btSideReturn", "btSideMa"
   ].forEach(id => {
     const input = el(id);
     if (!input) return;

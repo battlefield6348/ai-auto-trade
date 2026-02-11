@@ -481,20 +481,12 @@ async function confirmSaveScoringStrategy() {
       });
     }
 
-    // Always include Base AI Score rule
-    rules.push({
-      condition_name: "Base AI Score",
-      type: "BASE_SCORE",
-      params: {},
-      weight: parseFloat(el("btScoreWeight").value) || 0,
-      rule_type: "entry"
-    });
 
     const payload = {
       name: name,
       slug: slug,
       threshold: parseFloat(el("btTotalMin").value) || 0,
-      exit_threshold: parseFloat(el("newStrategyExitThreshold").value) || 0,
+      exit_threshold: parseFloat(el("btExitMin").value) || 0,
       rules: rules
     };
 

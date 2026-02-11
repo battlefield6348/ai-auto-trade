@@ -138,10 +138,15 @@ func loadScoringStrategy(ctx context.Context, db DBQueryer, field, value string)
 		r.Condition = c
 
 		rules = append(rules, r)
-		if r.RuleType == "exit" {
-			s.ExitRules = append(s.ExitRules, r)
-		} else {
+		
+		isEntry := r.RuleType == "entry" || r.RuleType == "both" || r.RuleType == ""
+		isExit := r.RuleType == "exit" || r.RuleType == "both"
+
+		if isEntry {
 			s.EntryRules = append(s.EntryRules, r)
+		}
+		if isExit {
+			s.ExitRules = append(s.ExitRules, r)
 		}
 	}
 

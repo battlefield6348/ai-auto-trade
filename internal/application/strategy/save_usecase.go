@@ -3,6 +3,7 @@ package strategy
 import (
 	strategyDomain "ai-auto-trade/internal/domain/strategy"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -64,8 +65,8 @@ func (u *SaveScoringStrategyUseCase) Execute(ctx context.Context, input SaveScor
 	// 1. Insert or Update Strategy
 	var strategyID string
 	err := u.db.QueryRowContext(ctx, `
-		INSERT INTO strategies (user_id, name, slug, threshold, exit_threshold, updated_at)
-		VALUES ($1, $2, $3, $4, $5, NOW())
+		INSERT INTO strategies (user_id, name, slug, threshold, exit_threshold, base_symbol, env, is_active, updated_at)
+		VALUES ($1, $2, $3, $4, $5, 'BTCUSDT', 'both', true, NOW())
 		ON CONFLICT (slug) DO UPDATE SET 
 			name = EXCLUDED.name, 
 			threshold = EXCLUDED.threshold, 
@@ -74,13 +75,13 @@ func (u *SaveScoringStrategyUseCase) Execute(ctx context.Context, input SaveScor
 		RETURNING id
 	`, input.UserID, input.Name, input.Slug, input.Threshold, input.ExitThreshold).Scan(&strategyID)
 	if err != nil {
-		return fmt.Errorf("upsert strategy failed: %w", err)
+		return fmt.Errorf("儲存策略失敗 (Upsert failed): %w", err)
 	}
 
 	// 2. Clear old rules for this strategy
 	_, err = u.db.ExecContext(ctx, "DELETE FROM strategy_rules WHERE strategy_id = $1", strategyID)
 	if err != nil {
-		return fmt.Errorf("clear old rules failed: %w", err)
+		return fmt.Errorf("清除舊規則失敗 (Clear rules failed): %w", err)
 	}
 
 	// 3. Process Rules and Conditions
@@ -88,13 +89,21 @@ func (u *SaveScoringStrategyUseCase) Execute(ctx context.Context, input SaveScor
 		paramsJSON, _ := json.Marshal(r.Params)
 		
 		var conditionID string
+		// Try to find existing condition first to avoid duplicates
 		err = u.db.QueryRowContext(ctx, `
-			INSERT INTO conditions (name, type, params)
-			VALUES ($1, $2, $3)
-			RETURNING id
-		`, r.ConditionName, r.Type, paramsJSON).Scan(&conditionID)
+			SELECT id FROM conditions WHERE type = $1 AND params::jsonb = $2::jsonb
+		`, r.Type, paramsJSON).Scan(&conditionID)
+		
+		if err == sql.ErrNoRows {
+			err = u.db.QueryRowContext(ctx, `
+				INSERT INTO conditions (name, type, params)
+				VALUES ($1, $2, $3)
+				RETURNING id
+			`, r.ConditionName, r.Type, paramsJSON).Scan(&conditionID)
+		}
+		
 		if err != nil {
-			return fmt.Errorf("create condition failed: %w", err)
+			return fmt.Errorf("建立條件失敗 (Condition failed): %w", err)
 		}
 
 		// 4. Link Rule
@@ -107,7 +116,7 @@ func (u *SaveScoringStrategyUseCase) Execute(ctx context.Context, input SaveScor
 			VALUES ($1, $2, $3, $4)
 		`, strategyID, conditionID, r.Weight, ruleType)
 		if err != nil {
-			return fmt.Errorf("link rule failed: %w", err)
+			return fmt.Errorf("連結規則失敗 (Link rule failed): %w", err)
 		}
 	}
 

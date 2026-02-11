@@ -149,6 +149,8 @@ type backtestWeights struct {
 	VolumeBonus float64 `json:"volume_bonus"`
 	ReturnBonus float64 `json:"return_bonus"`
 	MaBonus     float64 `json:"ma_bonus"`
+	AmpBonus    float64 `json:"amp_bonus"`
+	RangeBonus  float64 `json:"range_bonus"`
 }
 
 type backtestSides struct {
@@ -157,6 +159,8 @@ type backtestSides struct {
 	Volume string `json:"volume"`
 	Return string `json:"return"`
 	Ma     string `json:"ma"`
+	Amp    string `json:"amp"`
+	Range  string `json:"range"`
 }
 
 type backtestThresholds struct {
@@ -166,6 +170,8 @@ type backtestThresholds struct {
 	VolumeRatioMin float64 `json:"volume_ratio_min"`
 	Return5Min     float64 `json:"return5_min"`
 	MaGapMin       float64 `json:"ma_gap_min"`
+	AmpMin         float64 `json:"amp_min"`
+	RangeMin       float64 `json:"range_min"`
 }
 
 type backtestFlags struct {
@@ -173,6 +179,8 @@ type backtestFlags struct {
 	UseVolume bool `json:"use_volume"`
 	UseReturn bool `json:"use_return"`
 	UseMa     bool `json:"use_ma"`
+	UseAmp    bool `json:"use_amp"`
+	UseRange  bool `json:"use_range"`
 }
 
 type analysisBacktestEvent struct {
@@ -1364,6 +1372,36 @@ func calcBacktestScore(res analysisDomain.DailyAnalysisResult, req analysisBackt
 			total += req.Weights.MaBonus
 			if req.Weights.MaBonus != 0 {
 				components["ma"] = req.Weights.MaBonus
+			}
+		}
+	}
+
+	// Amplitude (Volatility Surage) Bonus
+	if req.Flags.UseAmp && matchSide(req.Sides.Amp) {
+		totalWeight += req.Weights.AmpBonus
+		ampRatio := 0.0
+		if res.AvgAmplitude20 != nil && *res.AvgAmplitude20 != 0 && res.Amplitude != nil {
+			ampRatio = *res.Amplitude / *res.AvgAmplitude20
+		}
+		if ampRatio >= req.Thresholds.AmpMin {
+			total += req.Weights.AmpBonus
+			if req.Weights.AmpBonus != 0 {
+				components["amp"] = req.Weights.AmpBonus
+			}
+		}
+	}
+
+	// Range Position Bonus
+	if req.Flags.UseRange && matchSide(req.Sides.Range) {
+		totalWeight += req.Weights.RangeBonus
+		rangePos := 0.0
+		if res.RangePos20 != nil {
+			rangePos = *res.RangePos20
+		}
+		if rangePos >= (req.Thresholds.RangeMin / 100.0) {
+			total += req.Weights.RangeBonus
+			if req.Weights.RangeBonus != 0 {
+				components["range"] = req.Weights.RangeBonus
 			}
 		}
 	}

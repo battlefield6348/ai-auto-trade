@@ -85,6 +85,8 @@ function readForm() {
       volume_bonus: parse("btVolumeBonus", 10),
       return_bonus: parse("btReturnBonus", 8),
       ma_bonus: parse("btMaBonus", 5),
+      amp_bonus: parse("btAmpBonus", 5),
+      range_bonus: parse("btRangeBonus", 5),
     },
     thresholds: {
       total_min: parse("btTotalMin", 60),
@@ -93,12 +95,16 @@ function readForm() {
       volume_ratio_min: parse("btVolMin", 1.2),
       return5_min: parse("btRet5Min", 1) / 100,
       ma_gap_min: parse("btMaGapMin", 1) / 100,
+      amp_min: parse("btAmpMin", 1.5),
+      range_min: parse("btRangeMin", 80),
     },
     flags: {
       use_change: el("btUseChange").checked,
       use_volume: el("btUseVolume").checked,
       use_return: el("btUseReturn").checked,
       use_ma: el("btUseMa").checked,
+      use_amp: el("btUseAmp").checked,
+      use_range: el("btUseRange").checked,
     },
     sides: {
       score: el("btSideScore").value,
@@ -106,6 +112,8 @@ function readForm() {
       volume: el("btSideVolume").value,
       return: el("btSideReturn").value,
       ma: el("btSideMa").value,
+      amp: el("btSideAmp").value,
+      range: el("btSideRange").value,
     },
     horizons: horizons.length ? horizons : [3, 5, 10],
   };
@@ -117,6 +125,8 @@ function updateVisibility() {
     btUseVolume: ["wrapper-btVolumeBonus", "wrapper-btVolMin"],
     btUseReturn: ["wrapper-btReturnBonus", "wrapper-btRet5Min"],
     btUseMa: ["wrapper-btMaBonus", "wrapper-btMaGapMin"],
+    btUseAmp: ["wrapper-btAmpBonus", "wrapper-btAmpMin"],
+    btUseRange: ["wrapper-btRangeBonus", "wrapper-btRangeMin"],
   };
 
   Object.entries(map).forEach(([checkId, wrapperIds]) => {
@@ -143,6 +153,8 @@ function updateMaxScore() {
   if (el("btUseVolume").checked && isEntry("btSideVolume")) totalWeight += parse("btVolumeBonus");
   if (el("btUseReturn").checked && isEntry("btSideReturn")) totalWeight += parse("btReturnBonus");
   if (el("btUseMa").checked && isEntry("btSideMa")) totalWeight += parse("btMaBonus");
+  if (el("btUseAmp").checked && isEntry("btSideAmp")) totalWeight += parse("btAmpBonus");
+  if (el("btUseRange").checked && isEntry("btSideRange")) totalWeight += parse("btRangeBonus");
 
   const display = el("maxPossibleScore");
   if (display) display.textContent = totalWeight > 0 ? "100.0" : "0.0";
@@ -160,6 +172,8 @@ function fillForm(cfg) {
     if (cfg.weights.volume_bonus !== undefined) el("btVolumeBonus").value = cfg.weights.volume_bonus;
     if (cfg.weights.return_bonus !== undefined) el("btReturnBonus").value = cfg.weights.return_bonus;
     if (cfg.weights.ma_bonus !== undefined) el("btMaBonus").value = cfg.weights.ma_bonus;
+    if (cfg.weights.amp_bonus !== undefined) el("btAmpBonus").value = cfg.weights.amp_bonus;
+    if (cfg.weights.range_bonus !== undefined) el("btRangeBonus").value = cfg.weights.range_bonus;
   }
   if (cfg.sides) {
     if (cfg.sides.score) el("btSideScore").value = cfg.sides.score;
@@ -167,6 +181,8 @@ function fillForm(cfg) {
     if (cfg.sides.volume) el("btSideVolume").value = cfg.sides.volume;
     if (cfg.sides.return) el("btSideReturn").value = cfg.sides.return;
     if (cfg.sides.ma) el("btSideMa").value = cfg.sides.ma;
+    if (cfg.sides.amp) el("btSideAmp").value = cfg.sides.amp;
+    if (cfg.sides.range) el("btSideRange").value = cfg.sides.range;
   }
 
   if (cfg.thresholds) {
@@ -176,6 +192,17 @@ function fillForm(cfg) {
     if (cfg.thresholds.volume_ratio_min !== undefined) el("btVolMin").value = cfg.thresholds.volume_ratio_min;
     if (cfg.thresholds.return5_min !== undefined) el("btRet5Min").value = cfg.thresholds.return5_min * 100;
     if (cfg.thresholds.ma_gap_min !== undefined) el("btMaGapMin").value = cfg.thresholds.ma_gap_min * 100;
+    if (cfg.thresholds.amp_min !== undefined) el("btAmpMin").value = cfg.thresholds.amp_min;
+    if (cfg.thresholds.range_min !== undefined) el("btRangeMin").value = cfg.thresholds.range_min;
+  }
+
+  if (cfg.flags) {
+    if (cfg.flags.use_change !== undefined) el("btUseChange").checked = cfg.flags.use_change;
+    if (cfg.flags.use_volume !== undefined) el("btUseVolume").checked = cfg.flags.use_volume;
+    if (cfg.flags.use_return !== undefined) el("btUseReturn").checked = cfg.flags.use_return;
+    if (cfg.flags.use_ma !== undefined) el("btUseMa").checked = cfg.flags.use_ma;
+    if (cfg.flags.use_amp !== undefined) el("btUseAmp").checked = cfg.flags.use_amp;
+    if (cfg.flags.use_range !== undefined) el("btUseRange").checked = cfg.flags.use_range;
   }
 
   if (cfg.flags) {
@@ -480,6 +507,29 @@ async function confirmSaveScoringStrategy() {
         rule_type: el("btSideMa").value
       });
     }
+    if (el("btUseAmp").checked) {
+      rules.push({
+        condition_name: "波動激增",
+        type: "AMPLITUDE_SURGE",
+        params: {
+          min: parseFloat(el("btAmpMin").value) || 0
+        },
+        weight: parseFloat(el("btAmpBonus").value) || 0,
+        rule_type: el("btSideAmp").value
+      });
+    }
+    if (el("btUseRange").checked) {
+      rules.push({
+        condition_name: "位階限制",
+        type: "RANGE_POS",
+        params: {
+          days: 20,
+          min: (parseFloat(el("btRangeMin").value) || 0) / 100
+        },
+        weight: parseFloat(el("btRangeBonus").value) || 0,
+        rule_type: el("btSideRange").value
+      });
+    }
 
 
     const payload = {
@@ -583,9 +633,15 @@ async function loadStrategyDetails(slug) {
           cfg.weights.score = r.weight;
           el("btSideScore").value = side;
         } else if (type === "RANGE_POS") {
-          // If we had a UI field for Range Pos, we would fill it here.
-          // For now just ensuring it doesn't break.
-          console.warn("Unhandled rule type in UI mapping:", type);
+          cfg.weights.range_bonus = r.weight;
+          cfg.thresholds.range_min = (r.condition.params?.min || 0) * 100;
+          cfg.flags.use_range = true;
+          el("btSideRange").value = side;
+        } else if (type === "AMPLITUDE_SURGE") {
+          cfg.weights.amp_bonus = r.weight;
+          cfg.thresholds.amp_min = r.condition.params?.min || 0;
+          cfg.flags.use_amp = true;
+          el("btSideAmp").value = side;
         } else {
           // Fallback for unknown types (like rsi_oversold) - add to score to keep Max Score accurate
           console.log("Adding unknown rule weight to score for visualization:", type, r.weight);
@@ -736,7 +792,7 @@ function bootstrap() {
     }
   });
 
-  ["btUseChange", "btUseVolume", "btUseReturn", "btUseMa"].forEach((id) => {
+  ["btUseChange", "btUseVolume", "btUseReturn", "btUseMa", "btUseAmp", "btUseRange"].forEach((id) => {
     el(id).addEventListener("change", () => {
       updateVisibility();
       debouncedRunBacktest();
@@ -746,9 +802,9 @@ function bootstrap() {
   // Auto-trigger on all inputs
   [
     "btSymbol", "btStart", "btEnd", "btTotalMin", "btExitMin", "btScoreWeight",
-    "btChangeBonus", "btVolumeBonus", "btReturnBonus", "btMaBonus",
-    "btChangeMin", "btVolMin", "btRet5Min", "btMaGapMin", "btHorizons",
-    "btSideScore", "btSideChange", "btSideVolume", "btSideReturn", "btSideMa"
+    "btChangeBonus", "btVolumeBonus", "btReturnBonus", "btMaBonus", "btAmpBonus", "btRangeBonus",
+    "btChangeMin", "btVolMin", "btRet5Min", "btMaGapMin", "btAmpMin", "btRangeMin", "btHorizons",
+    "btSideScore", "btSideChange", "btSideVolume", "btSideReturn", "btSideMa", "btSideAmp", "btSideRange"
   ].forEach(id => {
     const input = el(id);
     if (!input) return;

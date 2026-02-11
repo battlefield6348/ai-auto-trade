@@ -15,7 +15,25 @@ var EvaluatorRegistry = map[string]ConditionEvaluator{
 	"VOLUME_SURGE": evalVolumeSurge,
 	"MA_DEVIATION": evalMADeviation,
 	"RANGE_POS":    evalRangePos,
+	"AMPLITUDE_SURGE": evalAmplitudeSurge,
 	"BASE_SCORE":   evalBaseScore,
+}
+
+// evalAmplitudeSurge computes score based on current amplitude relative to average amplitude.
+// Params: {"min": 1.5}
+func evalAmplitudeSurge(params map[string]interface{}, data analysis.DailyAnalysisResult) (float64, error) {
+	if data.Amplitude == nil || data.AvgAmplitude20 == nil || *data.AvgAmplitude20 == 0 {
+		return 0, nil
+	}
+	ratio := *data.Amplitude / *data.AvgAmplitude20
+	threshold, hasThreshold := params["min"].(float64)
+	if hasThreshold {
+		if ratio >= threshold {
+			return 1.0, nil
+		}
+		return 0, nil
+	}
+	return (ratio - 1.0) * 10, nil
 }
 
 // evalPriceReturn computes score based on price return over N days.

@@ -45,10 +45,12 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 				Weight   float64
 				RuleType string
 			}{
-				{Type: "PRICE_RETURN", Name: "5日漲幅 > 5%", Params: map[string]interface{}{"days": 5.0, "min": 0.05}, Weight: 4.0, RuleType: "entry"},
-				{Type: "VOLUME_SURGE", Name: "成交量倍數 > 1.5", Params: map[string]interface{}{"min": 1.5}, Weight: 3.0, RuleType: "entry"},
-				{Type: "MA_DEVIATION", Name: "價格在20日均線上 (MA20 > 0%)", Params: map[string]interface{}{"ma": 20.0, "min": 0.0}, Weight: 3.0, RuleType: "entry"},
-				{Type: "PRICE_RETURN", Name: "日跌幅 > 3% (止損)", Params: map[string]interface{}{"days": 1.0, "min": -0.03}, Weight: 1.0, RuleType: "exit"},
+				{Type: "PRICE_RETURN", Name: "5日漲幅 > 5%", Params: map[string]interface{}{"days": 5.0, "min": 0.05}, Weight: 3.0, RuleType: "entry"},
+				{Type: "VOLUME_SURGE", Name: "成交量倍數 > 1.5", Params: map[string]interface{}{"min": 1.5}, Weight: 2.0, RuleType: "entry"},
+				{Type: "RANGE_POS", Name: "位階在高位 (> 80%)", Params: map[string]interface{}{"days": 20.0, "min": 0.8}, Weight: 2.0, RuleType: "entry"},
+				{Type: "AMPLITUDE_SURGE", Name: "波動放大 (> 1.2)", Params: map[string]interface{}{"min": 1.2}, Weight: 2.0, RuleType: "entry"},
+				{Type: "MA_DEVIATION", Name: "價格在20日均線上", Params: map[string]interface{}{"ma": 20.0, "min": 0.0}, Weight: 1.0, RuleType: "entry"},
+				{Type: "PRICE_RETURN", Name: "跌破5日低點 (止損)", Params: map[string]interface{}{"days": 1.0, "min": -0.03}, Weight: 1.0, RuleType: "exit"},
 			},
 		},
 		{
@@ -64,8 +66,9 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 				Weight   float64
 				RuleType string
 			}{
-				{Type: "VOLUME_SURGE", Name: "巨大成交量 > 2.0", Params: map[string]interface{}{"min": 2.0}, Weight: 6.0, RuleType: "entry"},
-				{Type: "PRICE_RETURN", Name: "當日收紅 (> 0%)", Params: map[string]interface{}{"days": 1.0, "min": 0.0}, Weight: 4.0, RuleType: "entry"},
+				{Type: "VOLUME_SURGE", Name: "巨大成交量 > 2.0", Params: map[string]interface{}{"min": 2.0}, Weight: 5.0, RuleType: "entry"},
+				{Type: "AMPLITUDE_SURGE", Name: "波動度倍數 > 1.5", Params: map[string]interface{}{"min": 1.5}, Weight: 3.0, RuleType: "entry"},
+				{Type: "PRICE_RETURN", Name: "當日收紅 (> 0%)", Params: map[string]interface{}{"days": 1.0, "min": 0.0}, Weight: 2.0, RuleType: "entry"},
 				{Type: "VOLUME_SURGE", Name: "成交量萎縮 (< 0.8)", Params: map[string]interface{}{"min": -0.8}, Weight: 1.0, RuleType: "exit"},
 			},
 		},
@@ -102,6 +105,8 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 				RuleType string
 			}{
 				{Type: "BASE_SCORE", Name: "AI Core Score", Params: map[string]interface{}{}, Weight: 100.0, RuleType: "both"},
+				{Type: "AMPLITUDE_SURGE", Name: "高效動能獎勵", Params: map[string]interface{}{"min": 1.5}, Weight: 20.0, RuleType: "entry"},
+				{Type: "RANGE_POS", Name: "趨勢延續獎勵", Params: map[string]interface{}{"days": 20.0, "min": 0.7}, Weight: 10.0, RuleType: "entry"},
 			},
 		},
 		{

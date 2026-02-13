@@ -126,6 +126,27 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 				{Type: "MA_DEVIATION", Name: "Trend Follow", Params: map[string]interface{}{"ma": 200.0, "min": 0.0}, Weight: 30.0, RuleType: "entry"},
 			},
 		},
+		{
+			Name:          "極速阿爾法動能策略 (Alpha High-Freq Momentum)",
+			Slug:          "alpha-hf-momentum",
+			Threshold:     7.5,
+			ExitThreshold: 4.5,
+			IsActive:      true,
+			Rules: []struct {
+				Type     string
+				Name     string
+				Params   map[string]interface{}
+				Weight   float64
+				RuleType string
+			}{
+				{Type: "PRICE_RETURN", Name: "當日漲幅 > 1.5%", Params: map[string]interface{}{"days": 1.0, "min": 0.015}, Weight: 4.0, RuleType: "entry"},
+				{Type: "VOLUME_SURGE", Name: "成交量倍數 > 1.5", Params: map[string]interface{}{"min": 1.5}, Weight: 3.0, RuleType: "entry"},
+				{Type: "MA_DEVIATION", Name: "站在20日均線上", Params: map[string]interface{}{"ma": 20.0, "min": 0.0}, Weight: 2.0, RuleType: "entry"},
+				{Type: "AMPLITUDE_SURGE", Name: "波動度 > 1.2", Params: map[string]interface{}{"min": 1.2}, Weight: 1.0, RuleType: "entry"},
+				{Type: "PRICE_RETURN", Name: "當日不跌超過 1% (止損)", Params: map[string]interface{}{"days": 1.0, "min": -0.01}, Weight: 6.0, RuleType: "exit"},
+				{Type: "VOLUME_SURGE", Name: "量能維持 (> 0.8)", Params: map[string]interface{}{"min": 0.8}, Weight: 4.0, RuleType: "exit"},
+			},
+		},
 	}
 
 	for _, s := range strategies {

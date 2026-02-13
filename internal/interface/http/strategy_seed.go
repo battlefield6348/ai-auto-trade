@@ -127,10 +127,10 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 			},
 		},
 		{
-			Name:          "極速阿爾法動能策略 (Alpha High-Freq Momentum)",
+			Name:          "極速阿爾法動能策略 (Alpha High-Freq Momentum) v2",
 			Slug:          "alpha-hf-momentum",
-			Threshold:     7.5,
-			ExitThreshold: 4.5,
+			Threshold:     55.0,
+			ExitThreshold: 35.0,
 			IsActive:      true,
 			Rules: []struct {
 				Type     string
@@ -143,8 +143,29 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 				{Type: "VOLUME_SURGE", Name: "成交量倍數 > 1.5", Params: map[string]interface{}{"min": 1.5}, Weight: 3.0, RuleType: "entry"},
 				{Type: "MA_DEVIATION", Name: "站在20日均線上", Params: map[string]interface{}{"ma": 20.0, "min": 0.0}, Weight: 2.0, RuleType: "entry"},
 				{Type: "AMPLITUDE_SURGE", Name: "波動度 > 1.2", Params: map[string]interface{}{"min": 1.2}, Weight: 1.0, RuleType: "entry"},
-				{Type: "PRICE_RETURN", Name: "當日不跌超過 1% (止損)", Params: map[string]interface{}{"days": 1.0, "min": -0.01}, Weight: 6.0, RuleType: "exit"},
-				{Type: "VOLUME_SURGE", Name: "量能維持 (> 0.8)", Params: map[string]interface{}{"min": 0.8}, Weight: 4.0, RuleType: "exit"},
+				{Type: "PRICE_RETURN", Name: "當日不跌超過 1.5% (止損)", Params: map[string]interface{}{"days": 1.0, "min": -0.015}, Weight: 6.0, RuleType: "exit"},
+				{Type: "VOLUME_SURGE", Name: "量能維持 (> 0.7)", Params: map[string]interface{}{"min": 0.7}, Weight: 4.0, RuleType: "exit"},
+			},
+		},
+		{
+			Name:          "黃金彈頭策略 (Golden Bullet Scalper)",
+			Slug:          "golden-bullet",
+			Threshold:     60.0,
+			ExitThreshold: 30.0,
+			IsActive:      true,
+			Rules: []struct {
+				Type     string
+				Name     string
+				Params   map[string]interface{}
+				Weight   float64
+				RuleType string
+			}{
+				{Type: "PRICE_RETURN", Name: "脈衝漲幅 > 2.0%", Params: map[string]interface{}{"days": 1.0, "min": 0.02}, Weight: 30.0, RuleType: "entry"},
+				{Type: "VOLUME_SURGE", Name: "強勢放量 > 1.8倍", Params: map[string]interface{}{"min": 1.8}, Weight: 30.0, RuleType: "entry"},
+				{Type: "RANGE_POS", Name: "近期突破 (> 85%)", Params: map[string]interface{}{"days": 20.0, "min": 0.85}, Weight: 20.0, RuleType: "entry"},
+				{Type: "MA_DEVIATION", Name: "趨勢向上 (MA20 > 1%)", Params: map[string]interface{}{"ma": 20.0, "min": 0.01}, Weight: 20.0, RuleType: "entry"},
+				{Type: "PRICE_RETURN", Name: "趨勢反轉 (跌破 -2%)", Params: map[string]interface{}{"days": 1.0, "min": -0.02}, Weight: 50.0, RuleType: "exit"},
+				{Type: "MA_DEVIATION", Name: "跌破均線 (MA20)", Params: map[string]interface{}{"ma": 20.0, "min": 0.0}, Weight: 50.0, RuleType: "exit"},
 			},
 		},
 	}

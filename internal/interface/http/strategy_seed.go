@@ -17,7 +17,7 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("find admin user: %w", err)
 	}
 
-	// 2. 定義預設策略
+	// 2. 定義預設策略 - 目前僅保留 Nexus Prime 高勝率策略
 	strategies := []struct {
 		Name          string
 		Slug          string
@@ -34,156 +34,6 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 			RuleType string
 		}
 	}{
-		{
-			Name:          "趨勢突破策略 (Trend Breakout)",
-			Slug:          "trend-breakout",
-			Timeframe:     "1d",
-			BaseSymbol:    "BTCUSDT",
-			Threshold:     7.0,
-			ExitThreshold: 5.0,
-			IsActive:      false,
-			Rules: []struct {
-				Type     string
-				Name     string
-				Params   map[string]interface{}
-				Weight   float64
-				RuleType string
-			}{
-				{Type: "PRICE_RETURN", Name: "5日漲幅 > 5%", Params: map[string]interface{}{"days": 5.0, "min": 0.05}, Weight: 3.0, RuleType: "entry"},
-				{Type: "VOLUME_SURGE", Name: "成交量倍數 > 1.5", Params: map[string]interface{}{"min": 1.5}, Weight: 2.0, RuleType: "entry"},
-				{Type: "RANGE_POS", Name: "位階在高位 (> 80%)", Params: map[string]interface{}{"days": 20.0, "min": 0.8}, Weight: 2.0, RuleType: "entry"},
-				{Type: "AMPLITUDE_SURGE", Name: "波動放大 (> 1.2)", Params: map[string]interface{}{"min": 1.2}, Weight: 2.0, RuleType: "entry"},
-				{Type: "MA_DEVIATION", Name: "價格在20日均線上", Params: map[string]interface{}{"ma": 20.0, "min": 0.0}, Weight: 1.0, RuleType: "entry"},
-				{Type: "PRICE_RETURN", Name: "跌破5日低點 (止損)", Params: map[string]interface{}{"days": 1.0, "min": -0.03}, Weight: 1.0, RuleType: "exit"},
-			},
-		},
-		{
-			Name:          "強勢放量策略 (High Volume Surge)",
-			Slug:          "volume-surge-pro",
-			Timeframe:     "1d",
-			BaseSymbol:    "BTCUSDT",
-			Threshold:     6.0,
-			ExitThreshold: 4.0,
-			IsActive:      false,
-			Rules: []struct {
-				Type     string
-				Name     string
-				Params   map[string]interface{}
-				Weight   float64
-				RuleType string
-			}{
-				{Type: "VOLUME_SURGE", Name: "巨大成交量 > 2.0", Params: map[string]interface{}{"min": 2.0}, Weight: 5.0, RuleType: "entry"},
-				{Type: "AMPLITUDE_SURGE", Name: "波動度倍數 > 1.5", Params: map[string]interface{}{"min": 1.5}, Weight: 3.0, RuleType: "entry"},
-				{Type: "PRICE_RETURN", Name: "當日收紅 (> 0%)", Params: map[string]interface{}{"days": 1.0, "min": 0.0}, Weight: 2.0, RuleType: "entry"},
-				{Type: "VOLUME_SURGE", Name: "成交量萎縮 (< 0.8)", Params: map[string]interface{}{"min": -0.8}, Weight: 1.0, RuleType: "exit"},
-			},
-		},
-		{
-			Name:          "低檔轉強策略 (Reversal at Low)",
-			Slug:          "low-reversal",
-			Timeframe:     "1d",
-			BaseSymbol:    "BTCUSDT",
-			Threshold:     6.5,
-			ExitThreshold: 4.0,
-			IsActive:      false,
-			Rules: []struct {
-				Type     string
-				Name     string
-				Params   map[string]interface{}
-				Weight   float64
-				RuleType string
-			}{
-				{Type: "RANGE_POS", Name: "20日股價位階 < 30%", Params: map[string]interface{}{"days": 20.0, "min": 0.3}, Weight: 2.0, RuleType: "entry"},
-				{Type: "PRICE_RETURN", Name: "5日漲幅由負轉正 (> 2%)", Params: map[string]interface{}{"days": 5.0, "min": 0.02}, Weight: 5.0, RuleType: "entry"},
-				{Type: "VOLUME_SURGE", Name: "成交量略微放大 (> 1.2)", Params: map[string]interface{}{"min": 1.2}, Weight: 3.0, RuleType: "entry"},
-				{Type: "RANGE_POS", Name: "股價位階回升至高位 (> 80%)", Params: map[string]interface{}{"days": 20.0, "min": 0.8}, Weight: 1.0, RuleType: "exit"},
-			},
-		},
-		{
-			Name:          "AI Max-Return Strategy (PROD)",
-			Slug:          "ai-max-profit-2026",
-			Timeframe:     "1d",
-			BaseSymbol:    "BTCUSDT",
-			Threshold:     70.0,
-			ExitThreshold: 42.0,
-			IsActive:      true,
-			Rules: []struct {
-				Type     string
-				Name     string
-				Params   map[string]interface{}
-				Weight   float64
-				RuleType string
-			}{
-				{Type: "BASE_SCORE", Name: "AI Core Score", Params: map[string]interface{}{}, Weight: 100.0, RuleType: "both"},
-				{Type: "AMPLITUDE_SURGE", Name: "高效動能獎勵", Params: map[string]interface{}{"min": 1.5}, Weight: 20.0, RuleType: "entry"},
-				{Type: "RANGE_POS", Name: "趨勢延續獎勵", Params: map[string]interface{}{"days": 20.0, "min": 0.7}, Weight: 10.0, RuleType: "entry"},
-			},
-		},
-		{
-			Name:          "AI Opt Strategy 2026-02-08 (RSI < 40)",
-			Slug:          "opt-080324-rsi40",
-			Timeframe:     "1d",
-			BaseSymbol:    "BTCUSDT",
-			Threshold:     80.0,
-			ExitThreshold: 50.0,
-			IsActive:      false,
-			Rules: []struct {
-				Type     string
-				Name     string
-				Params   map[string]interface{}
-				Weight   float64
-				RuleType string
-			}{
-				{Type: "BASE_SCORE", Name: "AI Core Score", Params: map[string]interface{}{}, Weight: 100.0, RuleType: "entry"},
-				{Type: "MA_DEVIATION", Name: "Trend Follow", Params: map[string]interface{}{"ma": 200.0, "min": 0.0}, Weight: 30.0, RuleType: "entry"},
-			},
-		},
-		{
-			Name:          "極速阿爾法動能策略 (Alpha High-Freq Momentum) v2",
-			Slug:          "alpha-hf-momentum",
-			Timeframe:     "1d",
-			BaseSymbol:    "BTCUSDT",
-			Threshold:     55.0,
-			ExitThreshold: 35.0,
-			IsActive:      true,
-			Rules: []struct {
-				Type     string
-				Name     string
-				Params   map[string]interface{}
-				Weight   float64
-				RuleType string
-			}{
-				{Type: "PRICE_RETURN", Name: "當日漲幅 > 1.5%", Params: map[string]interface{}{"days": 1.0, "min": 0.015}, Weight: 4.0, RuleType: "entry"},
-				{Type: "VOLUME_SURGE", Name: "成交量倍數 > 1.5", Params: map[string]interface{}{"min": 1.5}, Weight: 3.0, RuleType: "entry"},
-				{Type: "MA_DEVIATION", Name: "站在20日均線上", Params: map[string]interface{}{"ma": 20.0, "min": 0.0}, Weight: 2.0, RuleType: "entry"},
-				{Type: "AMPLITUDE_SURGE", Name: "波動度 > 1.2", Params: map[string]interface{}{"min": 1.2}, Weight: 1.0, RuleType: "entry"},
-				{Type: "PRICE_RETURN", Name: "當日不跌超過 1.5% (止損)", Params: map[string]interface{}{"days": 1.0, "min": -0.015}, Weight: 6.0, RuleType: "exit"},
-				{Type: "VOLUME_SURGE", Name: "量能維持 (> 0.7)", Params: map[string]interface{}{"min": 0.7}, Weight: 4.0, RuleType: "exit"},
-			},
-		},
-		{
-			Name:          "黃金彈頭策略 (Golden Bullet Scalper)",
-			Slug:          "golden-bullet",
-			Timeframe:     "1d",
-			BaseSymbol:    "BTCUSDT",
-			Threshold:     60.0,
-			ExitThreshold: 30.0,
-			IsActive:      true,
-			Rules: []struct {
-				Type     string
-				Name     string
-				Params   map[string]interface{}
-				Weight   float64
-				RuleType string
-			}{
-				{Type: "PRICE_RETURN", Name: "脈衝漲幅 > 2.0%", Params: map[string]interface{}{"days": 1.0, "min": 0.02}, Weight: 30.0, RuleType: "entry"},
-				{Type: "VOLUME_SURGE", Name: "強勢放量 > 1.8倍", Params: map[string]interface{}{"min": 1.8}, Weight: 30.0, RuleType: "entry"},
-				{Type: "RANGE_POS", Name: "近期突破 (> 85%)", Params: map[string]interface{}{"days": 20.0, "min": 0.85}, Weight: 20.0, RuleType: "entry"},
-				{Type: "MA_DEVIATION", Name: "趨勢向上 (MA20 > 1%)", Params: map[string]interface{}{"ma": 20.0, "min": 0.01}, Weight: 20.0, RuleType: "entry"},
-				{Type: "PRICE_RETURN", Name: "趨勢反轉 (跌破 -2%)", Params: map[string]interface{}{"days": 1.0, "min": -0.02}, Weight: 50.0, RuleType: "exit"},
-				{Type: "MA_DEVIATION", Name: "跌破均線 (MA20)", Params: map[string]interface{}{"ma": 20.0, "min": 0.0}, Weight: 50.0, RuleType: "exit"},
-			},
-		},
 		{
 			Name:          "Nexus Prime 核心動能策略 (Nexus Prime Momentum)",
 			Slug:          "nexus-prime-momentum",
@@ -207,6 +57,12 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 				{Type: "MA_DEVIATION", Name: "趨勢破壞 (MA20 < 0%)", Params: map[string]interface{}{"ma": 20.0, "min": 0.0}, Weight: 50.0, RuleType: "exit"},
 			},
 		},
+	}
+
+	// 取得當前所有要保留的 Slugs
+	var keptSlugs []string
+	for _, s := range strategies {
+		keptSlugs = append(keptSlugs, s.Slug)
 	}
 
 	for _, s := range strategies {
@@ -233,7 +89,6 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 			err = db.QueryRowContext(ctx, `
 				SELECT id FROM conditions WHERE name = $1 AND type = $2 AND params::jsonb = $3::jsonb
 			`, r.Name, r.Type, paramsBytes).Scan(&cid)
-
 
 			if err == sql.ErrNoRows {
 				// 2. Insert if not exists
@@ -265,6 +120,12 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 		}
 	}
 
-	log.Printf("[Seed] Default scoring strategies seeded successfully")
+	// 額外清理：刪除不在 strategies 列表中的其他策略
+	_, err = db.ExecContext(ctx, "DELETE FROM strategies WHERE slug NOT IN ('nexus-prime-momentum')")
+	if err != nil {
+		log.Printf("[Seed] Cleanup old strategies failed: %v", err)
+	}
+
+	log.Printf("[Seed] Default scoring strategies seeded successfully (Nexus Prime only)")
 	return nil
 }

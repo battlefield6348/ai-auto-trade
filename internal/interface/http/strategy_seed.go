@@ -21,6 +21,8 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 	strategies := []struct {
 		Name          string
 		Slug          string
+		Timeframe     string
+		BaseSymbol    string
 		Threshold     float64
 		ExitThreshold float64
 		IsActive      bool
@@ -35,6 +37,8 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 		{
 			Name:          "趨勢突破策略 (Trend Breakout)",
 			Slug:          "trend-breakout",
+			Timeframe:     "1d",
+			BaseSymbol:    "BTCUSDT",
 			Threshold:     7.0,
 			ExitThreshold: 5.0,
 			IsActive:      false,
@@ -56,6 +60,8 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 		{
 			Name:          "強勢放量策略 (High Volume Surge)",
 			Slug:          "volume-surge-pro",
+			Timeframe:     "1d",
+			BaseSymbol:    "BTCUSDT",
 			Threshold:     6.0,
 			ExitThreshold: 4.0,
 			IsActive:      false,
@@ -75,6 +81,8 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 		{
 			Name:          "低檔轉強策略 (Reversal at Low)",
 			Slug:          "low-reversal",
+			Timeframe:     "1d",
+			BaseSymbol:    "BTCUSDT",
 			Threshold:     6.5,
 			ExitThreshold: 4.0,
 			IsActive:      false,
@@ -94,6 +102,8 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 		{
 			Name:          "AI Max-Return Strategy (PROD)",
 			Slug:          "ai-max-profit-2026",
+			Timeframe:     "1d",
+			BaseSymbol:    "BTCUSDT",
 			Threshold:     70.0,
 			ExitThreshold: 42.0,
 			IsActive:      true,
@@ -112,6 +122,8 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 		{
 			Name:          "AI Opt Strategy 2026-02-08 (RSI < 40)",
 			Slug:          "opt-080324-rsi40",
+			Timeframe:     "1d",
+			BaseSymbol:    "BTCUSDT",
 			Threshold:     80.0,
 			ExitThreshold: 50.0,
 			IsActive:      false,
@@ -129,6 +141,8 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 		{
 			Name:          "極速阿爾法動能策略 (Alpha High-Freq Momentum) v2",
 			Slug:          "alpha-hf-momentum",
+			Timeframe:     "1d",
+			BaseSymbol:    "BTCUSDT",
 			Threshold:     55.0,
 			ExitThreshold: 35.0,
 			IsActive:      true,
@@ -150,6 +164,8 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 		{
 			Name:          "黃金彈頭策略 (Golden Bullet Scalper)",
 			Slug:          "golden-bullet",
+			Timeframe:     "1d",
+			BaseSymbol:    "BTCUSDT",
 			Threshold:     60.0,
 			ExitThreshold: 30.0,
 			IsActive:      true,
@@ -168,16 +184,39 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 				{Type: "MA_DEVIATION", Name: "跌破均線 (MA20)", Params: map[string]interface{}{"ma": 20.0, "min": 0.0}, Weight: 50.0, RuleType: "exit"},
 			},
 		},
+		{
+			Name:          "Nexus Prime 核心動能策略 (Nexus Prime Momentum)",
+			Slug:          "nexus-prime-momentum",
+			Timeframe:     "1d",
+			BaseSymbol:    "BTCUSDT",
+			Threshold:     70.0,
+			ExitThreshold: 45.0,
+			IsActive:      true,
+			Rules: []struct {
+				Type     string
+				Name     string
+				Params   map[string]interface{}
+				Weight   float64
+				RuleType string
+			}{
+				{Type: "BASE_SCORE", Name: "AI 核心評分", Params: map[string]interface{}{}, Weight: 50.0, RuleType: "entry"},
+				{Type: "PRICE_RETURN", Name: "短線動能漲幅 > 1.5%", Params: map[string]interface{}{"days": 1.0, "min": 0.015}, Weight: 20.0, RuleType: "entry"},
+				{Type: "VOLUME_SURGE", Name: "量能爆發 > 1.8倍", Params: map[string]interface{}{"min": 1.8}, Weight: 15.0, RuleType: "entry"},
+				{Type: "MA_DEVIATION", Name: "趨勢延續 (MA20 > 1%)", Params: map[string]interface{}{"ma": 20.0, "min": 0.01}, Weight: 15.0, RuleType: "entry"},
+				{Type: "PRICE_RETURN", Name: "緊急止損 (-2%)", Params: map[string]interface{}{"days": 1.0, "min": -0.02}, Weight: 50.0, RuleType: "exit"},
+				{Type: "MA_DEVIATION", Name: "趨勢破壞 (MA20 < 0%)", Params: map[string]interface{}{"ma": 20.0, "min": 0.0}, Weight: 50.0, RuleType: "exit"},
+			},
+		},
 	}
 
 	for _, s := range strategies {
 		var sid string
 		err = db.QueryRowContext(ctx, `
-			INSERT INTO strategies (user_id, name, slug, threshold, exit_threshold, is_active, env, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, 'both', NOW())
-			ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, threshold = EXCLUDED.threshold, exit_threshold = EXCLUDED.exit_threshold, updated_at = NOW()
+			INSERT INTO strategies (user_id, name, slug, timeframe, base_symbol, threshold, exit_threshold, is_active, env, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'both', NOW())
+			ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, threshold = EXCLUDED.threshold, exit_threshold = EXCLUDED.exit_threshold, timeframe = EXCLUDED.timeframe, base_symbol = EXCLUDED.base_symbol, updated_at = NOW()
 			RETURNING id
-		`, adminID, s.Name, s.Slug, s.Threshold, s.ExitThreshold, s.IsActive).Scan(&sid)
+		`, adminID, s.Name, s.Slug, s.Timeframe, s.BaseSymbol, s.Threshold, s.ExitThreshold, s.IsActive).Scan(&sid)
 
 		if err != nil {
 			log.Printf("[Seed] Strategy %s insert failed: %v", s.Slug, err)

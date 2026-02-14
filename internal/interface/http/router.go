@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"database/sql"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -189,9 +190,22 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 	return s
 }
 
+type loggingResponseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (lrw *loggingResponseWriter) WriteHeader(code int) {
+	lrw.statusCode = code
+	lrw.ResponseWriter.WriteHeader(code)
+}
+
 // Handler 回傳路由處理器，供 HTTP server 掛載。
 func (s *Server) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		// CORS and OPTIONS handling
 		origin := r.Header.Get("Origin")
 		if origin != "" {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
@@ -204,7 +218,23 @@ func (s *Server) Handler() http.Handler {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		s.mux.ServeHTTP(w, r)
+
+		// Wrap response writer to capture status code
+		lrw := &loggingResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+
+		// Process request
+		s.mux.ServeHTTP(lrw, r)
+
+		// Log request similar to Gin's format
+		duration := time.Since(start)
+		log.Printf("[API] %v | %3d | %13v | %15s | %-7s %s",
+			start.Format("2006/01/02 - 15:04:05"),
+			lrw.statusCode,
+			duration,
+			r.RemoteAddr,
+			r.Method,
+			r.URL.Path,
+		)
 	})
 }
 

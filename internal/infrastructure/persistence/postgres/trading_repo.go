@@ -43,10 +43,9 @@ VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
         COALESCE($11::uuid, $12::uuid, $13::uuid),
         COALESCE($12::uuid, $11::uuid),
         COALESCE($13::uuid, $11::uuid))
-RETURNING id, created_at, updated_at;
+RETURNING id;
 `
 	var id string
-	var createdAt, updatedAt time.Time
 	userID := nullableUUID(s.CreatedBy)
 	if !userID.Valid {
 		userID = nullableUUID(s.UpdatedBy)
@@ -70,7 +69,7 @@ RETURNING id, created_at, updated_at;
 	if err := r.db.QueryRowContext(ctx, q,
 		s.Name, s.Description, s.BaseSymbol, s.Timeframe, string(s.Env), string(s.Status), s.Version,
 		buyJSON, sellJSON, riskJSON, userID, createdBy, updatedBy,
-	).Scan(&id, &createdAt, &updatedAt); err != nil {
+	).Scan(&id); err != nil {
 		return "", err
 	}
 	return id, nil

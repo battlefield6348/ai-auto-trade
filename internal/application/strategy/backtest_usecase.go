@@ -56,7 +56,7 @@ type BacktestStats struct {
 }
 
 type DataProvider interface {
-	FindHistory(ctx context.Context, symbol string, from, to *time.Time, limit int, onlySuccess bool) ([]analysisDomain.DailyAnalysisResult, error)
+	FindHistory(ctx context.Context, symbol string, timeframe string, from, to *time.Time, limit int, onlySuccess bool) ([]analysisDomain.DailyAnalysisResult, error)
 }
 
 type BacktestUseCase struct {
@@ -83,7 +83,7 @@ func (u *BacktestUseCase) Execute(ctx context.Context, slug string, symbol strin
 	}
 
 	// 2. Load History
-	history, err := u.dataProv.FindHistory(ctx, symbol, &start, &end, 5000, true)
+	history, err := u.dataProv.FindHistory(ctx, symbol, s.Timeframe, &start, &end, 5000, true)
 	if err != nil {
 		return nil, fmt.Errorf("fetch history failed: %w", err)
 	}

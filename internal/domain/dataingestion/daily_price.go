@@ -19,6 +19,7 @@ const (
 type DailyPrice struct {
 	Symbol       string
 	Market       Market
+	Timeframe    string
 	TradeDate    time.Time
 	Open         float64
 	High         float64

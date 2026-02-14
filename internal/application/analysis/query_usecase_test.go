@@ -47,7 +47,7 @@ func (f fakeQueryRepo) FindByDate(_ context.Context, date time.Time, filter Quer
 	return filtered[start:end], total, nil
 }
 
-func (f fakeQueryRepo) FindHistory(_ context.Context, symbol string, _ *time.Time, _ *time.Time, limit int, _ bool) ([]analysisDomain.DailyAnalysisResult, error) {
+func (f fakeQueryRepo) FindHistory(_ context.Context, symbol string, _ string, _ *time.Time, _ *time.Time, limit int, _ bool) ([]analysisDomain.DailyAnalysisResult, error) {
 	data, ok := f.history[symbol]
 	if !ok {
 		return nil, errors.New("not found")
@@ -58,7 +58,7 @@ func (f fakeQueryRepo) FindHistory(_ context.Context, symbol string, _ *time.Tim
 	return data, nil
 }
 
-func (f fakeQueryRepo) Get(_ context.Context, symbol string, date time.Time) (analysisDomain.DailyAnalysisResult, error) {
+func (f fakeQueryRepo) Get(_ context.Context, symbol string, date time.Time, _ string) (analysisDomain.DailyAnalysisResult, error) {
 	if f.detailErr != nil {
 		return analysisDomain.DailyAnalysisResult{}, f.detailErr
 	}

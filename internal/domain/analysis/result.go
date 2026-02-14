@@ -23,6 +23,7 @@ const (
 type DailyAnalysisResult struct {
 	Symbol    string
 	Market    dataingestion.Market
+	Timeframe string
 	Industry  string
 	TradeDate time.Time
 	Version   string

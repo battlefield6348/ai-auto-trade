@@ -16,8 +16,8 @@ import (
 // AnalysisQueryRepository 定義查詢介面，具體儲存層自行實作。
 type AnalysisQueryRepository interface {
 	FindByDate(ctx context.Context, date time.Time, filter QueryFilter, sort SortOption, pagination Pagination) ([]domain.DailyAnalysisResult, int, error)
-	FindHistory(ctx context.Context, symbol string, from, to *time.Time, limit int, onlySuccess bool) ([]domain.DailyAnalysisResult, error)
-	Get(ctx context.Context, symbol string, date time.Time) (domain.DailyAnalysisResult, error)
+	FindHistory(ctx context.Context, symbol string, timeframe string, from, to *time.Time, limit int, onlySuccess bool) ([]domain.DailyAnalysisResult, error)
+	Get(ctx context.Context, symbol string, date time.Time, timeframe string) (domain.DailyAnalysisResult, error)
 }
 
 // QueryFilter 為列表查詢的過濾條件。
@@ -36,6 +36,7 @@ type QueryFilter struct {
 	TagsAny           []domain.Tag // 符合任一
 	TagsAll           []domain.Tag // 必須全包含
 	OnlySuccess       bool
+	Timeframe         string
 }
 
 // SortField 定義列表排序欄位。
@@ -89,12 +90,14 @@ type QueryHistoryInput struct {
 	To          *time.Time
 	Limit       int // 若未指定則由實作決定，預設 120
 	OnlySuccess bool
+	Timeframe   string
 }
 
 // QueryDetailInput 對應單筆明細。
 type QueryDetailInput struct {
-	Symbol string
-	Date   time.Time
+	Symbol    string
+	Date      time.Time
+	Timeframe string
 }
 
 // ExportDailyStrongInput 對應「當日強勢股清單」匯出。
@@ -164,7 +167,7 @@ func (u *QueryUseCase) QueryHistory(ctx context.Context, input QueryHistoryInput
 		limit = maxLimit
 	}
 
-	return u.repo.FindHistory(ctx, input.Symbol, input.From, input.To, limit, input.OnlySuccess)
+	return u.repo.FindHistory(ctx, input.Symbol, input.Timeframe, input.From, input.To, limit, input.OnlySuccess)
 }
 
 // QueryDetail 取得單一股票在指定日期的分析明細。
@@ -175,7 +178,10 @@ func (u *QueryUseCase) QueryDetail(ctx context.Context, input QueryDetailInput) 
 	if input.Date.IsZero() {
 		return domain.DailyAnalysisResult{}, fmt.Errorf("date is required")
 	}
-	return u.repo.Get(ctx, input.Symbol, input.Date)
+	if input.Timeframe == "" {
+		input.Timeframe = "1d"
+	}
+	return u.repo.Get(ctx, input.Symbol, input.Date, input.Timeframe)
 }
 
 // ExportDailyStrong 匯出「當日強勢股清單」為 CSV 字串。

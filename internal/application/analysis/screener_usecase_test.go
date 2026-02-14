@@ -23,11 +23,11 @@ func (f fakeQueryRepoForScreener) FindByDate(_ context.Context, date time.Time, 
 	return out, len(out), nil
 }
 
-func (f fakeQueryRepoForScreener) FindHistory(_ context.Context, _ string, _, _ *time.Time, _ int, _ bool) ([]analysisDomain.DailyAnalysisResult, error) {
+func (f fakeQueryRepoForScreener) FindHistory(_ context.Context, _ string, _ string, _, _ *time.Time, _ int, _ bool) ([]analysisDomain.DailyAnalysisResult, error) {
 	return nil, nil
 }
 
-func (f fakeQueryRepoForScreener) Get(_ context.Context, _ string, _ time.Time) (analysisDomain.DailyAnalysisResult, error) {
+func (f fakeQueryRepoForScreener) Get(_ context.Context, _ string, _ time.Time, _ string) (analysisDomain.DailyAnalysisResult, error) {
 	return analysisDomain.DailyAnalysisResult{}, nil
 }
 

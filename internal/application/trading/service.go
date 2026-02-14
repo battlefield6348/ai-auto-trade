@@ -49,8 +49,8 @@ type Repository interface {
 
 // MarketDataProvider 取得分析結果與日 K 價格。
 type MarketDataProvider interface {
-	FindHistory(ctx context.Context, symbol string, from, to *time.Time, limit int, onlySuccess bool) ([]analysisDomain.DailyAnalysisResult, error)
-	PricesByPair(ctx context.Context, pair string) ([]dataDomain.DailyPrice, error)
+	FindHistory(ctx context.Context, symbol string, timeframe string, from, to *time.Time, limit int, onlySuccess bool) ([]analysisDomain.DailyAnalysisResult, error)
+	PricesByPair(ctx context.Context, pair string, timeframe string) ([]dataDomain.DailyPrice, error)
 }
 
 // OrderResponse represents the response from an order query.
@@ -388,7 +388,7 @@ func (s *Service) ExecuteScoringAutoTrade(ctx context.Context, slug string, env 
 
 
 	// 2. 獲取最新行情分析 (取得最後 1 天的結果)
-	results, err := s.data.FindHistory(ctx, strat.BaseSymbol, nil, nil, 1, true)
+	results, err := s.data.FindHistory(ctx, strat.BaseSymbol, strat.Timeframe, nil, nil, 1, true)
 	if err != nil || len(results) == 0 {
 		return fmt.Errorf("no analysis results found for %s", strat.BaseSymbol)
 	}
@@ -758,7 +758,7 @@ func (s *Service) ListLogs(ctx context.Context, filter tradingDomain.LogFilter) 
 // loadData 抽取歷史分析與日 K 價格。
 func (s *Service) loadData(ctx context.Context, symbol string, start, end time.Time) ([]analysisDomain.DailyAnalysisResult, []dataDomain.DailyPrice, error) {
 	limit := 4000
-	history, err := s.data.FindHistory(ctx, symbol, &start, &end, limit, true)
+	history, err := s.data.FindHistory(ctx, symbol, "1d", &start, &end, limit, true)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -776,7 +776,7 @@ func (s *Service) loadData(ctx context.Context, symbol string, start, end time.T
 		return 0
 	})
 
-	prices, err := s.data.PricesByPair(ctx, symbol)
+	prices, err := s.data.PricesByPair(ctx, symbol, "1d")
 	if err != nil {
 		return nil, nil, err
 	}

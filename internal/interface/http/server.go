@@ -45,7 +45,9 @@ type DataRepository interface {
 	UpsertTradingPair(ctx context.Context, pair, name string, market dataDomain.Market, industry string) (string, error)
 	InsertDailyPrice(ctx context.Context, stockID string, price dataDomain.DailyPrice) error
 	PricesByDate(ctx context.Context, date time.Time) ([]dataDomain.DailyPrice, error)
-	PricesByPair(ctx context.Context, pair string) ([]dataDomain.DailyPrice, error)
+	PricesByPair(ctx context.Context, pair string, timeframe string) ([]dataDomain.DailyPrice, error)
+	FindHistory(ctx context.Context, symbol string, timeframe string, from, to *time.Time, limit int, onlySuccess bool) ([]analysisDomain.DailyAnalysisResult, error)
+	Get(ctx context.Context, symbol string, date time.Time, timeframe string) (analysisDomain.DailyAnalysisResult, error)
 	InsertAnalysisResult(ctx context.Context, stockID string, res analysisDomain.DailyAnalysisResult) error
 	HasAnalysisForDate(ctx context.Context, date time.Time) (bool, error)
 	LatestAnalysisDate(ctx context.Context) (time.Time, error)
@@ -69,7 +71,8 @@ func (m memoryRepoAdapter) PricesByDate(ctx context.Context, date time.Time) ([]
 	return m.store.PricesByDate(date), nil
 }
 
-func (m memoryRepoAdapter) PricesByPair(ctx context.Context, pair string) ([]dataDomain.DailyPrice, error) {
+func (m memoryRepoAdapter) PricesByPair(ctx context.Context, pair string, timeframe string) ([]dataDomain.DailyPrice, error) {
+	// memory store doesn't support timeframe yet, so we ignore it for now
 	return m.store.PricesByPair(pair), nil
 }
 
@@ -95,11 +98,12 @@ func (m memoryRepoAdapter) FindByDate(ctx context.Context, date time.Time, filte
 	return m.store.FindByDate(ctx, date, filter, sortOpt, pagination)
 }
 
-func (m memoryRepoAdapter) FindHistory(ctx context.Context, symbol string, from, to *time.Time, limit int, onlySuccess bool) ([]analysisDomain.DailyAnalysisResult, error) {
+func (m memoryRepoAdapter) FindHistory(ctx context.Context, symbol string, timeframe string, from, to *time.Time, limit int, onlySuccess bool) ([]analysisDomain.DailyAnalysisResult, error) {
+	// memory store doesn't support timeframe yet, so we ignore it for now or return daily
 	return m.store.FindHistory(ctx, symbol, from, to, limit, onlySuccess)
 }
 
-func (m memoryRepoAdapter) Get(ctx context.Context, symbol string, date time.Time) (analysisDomain.DailyAnalysisResult, error) {
+func (m memoryRepoAdapter) Get(ctx context.Context, symbol string, date time.Time, timeframe string) (analysisDomain.DailyAnalysisResult, error) {
 	return m.store.Get(ctx, symbol, date)
 }
 
@@ -141,6 +145,7 @@ type analysisBacktestRequest struct {
 	Flags      backtestFlags      `json:"flags"`
 	Sides      backtestSides      `json:"sides"`
 	Horizons   []int              `json:"horizons"`
+	Timeframe  string             `json:"timeframe"`
 }
 
 type backtestWeights struct {
@@ -212,6 +217,7 @@ type parsedBacktestInput struct {
 	startDate time.Time
 	endDate   time.Time
 	horizons  []int
+	timeframe string
 }
 
 // --- Handlers ---
@@ -602,6 +608,10 @@ func (s *Server) handleAnalysisQuery(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid trade_date")
 		return
 	}
+	timeframe := r.URL.Query().Get("timeframe")
+	if timeframe == "" {
+		timeframe = "1d"
+	}
 	limit := parseIntDefault(r.URL.Query().Get("limit"), 100)
 	if limit > 1000 {
 		limit = 1000
@@ -612,6 +622,7 @@ func (s *Server) handleAnalysisQuery(w http.ResponseWriter, r *http.Request) {
 		Date: tradeDate,
 		Filter: analysis.QueryFilter{
 			OnlySuccess: true,
+			Timeframe:   timeframe,
 		},
 		Pagination: analysis.Pagination{
 			Offset: offset,
@@ -694,9 +705,14 @@ func (s *Server) handleAnalysisHistory(w http.ResponseWriter, r *http.Request) {
 
 	limit := parseIntDefault(r.URL.Query().Get("limit"), 1000)
 	onlySuccess := parseBoolDefault(r.URL.Query().Get("only_success"), true)
+	timeframe := r.URL.Query().Get("timeframe")
+	if timeframe == "" {
+		timeframe = "1d"
+	}
 
 	out, err := s.queryUC.QueryHistory(r.Context(), analysis.QueryHistoryInput{
 		Symbol:      symbol,
+		Timeframe:   timeframe,
 		From:        startDate,
 		To:          endDate,
 		Limit:       limit,
@@ -836,7 +852,7 @@ func (s *Server) handleAnalysisBacktest(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	history, err := s.dataRepo.FindHistory(r.Context(), input.symbol, &input.startDate, &input.endDate, 5000, true)
+	history, err := s.dataRepo.FindHistory(r.Context(), input.symbol, input.timeframe, &input.startDate, &input.endDate, 5000, true)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, errCodeInternal, "query history failed")
 		return
@@ -2613,6 +2629,7 @@ func (s *Server) generateSyntheticBTC(ctx context.Context, tradeDate time.Time) 
 			Low:       srs.low,
 			Close:     srs.close,
 			Volume:    srs.volume,
+			Timeframe: "1d",
 		}
 		if err := s.dataRepo.InsertDailyPrice(ctx, stockID, price); err != nil {
 			return err
@@ -2671,7 +2688,7 @@ func (s *Server) insertPriceSeries(ctx context.Context, code string, market data
 }
 
 func (s *Server) calculateAnalysis(ctx context.Context, p dataDomain.DailyPrice) analysisDomain.DailyAnalysisResult {
-	history, _ := s.dataRepo.PricesByPair(ctx, p.Symbol)
+	history, _ := s.dataRepo.PricesByPair(ctx, p.Symbol, p.Timeframe)
 	var return5 *float64
 	var volumeRatio *float64
 	var changeRate float64
@@ -2711,6 +2728,7 @@ func (s *Server) calculateAnalysis(ctx context.Context, p dataDomain.DailyPrice)
 	return analysisDomain.DailyAnalysisResult{
 		Symbol:         p.Symbol,
 		Market:         p.Market,
+		Timeframe:      p.Timeframe,
 		Industry:       "",
 		TradeDate:      p.TradeDate,
 		Version:        "v1-mvp",
@@ -2786,6 +2804,7 @@ func (s *Server) fetchBTCSeries(ctx context.Context, tradeDate time.Time) ([]dat
 						out = append(out, dataDomain.DailyPrice{
 							Symbol:    "BTCUSDT",
 							Market:    dataDomain.MarketCrypto,
+							Timeframe: "1d",
 							TradeDate: day,
 							Open:      open,
 							High:      high,

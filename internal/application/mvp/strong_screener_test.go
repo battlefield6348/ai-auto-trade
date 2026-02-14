@@ -24,11 +24,11 @@ func (f fakeQueryRepoMVP) FindByDate(_ context.Context, date time.Time, _ analys
 	return filtered, len(filtered), nil
 }
 
-func (f fakeQueryRepoMVP) FindHistory(context.Context, string, *time.Time, *time.Time, int, bool) ([]analysisDomain.DailyAnalysisResult, error) {
+func (f fakeQueryRepoMVP) FindHistory(context.Context, string, string, *time.Time, *time.Time, int, bool) ([]analysisDomain.DailyAnalysisResult, error) {
 	return nil, nil
 }
 
-func (f fakeQueryRepoMVP) Get(context.Context, string, time.Time) (analysisDomain.DailyAnalysisResult, error) {
+func (f fakeQueryRepoMVP) Get(context.Context, string, time.Time, string) (analysisDomain.DailyAnalysisResult, error) {
 	return analysisDomain.DailyAnalysisResult{}, nil
 }
 

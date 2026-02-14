@@ -590,11 +590,11 @@ func (f *fakeRepo) ListActiveScoringStrategies(ctx context.Context) ([]*strategy
 
 type dummyDataProvider struct{}
 
-func (dummyDataProvider) FindHistory(context.Context, string, *time.Time, *time.Time, int, bool) ([]analysisDomain.DailyAnalysisResult, error) {
+func (dummyDataProvider) FindHistory(context.Context, string, string, *time.Time, *time.Time, int, bool) ([]analysisDomain.DailyAnalysisResult, error) {
 	return nil, nil
 }
 
-func (dummyDataProvider) PricesByPair(context.Context, string) ([]dataDomain.DailyPrice, error) {
+func (dummyDataProvider) PricesByPair(context.Context, string, string) ([]dataDomain.DailyPrice, error) {
 	return nil, nil
 }
 
@@ -603,11 +603,11 @@ type stubDataProvider struct {
 	prices  []dataDomain.DailyPrice
 }
 
-func (s stubDataProvider) FindHistory(context.Context, string, *time.Time, *time.Time, int, bool) ([]analysisDomain.DailyAnalysisResult, error) {
+func (s stubDataProvider) FindHistory(context.Context, string, string, *time.Time, *time.Time, int, bool) ([]analysisDomain.DailyAnalysisResult, error) {
 	return s.history, nil
 }
 
-func (s stubDataProvider) PricesByPair(context.Context, string) ([]dataDomain.DailyPrice, error) {
+func (s stubDataProvider) PricesByPair(context.Context, string, string) ([]dataDomain.DailyPrice, error) {
 	return s.prices, nil
 }
 

@@ -5,7 +5,6 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"testing"
-	"time"
 
 	"ai-auto-trade/internal/application/analysis"
 	tradingDomain "ai-auto-trade/internal/domain/trading"
@@ -21,7 +20,6 @@ func TestCreateStrategy_UseCreatedBy(t *testing.T) {
 	defer db.Close()
 
 	repo := NewTradingRepo(db)
-	created := time.Now()
 	mock.ExpectQuery("INSERT INTO strategies").
 		WithArgs(
 			"策略A", "",
@@ -33,7 +31,7 @@ func TestCreateStrategy_UseCreatedBy(t *testing.T) {
 			sqlmock.AnyArg(), // created_by
 			sqlmock.AnyArg(), // updated_by
 		).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at"}).AddRow("s-1", created, created))
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("s-1"))
 
 	_, err = repo.CreateStrategy(context.Background(), tradingDomain.Strategy{
 		Name:       "策略A",
@@ -74,7 +72,6 @@ func TestCreateStrategy_FallbackUser(t *testing.T) {
 	defer db.Close()
 
 	repo := NewTradingRepo(db)
-	created := time.Now()
 
 	mock.ExpectQuery("SELECT id FROM users").
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("admin-id"))
@@ -90,7 +87,7 @@ func TestCreateStrategy_FallbackUser(t *testing.T) {
 			driver.Value("admin-id"), // created_by fallback
 			driver.Value("admin-id"), // updated_by fallback
 		).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "updated_at"}).AddRow("s-2", created, created))
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("s-2"))
 
 	_, err = repo.CreateStrategy(context.Background(), tradingDomain.Strategy{
 		Name:       "策略B",

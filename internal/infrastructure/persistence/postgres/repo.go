@@ -40,9 +40,9 @@ RETURNING id;
 // InsertDailyPrice 寫入或更新單日日 K。
 func (r *Repo) InsertDailyPrice(ctx context.Context, stockID string, price dataDomain.DailyPrice) error {
 	const q = `
-INSERT INTO daily_prices (stock_id, trade_date, open_price, high_price, low_price, close_price, volume, turnover, change, change_percent, is_dividend_date)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-ON CONFLICT (stock_id, trade_date)
+INSERT INTO daily_prices (stock_id, timeframe, trade_date, open_price, high_price, low_price, close_price, volume, turnover, change, change_percent, is_dividend_date)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+ON CONFLICT (stock_id, timeframe, trade_date)
 DO UPDATE SET open_price = EXCLUDED.open_price,
               high_price = EXCLUDED.high_price,
               low_price = EXCLUDED.low_price,
@@ -56,6 +56,7 @@ DO UPDATE SET open_price = EXCLUDED.open_price,
 `
 	_, err := r.db.ExecContext(ctx, q,
 		stockID,
+		price.Timeframe,
 		price.TradeDate,
 		price.Open,
 		price.High,
@@ -73,7 +74,7 @@ DO UPDATE SET open_price = EXCLUDED.open_price,
 // PricesByDate 取某交易日全市場日 K。
 func (r *Repo) PricesByDate(ctx context.Context, date time.Time) ([]dataDomain.DailyPrice, error) {
 	const q = `
-SELECT s.trading_pair, s.market_type, dp.trade_date, dp.open_price, dp.high_price, dp.low_price, dp.close_price, dp.volume
+SELECT s.trading_pair, s.market_type, dp.timeframe, dp.trade_date, dp.open_price, dp.high_price, dp.low_price, dp.close_price, dp.volume
 FROM daily_prices dp
 JOIN stocks s ON dp.stock_id = s.id
 WHERE dp.trade_date = $1
@@ -88,7 +89,7 @@ ORDER BY s.trading_pair;
 	for rows.Next() {
 		var p dataDomain.DailyPrice
 		var market string
-		if err := rows.Scan(&p.Symbol, &market, &p.TradeDate, &p.Open, &p.High, &p.Low, &p.Close, &p.Volume); err != nil {
+		if err := rows.Scan(&p.Symbol, &market, &p.Timeframe, &p.TradeDate, &p.Open, &p.High, &p.Low, &p.Close, &p.Volume); err != nil {
 			return nil, err
 		}
 		p.Market = dataDomain.Market(market)
@@ -98,15 +99,15 @@ ORDER BY s.trading_pair;
 }
 
 // PricesByPair 取單檔交易對歷史日 K（遞增日期）。
-func (r *Repo) PricesByPair(ctx context.Context, pair string) ([]dataDomain.DailyPrice, error) {
+func (r *Repo) PricesByPair(ctx context.Context, pair string, timeframe string) ([]dataDomain.DailyPrice, error) {
 	const q = `
-SELECT s.trading_pair, s.market_type, dp.trade_date, dp.open_price, dp.high_price, dp.low_price, dp.close_price, dp.volume
+SELECT s.trading_pair, s.market_type, dp.timeframe, dp.trade_date, dp.open_price, dp.high_price, dp.low_price, dp.close_price, dp.volume
 FROM daily_prices dp
 JOIN stocks s ON dp.stock_id = s.id
-WHERE s.trading_pair = $1
+WHERE s.trading_pair = $1 AND dp.timeframe = $2
 ORDER BY dp.trade_date;
 `
-	rows, err := r.db.QueryContext(ctx, q, pair)
+	rows, err := r.db.QueryContext(ctx, q, pair, timeframe)
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +116,7 @@ ORDER BY dp.trade_date;
 	for rows.Next() {
 		var p dataDomain.DailyPrice
 		var market string
-		if err := rows.Scan(&p.Symbol, &market, &p.TradeDate, &p.Open, &p.High, &p.Low, &p.Close, &p.Volume); err != nil {
+		if err := rows.Scan(&p.Symbol, &market, &p.Timeframe, &p.TradeDate, &p.Open, &p.High, &p.Low, &p.Close, &p.Volume); err != nil {
 			return nil, err
 		}
 		p.Market = dataDomain.Market(market)
@@ -128,12 +129,12 @@ ORDER BY dp.trade_date;
 func (r *Repo) InsertAnalysisResult(ctx context.Context, stockID string, res analysisDomain.DailyAnalysisResult) error {
 	const q = `
 INSERT INTO analysis_results (
-    stock_id, trade_date, analysis_version, close_price, change, change_percent,
+    stock_id, timeframe, trade_date, analysis_version, close_price, change, change_percent,
     return_5d, volume, volume_ratio, score, status, error_reason, created_at, updated_at
 ) VALUES (
     $1, $2, $3, $4, $5, $6,
-    $7, $8, $9, $10, $11, $12, NOW(), NOW()
-) ON CONFLICT (stock_id, trade_date, analysis_version)
+    $7, $8, $9, $10, $11, $12, $13, NOW(), NOW()
+) ON CONFLICT (stock_id, timeframe, trade_date, analysis_version)
 DO UPDATE SET close_price = EXCLUDED.close_price,
               change = EXCLUDED.change,
               change_percent = EXCLUDED.change_percent,
@@ -147,6 +148,7 @@ DO UPDATE SET close_price = EXCLUDED.close_price,
 `
 	_, err := r.db.ExecContext(ctx, q,
 		stockID,
+		res.Timeframe,
 		res.TradeDate,
 		res.Version,
 		res.Close,
@@ -189,7 +191,7 @@ func (r *Repo) LatestAnalysisDate(ctx context.Context) (time.Time, error) {
 func (r *Repo) FindByDate(ctx context.Context, date time.Time, filter analysis.QueryFilter, sort analysis.SortOption, pagination analysis.Pagination) ([]analysisDomain.DailyAnalysisResult, int, error) {
 	// MVP 僅支援基本條件：OnlySuccess + 分頁
 	const q = `
-SELECT s.trading_pair, s.market_type, s.industry, ar.trade_date, ar.analysis_version,
+SELECT s.trading_pair, s.market_type, s.industry, ar.timeframe, ar.trade_date, ar.analysis_version,
        ar.close_price, ar.change, ar.change_percent, ar.return_5d, ar.volume, ar.volume_ratio, ar.score, ar.status, ar.error_reason
 FROM analysis_results ar
 JOIN stocks s ON ar.stock_id = s.id
@@ -216,6 +218,7 @@ LIMIT $3 OFFSET $4;
 			&rres.Symbol,
 			&market,
 			&rres.Industry,
+			&rres.Timeframe,
 			&rres.TradeDate,
 			&rres.Version,
 			&rres.Close,
@@ -260,15 +263,19 @@ SELECT count(*) FROM analysis_results ar WHERE ar.trade_date = $1 AND ($2::bool 
 }
 
 // FindHistory 供 QueryUseCase 使用，MVP 版。
-func (r *Repo) FindHistory(ctx context.Context, symbol string, from, to *time.Time, limit int, onlySuccess bool) ([]analysisDomain.DailyAnalysisResult, error) {
+func (r *Repo) FindHistory(ctx context.Context, symbol string, timeframe string, from, to *time.Time, limit int, onlySuccess bool) ([]analysisDomain.DailyAnalysisResult, error) {
 	q := `
-SELECT s.trading_pair, s.market_type, ar.trade_date, ar.analysis_version,
+SELECT s.trading_pair, s.market_type, ar.timeframe, ar.trade_date, ar.analysis_version,
        ar.close_price, ar.change, ar.change_percent, ar.return_5d, ar.volume, ar.volume_ratio, ar.score, ar.status, ar.error_reason
 FROM analysis_results ar
 JOIN stocks s ON ar.stock_id = s.id
 WHERE s.trading_pair = $1
 `
 	args := []interface{}{symbol}
+	if timeframe != "" {
+		q += fmt.Sprintf(" AND ar.timeframe = $%d", len(args)+1)
+		args = append(args, timeframe)
+	}
 	if from != nil {
 		q += fmt.Sprintf(" AND ar.trade_date >= $%d", len(args)+1)
 		args = append(args, *from)
@@ -303,6 +310,7 @@ WHERE s.trading_pair = $1
 		if err := rows.Scan(
 			&rres.Symbol,
 			&market,
+			&rres.Timeframe,
 			&rres.TradeDate,
 			&rres.Version,
 			&rres.Close,
@@ -334,13 +342,13 @@ WHERE s.trading_pair = $1
 }
 
 // Get 單筆查詢。
-func (r *Repo) Get(ctx context.Context, symbol string, date time.Time) (analysisDomain.DailyAnalysisResult, error) {
+func (r *Repo) Get(ctx context.Context, symbol string, date time.Time, timeframe string) (analysisDomain.DailyAnalysisResult, error) {
 	const q = `
-SELECT s.trading_pair, s.market_type, ar.trade_date, ar.analysis_version,
+SELECT s.trading_pair, s.market_type, ar.timeframe, ar.trade_date, ar.analysis_version,
        ar.close_price, ar.change, ar.change_percent, ar.return_5d, ar.volume, ar.volume_ratio, ar.score, ar.status, ar.error_reason
 FROM analysis_results ar
 JOIN stocks s ON ar.stock_id = s.id
-WHERE s.trading_pair = $1 AND ar.trade_date = $2
+WHERE s.trading_pair = $1 AND ar.trade_date = $2 AND ar.timeframe = $3
 LIMIT 1;
 `
 	var rres analysisDomain.DailyAnalysisResult
@@ -349,9 +357,10 @@ LIMIT 1;
 	var volRatio sql.NullFloat64
 	var status string
 	var errReason sql.NullString
-	err := r.db.QueryRowContext(ctx, q, symbol, date).Scan(
+	err := r.db.QueryRowContext(ctx, q, symbol, date, timeframe).Scan(
 		&rres.Symbol,
 		&market,
+		&rres.Timeframe,
 		&rres.TradeDate,
 		&rres.Version,
 		&rres.Close,

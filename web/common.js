@@ -2,6 +2,15 @@
  * Common utilities for AI Auto Trade Web Console
  */
 
+export function handleUnauthorized() {
+    console.warn("[Auth] Unauthorized or session expired, redirecting to login...");
+    localStorage.removeItem("aat_token");
+    localStorage.removeItem("aat_email");
+
+    // Use replace to avoid back-button loop from login page
+    window.location.replace("/login.html");
+}
+
 export function guardRoute() {
     // Check if current page is login.html to avoid infinite redirect
     if (window.location.pathname.endsWith('/login.html')) {
@@ -10,8 +19,7 @@ export function guardRoute() {
 
     const token = localStorage.getItem("aat_token");
     if (!token) {
-        console.warn("[Auth] No token found, redirecting to login...");
-        window.location.href = "/login.html";
+        handleUnauthorized();
         return true;
     }
     return false;

@@ -1,4 +1,4 @@
-import { updateExchangeLink, initSidebar, initBinanceConfigModal, initAuthModal, initGlobalEnvSelector } from "./common.js";
+import { updateExchangeLink, initSidebar, initBinanceConfigModal, initAuthModal, initGlobalEnvSelector, handleUnauthorized } from "./common.js";
 
 
 const state = {
@@ -49,7 +49,7 @@ async function api(path, { method = "GET", body, requireAuth = true } = {}) {
   console.log(`[API] ${method} ${path}`, body || "");
   const res = await fetch(path, { method, headers, body: payload });
   if (res.status === 401) {
-    logout(true);
+    handleUnauthorized();
     throw new Error("需要登入或權限不足");
   }
   const data = await res.json().catch(() => ({}));

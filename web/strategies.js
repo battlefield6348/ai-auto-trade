@@ -1,4 +1,4 @@
-import { updateExchangeLink, initSidebar, initBinanceConfigModal, initGlobalEnvSelector } from "./common.js";
+import { updateExchangeLink, initSidebar, initBinanceConfigModal, initGlobalEnvSelector, handleUnauthorized } from "./common.js";
 
 const state = {
     token: localStorage.getItem("aat_token") || "",
@@ -38,7 +38,7 @@ async function api(path, { method = "GET", body } = {}) {
 
     const res = await fetch(path, { method, headers, body: payload });
     if (res.status === 401) {
-        window.location.href = "/";
+        handleUnauthorized();
         return;
     }
 

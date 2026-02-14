@@ -2,7 +2,8 @@
  * Common utilities for AI Auto Trade Web Console
  */
 
-export function handleUnauthorized() {
+// 處理登入逾時或權限不足
+function handleUnauthorized() {
     console.warn("[Auth] Unauthorized or session expired, redirecting to login...");
     localStorage.removeItem("aat_token");
     localStorage.removeItem("aat_email");
@@ -11,7 +12,7 @@ export function handleUnauthorized() {
     window.location.replace("/login.html");
 }
 
-export function guardRoute() {
+function guardRoute() {
     // Check if current page is login.html to avoid infinite redirect
     if (window.location.pathname.endsWith('/login.html')) {
         return;
@@ -25,7 +26,7 @@ export function guardRoute() {
     return false;
 }
 
-export async function updateExchangeLink() {
+async function updateExchangeLink() {
     const link = document.getElementById('exchangeLink');
     if (!link) return;
 
@@ -54,14 +55,14 @@ export async function updateExchangeLink() {
     }
 }
 
-export async function initBinanceConfigModal() {
+async function initBinanceConfigModal() {
     // Deprecated: Environment configuration is now handled globally in the top bar.
     // This function is kept to avoid import errors until all references are removed.
     const openBtn = document.getElementById('binanceConfigBtn');
     if (openBtn) openBtn.style.display = 'none'; // Hide the button instead
 }
 
-export function initSidebar() {
+function initSidebar() {
     const sidebar = document.getElementById('sidebar');
     const toggle = document.getElementById('sidebarToggle');
     const mobileToggle = document.getElementById('mobileToggle');
@@ -135,7 +136,7 @@ export function initSidebar() {
     }
 }
 
-export function initAuthModal(onSuccess) {
+function initAuthModal(onSuccess) {
     const dialog = document.getElementById("loginModal");
     const openBtn = document.getElementById("loginBtn");
     const closeBtn = document.getElementById("closeAuth");
@@ -189,7 +190,7 @@ export function initAuthModal(onSuccess) {
     }
 }
 
-export async function initGlobalEnvSelector(onEnvChange) {
+async function initGlobalEnvSelector(onEnvChange) {
     const envSelectors = document.querySelectorAll(".env-selector");
     if (envSelectors.length === 0) return;
 
@@ -282,3 +283,13 @@ export async function initGlobalEnvSelector(onEnvChange) {
         console.error("Failed to sync env:", err);
     }
 }
+// 統一導出所有工具函數
+export {
+    handleUnauthorized,
+    guardRoute,
+    updateExchangeLink,
+    initBinanceConfigModal,
+    initSidebar,
+    initAuthModal,
+    initGlobalEnvSelector
+};

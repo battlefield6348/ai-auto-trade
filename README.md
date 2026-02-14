@@ -16,7 +16,7 @@
 ---
 
 ## 🛠 技術棧
-*   **後端**：Golang (DDD, Clean Architecture)
+*   **後端**：Golang (Handler-Service-Repository 三層架構)
 *   **前端**：Vanilla JS + CSS (Rich Aesthetics UI)
 *   **資料庫**：Postgres (Time-series optimization)
 *   **API 串接**：Binance API (K-lines, Trades)

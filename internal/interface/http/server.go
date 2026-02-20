@@ -223,8 +223,10 @@ type parsedBacktestInput struct {
 
 func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"success": true,
-		"message": "pong",
+		"success":   true,
+		"message":   "pong",
+		"timestamp": time.Now().Unix(),
+		"status":    "alive",
 	})
 }
 

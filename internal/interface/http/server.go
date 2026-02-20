@@ -137,15 +137,23 @@ type jobRun struct {
 }
 
 type analysisBacktestRequest struct {
-	Symbol     string             `json:"symbol"`
-	StartDate  string             `json:"start_date"`
-	EndDate    string             `json:"end_date"`
+	Symbol    string             `json:"symbol"`
+	StartDate string             `json:"start_date"`
+	EndDate   string             `json:"end_date"`
+	Entry     backtestSideParams `json:"entry"`
+	Exit      backtestSideParams `json:"exit"`
+	Horizons  []int              `json:"horizons"`
+	Timeframe string             `json:"timeframe"`
+
+	// Legacy fields for compatibility during transition (optional)
+	Thresholds backtestThresholds `json:"thresholds,omitempty"`
+}
+
+type backtestSideParams struct {
 	Weights    backtestWeights    `json:"weights"`
 	Thresholds backtestThresholds `json:"thresholds"`
 	Flags      backtestFlags      `json:"flags"`
-	Sides      backtestSides      `json:"sides"`
-	Horizons   []int              `json:"horizons"`
-	Timeframe  string             `json:"timeframe"`
+	TotalMin   float64            `json:"total_min"`
 }
 
 type backtestWeights struct {
@@ -158,25 +166,16 @@ type backtestWeights struct {
 	RangeBonus  float64 `json:"range_bonus"`
 }
 
-type backtestSides struct {
-	Score  string `json:"score"` // "entry", "exit", "both"
-	Change string `json:"change"`
-	Volume string `json:"volume"`
-	Return string `json:"return"`
-	Ma     string `json:"ma"`
-	Amp    string `json:"amp"`
-	Range  string `json:"range"`
-}
+// backtestSides removed
 
 type backtestThresholds struct {
-	TotalMin       float64 `json:"total_min"`
-	ExitMin        float64 `json:"exit_min"`
 	ChangeMin      float64 `json:"change_min"`
 	VolumeRatioMin float64 `json:"volume_ratio_min"`
 	Return5Min     float64 `json:"return5_min"`
 	MaGapMin       float64 `json:"ma_gap_min"`
 	AmpMin         float64 `json:"amp_min"`
 	RangeMin       float64 `json:"range_min"`
+	TotalMin       float64 `json:"total_min"` // Fallback for legacy
 }
 
 type backtestFlags struct {
@@ -879,10 +878,10 @@ func (s *Server) handleAnalysisBacktest(w http.ResponseWriter, r *http.Request) 
 	totalReturn := 1.0
 
 	for idx, res := range history {
-		entryTotal, entryComps := calcBacktestScore(res, input.req, "entry")
-		exitTotal, exitComps := calcBacktestScore(res, input.req, "exit")
+		entryTotal, entryComps := calcBacktestScore(res, input.req.Entry)
+		exitTotal, exitComps := calcBacktestScore(res, input.req.Exit)
 		
-		triggered := entryTotal >= input.req.Thresholds.TotalMin
+		triggered := entryTotal >= input.req.Entry.TotalMin
 
 		// Calculate forward returns for statistics (only for triggered events to maintain density)
 		var forward map[string]float64
@@ -926,14 +925,19 @@ func (s *Server) handleAnalysisBacktest(w http.ResponseWriter, r *http.Request) 
 				}
 			}
 		} else {
-			// Exit logic: use explicit exit_min if provided, otherwise default to 50% of entry threshold
-			exitThreshold := input.req.Thresholds.ExitMin
-			if exitThreshold <= 0 {
-				exitThreshold = input.req.Thresholds.TotalMin * 0.5
+			// Check Exit
+			exitTriggered := exitTotal < input.req.Exit.TotalMin
+			
+			// Also auto-exit if entry score drops below 50% of threshold (builtin protection)
+			if !exitTriggered {
+				if entryTotal < (input.req.Entry.TotalMin * 0.5) {
+					exitTriggered = true
+					currentPosition.Reason = fmt.Sprintf("AI信號轉弱 (%.1f < %.1f)", entryTotal, input.req.Entry.TotalMin*0.5)
+				}
 			}
 
 			// User requirement: Exit if ExitScore < ExitThreshold
-			if exitTotal < exitThreshold {
+			if exitTriggered {
 				currentPosition.ExitDate = res.TradeDate.Format("2006-01-02")
 				currentPosition.ExitPrice = res.Close
 				
@@ -942,7 +946,9 @@ func (s *Server) handleAnalysisBacktest(w http.ResponseWriter, r *http.Request) 
 				
 				currentPosition.PnL = exitPriceWithFee - currentPosition.EntryPrice
 				currentPosition.PnLPct = (exitPriceWithFee / currentPosition.EntryPrice) - 1.0
-				currentPosition.Reason = fmt.Sprintf("AI信號轉弱 (%.1f < %.1f)", exitTotal, exitThreshold)
+				if currentPosition.Reason == "" { // Only set if not already set by auto-exit
+					currentPosition.Reason = fmt.Sprintf("AI信號轉弱 (%.1f < %.1f)", exitTotal, input.req.Exit.TotalMin)
+				}
 				
 				trades = append(trades, *currentPosition)
 				totalReturn *= (1.0 + currentPosition.PnLPct)
@@ -1309,126 +1315,94 @@ func normalizeHorizons(values []int) []int {
 	return out
 }
 
-func calcBacktestScore(res analysisDomain.DailyAnalysisResult, req analysisBacktestRequest, targetSide string) (float64, map[string]float64) {
+func calcBacktestScore(res analysisDomain.DailyAnalysisResult, params backtestSideParams) (float64, map[string]float64) {
 	total := 0.0
-	totalWeight := 0.0
 	components := make(map[string]float64)
 
-	// Helper to check if a condition's side matches the target
-	matchSide := func(condSide string) bool {
-		if condSide == "" {
-			condSide = "both" // default
-		}
-		return condSide == "both" || condSide == targetSide
-	}
-
 	// AI Core Score
-	scoreSide := req.Sides.Score
-	if scoreSide == "" {
-		scoreSide = "both"
-	}
-	if matchSide(scoreSide) {
-		totalWeight += req.Weights.Score
-		val := req.Weights.Score * (res.Score / 100.0)
-		total += val
-		if val != 0 {
-			components["score"] = val
-		}
+	total += params.Weights.Score * (res.Score / 100.0)
+	if params.Weights.Score != 0 {
+		components["score"] = params.Weights.Score * (res.Score / 100.0)
 	}
 
 	// Change Bonus
-	if req.Flags.UseChange && matchSide(req.Sides.Change) {
-		totalWeight += req.Weights.ChangeBonus
-		if res.ChangeRate >= req.Thresholds.ChangeMin {
-			total += req.Weights.ChangeBonus
-			if req.Weights.ChangeBonus != 0 {
-				components["change"] = req.Weights.ChangeBonus
+	if params.Flags.UseChange {
+		if res.ChangeRate >= params.Thresholds.ChangeMin {
+			total += params.Weights.ChangeBonus
+			if params.Weights.ChangeBonus != 0 {
+				components["change"] = params.Weights.ChangeBonus
 			}
 		}
 	}
 
 	// Volume Bonus
-	if req.Flags.UseVolume && matchSide(req.Sides.Volume) {
-		totalWeight += req.Weights.VolumeBonus
+	if params.Flags.UseVolume {
 		vol := 0.0
 		if res.VolumeMultiple != nil {
 			vol = *res.VolumeMultiple
 		}
-		if vol >= req.Thresholds.VolumeRatioMin {
-			total += req.Weights.VolumeBonus
-			if req.Weights.VolumeBonus != 0 {
-				components["volume"] = req.Weights.VolumeBonus
+		if vol >= params.Thresholds.VolumeRatioMin {
+			total += params.Weights.VolumeBonus
+			if params.Weights.VolumeBonus != 0 {
+				components["volume"] = params.Weights.VolumeBonus
 			}
 		}
 	}
 
 	// Return Bonus
-	if req.Flags.UseReturn && matchSide(req.Sides.Return) {
-		totalWeight += req.Weights.ReturnBonus
+	if params.Flags.UseReturn {
 		ret := 0.0
 		if res.Return5 != nil {
 			ret = *res.Return5
 		}
-		if ret >= req.Thresholds.Return5Min {
-			total += req.Weights.ReturnBonus
-			if req.Weights.ReturnBonus != 0 {
-				components["return"] = req.Weights.ReturnBonus
+		if ret >= params.Thresholds.Return5Min {
+			total += params.Weights.ReturnBonus
+			if params.Weights.ReturnBonus != 0 {
+				components["return"] = params.Weights.ReturnBonus
 			}
 		}
 	}
 
 	// MA Bonus
-	if req.Flags.UseMa && matchSide(req.Sides.Ma) {
-		totalWeight += req.Weights.MaBonus
+	if params.Flags.UseMa {
 		gap := 0.0
 		if res.Deviation20 != nil {
 			gap = *res.Deviation20
 		}
-		if gap >= req.Thresholds.MaGapMin {
-			total += req.Weights.MaBonus
-			if req.Weights.MaBonus != 0 {
-				components["ma"] = req.Weights.MaBonus
+		if gap >= params.Thresholds.MaGapMin {
+			total += params.Weights.MaBonus
+			if params.Weights.MaBonus != 0 {
+				components["ma"] = params.Weights.MaBonus
 			}
 		}
 	}
 
-	// Amplitude (Volatility Surage) Bonus
-	if req.Flags.UseAmp && matchSide(req.Sides.Amp) {
-		totalWeight += req.Weights.AmpBonus
-		ampRatio := 0.0
-		if res.AvgAmplitude20 != nil && *res.AvgAmplitude20 != 0 && res.Amplitude != nil {
-			ampRatio = *res.Amplitude / *res.AvgAmplitude20
+	// Amplitude Bonus
+	if params.Flags.UseAmp {
+		amp := 0.0
+		if res.Amplitude != nil {
+			amp = *res.Amplitude
 		}
-		if ampRatio >= req.Thresholds.AmpMin {
-			total += req.Weights.AmpBonus
-			if req.Weights.AmpBonus != 0 {
-				components["amp"] = req.Weights.AmpBonus
+		if amp >= params.Thresholds.AmpMin {
+			total += params.Weights.AmpBonus
+			if params.Weights.AmpBonus != 0 {
+				components["amplitude"] = params.Weights.AmpBonus
 			}
 		}
 	}
 
-	// Range Position Bonus
-	if req.Flags.UseRange && matchSide(req.Sides.Range) {
-		totalWeight += req.Weights.RangeBonus
+	// Range Bonus
+	if params.Flags.UseRange {
 		rangePos := 0.0
 		if res.RangePos20 != nil {
 			rangePos = *res.RangePos20
 		}
-		if rangePos >= (req.Thresholds.RangeMin / 100.0) {
-			total += req.Weights.RangeBonus
-			if req.Weights.RangeBonus != 0 {
-				components["range"] = req.Weights.RangeBonus
+		if rangePos >= (params.Thresholds.RangeMin / 100.0) {
+			total += params.Weights.RangeBonus
+			if params.Weights.RangeBonus != 0 {
+				components["range"] = params.Weights.RangeBonus
 			}
 		}
-	}
-
-	if totalWeight > 0 {
-		normalizedTotal := (total / totalWeight) * 100.0
-		// Also normalize components for display
-		for k, v := range components {
-			components[k] = (v / totalWeight) * 100.0
-		}
-		return normalizedTotal, components
 	}
 
 	return total, components

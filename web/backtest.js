@@ -78,67 +78,48 @@ function readForm() {
     .split(",")
     .map((s) => parseInt(s.trim(), 10))
     .filter((n) => !isNaN(n));
+
+  const buildSide = (prefix) => ({
+    weights: {
+      score: parse(prefix + "ScoreWeight", 1.0),
+      change_bonus: parse(prefix + "ChangeBonus", 10),
+      volume_bonus: parse(prefix + "VolumeBonus", 10),
+      ma_bonus: parse(prefix + "MaBonus", 5),
+      range_bonus: parse(prefix + "RangeBonus", 5),
+    },
+    thresholds: {
+      change_min: parse(prefix + "ChangeMin", 0.5) / 100,
+      volume_ratio_min: parse(prefix + "VolMin", 1.2),
+      ma_gap_min: parse(prefix + "MaGapMin", 1) / 100,
+      range_min: parse(prefix + "RangeMin", 80),
+    },
+    flags: {
+      use_change: el(prefix + "UseChange").checked,
+      use_volume: el(prefix + "UseVolume").checked,
+      use_ma: el(prefix + "UseMa").checked,
+      use_range: el(prefix + "UseRange").checked,
+    },
+    total_min: parse(prefix + "TotalMin", 60)
+  });
+
   return {
     symbol: (el("btSymbol").value || "BTCUSDT").trim().toUpperCase(),
     start_date: el("btStart").value,
     end_date: el("btEnd").value,
-    weights: {
-      score: parse("btScoreWeight", 1.0),
-      change_bonus: parse("btChangeBonus", 10),
-      volume_bonus: parse("btVolumeBonus", 10),
-      return_bonus: parse("btReturnBonus", 8),
-      ma_bonus: parse("btMaBonus", 5),
-      amp_bonus: parse("btAmpBonus", 5),
-      range_bonus: parse("btRangeBonus", 5),
-    },
-    thresholds: {
-      total_min: parse("btTotalMin", 60),
-      exit_min: parse("btExitMin", 10),
-      change_min: parse("btChangeMin", 0.5) / 100,
-      volume_ratio_min: parse("btVolMin", 1.2),
-      return5_min: parse("btRet5Min", 1) / 100,
-      ma_gap_min: parse("btMaGapMin", 1) / 100,
-      amp_min: parse("btAmpMin", 1.5),
-      range_min: parse("btRangeMin", 80),
-    },
-    flags: {
-      use_change: el("btUseChange").checked,
-      use_volume: el("btUseVolume").checked,
-      use_return: el("btUseReturn").checked,
-      use_ma: el("btUseMa").checked,
-      use_amp: el("btUseAmp").checked,
-      use_range: el("btUseRange").checked,
-    },
-    sides: {
-      score: el("btSideScore").value,
-      change: el("btSideChange").value,
-      volume: el("btSideVolume").value,
-      return: el("btSideReturn").value,
-      ma: el("btSideMa").value,
-      amp: el("btSideAmp").value,
-      range: el("btSideRange").value,
-    },
+    entry: buildSide("btEntry"),
+    exit: buildSide("btExit"),
     horizons: horizons.length ? horizons : [3, 5, 10],
   };
 }
 
 function updateVisibility() {
-  const map = {
-    btUseChange: ["wrapper-btChangeBonus", "wrapper-btChangeMin"],
-    btUseVolume: ["wrapper-btVolumeBonus", "wrapper-btVolMin"],
-    btUseReturn: ["wrapper-btReturnBonus", "wrapper-btRet5Min"],
-    btUseMa: ["wrapper-btMaBonus", "wrapper-btMaGapMin"],
-    btUseAmp: ["wrapper-btAmpBonus", "wrapper-btAmpMin"],
-    btUseRange: ["wrapper-btRangeBonus", "wrapper-btRangeMin"],
-  };
-
-  Object.entries(map).forEach(([checkId, wrapperIds]) => {
-    const checked = el(checkId).checked;
-    wrapperIds.forEach((id) => {
-      const w = el(id);
-      if (w) {
-        if (checked) w.classList.remove("invisible");
-        else w.classList.add("invisible");
+  // Simple check based on prefix
+  ["btEntry", "btExit"].forEach(prefix => {
+    ["UseChange", "UseVolume", "UseMa", "UseRange"].forEach(name => {
+      const checkbox = el(prefix + name);
+      if (checkbox) {
+        // Toggle opacity or related inputs if needed, though they are inline now
+        // For now just refresh max score
       }
     });
   });
@@ -147,20 +128,15 @@ function updateVisibility() {
 
 function updateMaxScore() {
   const parse = (id) => parseFloat(el(id)?.value) || 0;
-  const getSide = (id) => el(id)?.value || "both";
-  const isEntry = (id) => ["entry", "both"].includes(getSide(id));
 
-  let totalWeight = 0;
-  if (isEntry("btSideScore")) totalWeight += parse("btScoreWeight");
-  if (el("btUseChange").checked && isEntry("btSideChange")) totalWeight += parse("btChangeBonus");
-  if (el("btUseVolume").checked && isEntry("btSideVolume")) totalWeight += parse("btVolumeBonus");
-  if (el("btUseReturn").checked && isEntry("btSideReturn")) totalWeight += parse("btReturnBonus");
-  if (el("btUseMa").checked && isEntry("btSideMa")) totalWeight += parse("btMaBonus");
-  if (el("btUseAmp").checked && isEntry("btSideAmp")) totalWeight += parse("btAmpBonus");
-  if (el("btUseRange").checked && isEntry("btSideRange")) totalWeight += parse("btRangeBonus");
+  let totalEntry = parse("btEntryScoreWeight");
+  if (el("btEntryUseChange").checked) totalEntry += parse("btEntryChangeBonus");
+  if (el("btEntryUseVolume").checked) totalEntry += parse("btEntryVolumeBonus");
+  if (el("btEntryUseMa").checked) totalEntry += parse("btEntryMaBonus");
+  if (el("btEntryUseRange")?.checked) totalEntry += parse("btEntryRangeBonus");
 
   const display = el("maxPossibleScore");
-  if (display) display.textContent = totalWeight > 0 ? "100.0" : "0.0";
+  if (display) display.textContent = totalEntry.toFixed(1);
 }
 
 function fillForm(cfg) {
@@ -169,50 +145,38 @@ function fillForm(cfg) {
   if (cfg.start_date) el("btStart").value = cfg.start_date;
   if (cfg.end_date) el("btEnd").value = cfg.end_date;
 
-  if (cfg.weights) {
-    if (cfg.weights.score !== undefined) el("btScoreWeight").value = cfg.weights.score;
-    if (cfg.weights.change_bonus !== undefined) el("btChangeBonus").value = cfg.weights.change_bonus;
-    if (cfg.weights.volume_bonus !== undefined) el("btVolumeBonus").value = cfg.weights.volume_bonus;
-    if (cfg.weights.return_bonus !== undefined) el("btReturnBonus").value = cfg.weights.return_bonus;
-    if (cfg.weights.ma_bonus !== undefined) el("btMaBonus").value = cfg.weights.ma_bonus;
-    if (cfg.weights.amp_bonus !== undefined) el("btAmpBonus").value = cfg.weights.amp_bonus;
-    if (cfg.weights.range_bonus !== undefined) el("btRangeBonus").value = cfg.weights.range_bonus;
-  }
-  if (cfg.sides) {
-    if (cfg.sides.score) el("btSideScore").value = cfg.sides.score;
-    if (cfg.sides.change) el("btSideChange").value = cfg.sides.change;
-    if (cfg.sides.volume) el("btSideVolume").value = cfg.sides.volume;
-    if (cfg.sides.return) el("btSideReturn").value = cfg.sides.return;
-    if (cfg.sides.ma) el("btSideMa").value = cfg.sides.ma;
-    if (cfg.sides.amp) el("btSideAmp").value = cfg.sides.amp;
-    if (cfg.sides.range) el("btSideRange").value = cfg.sides.range;
-  }
+  const mapSide = (prefix, sideCfg) => {
+    if (!sideCfg) return;
+    if (sideCfg.weights) {
+      if (sideCfg.weights.score !== undefined) el(prefix + "ScoreWeight").value = sideCfg.weights.score;
+      if (sideCfg.weights.change_bonus !== undefined) el(prefix + "ChangeBonus").value = sideCfg.weights.change_bonus;
+      if (sideCfg.weights.volume_bonus !== undefined) el(prefix + "VolumeBonus").value = sideCfg.weights.volume_bonus;
+      if (sideCfg.weights.ma_bonus !== undefined) el(prefix + "MaBonus").value = sideCfg.weights.ma_bonus;
+      if (sideCfg.weights.range_bonus !== undefined) el(prefix + "RangeBonus").value = sideCfg.weights.range_bonus;
+    }
+    if (sideCfg.thresholds) {
+      if (sideCfg.thresholds.change_min !== undefined) el(prefix + "ChangeMin").value = sideCfg.thresholds.change_min * 100;
+      if (sideCfg.thresholds.volume_ratio_min !== undefined) el(prefix + "VolMin").value = sideCfg.thresholds.volume_ratio_min;
+      if (sideCfg.thresholds.ma_gap_min !== undefined) el(prefix + "MaGapMin").value = sideCfg.thresholds.ma_gap_min * 100;
+      if (sideCfg.thresholds.range_min !== undefined) el(prefix + "RangeMin").value = sideCfg.thresholds.range_min;
+    }
+    if (sideCfg.flags) {
+      if (sideCfg.flags.use_change !== undefined) el(prefix + "UseChange").checked = sideCfg.flags.use_change;
+      if (sideCfg.flags.use_volume !== undefined) el(prefix + "UseVolume").checked = sideCfg.flags.use_volume;
+      if (sideCfg.flags.use_ma !== undefined) el(prefix + "UseMa").checked = sideCfg.flags.use_ma;
+      if (sideCfg.flags.use_range !== undefined) el(prefix + "UseRange").checked = sideCfg.flags.use_range;
+    }
+    if (sideCfg.total_min !== undefined) el(prefix + "TotalMin").value = sideCfg.total_min;
+  };
 
-  if (cfg.thresholds) {
-    if (cfg.thresholds.total_min !== undefined) el("btTotalMin").value = cfg.thresholds.total_min;
-    if (cfg.thresholds.exit_min !== undefined) el("btExitMin").value = cfg.thresholds.exit_min;
-    if (cfg.thresholds.change_min !== undefined) el("btChangeMin").value = cfg.thresholds.change_min * 100;
-    if (cfg.thresholds.volume_ratio_min !== undefined) el("btVolMin").value = cfg.thresholds.volume_ratio_min;
-    if (cfg.thresholds.return5_min !== undefined) el("btRet5Min").value = cfg.thresholds.return5_min * 100;
-    if (cfg.thresholds.ma_gap_min !== undefined) el("btMaGapMin").value = cfg.thresholds.ma_gap_min * 100;
-    if (cfg.thresholds.amp_min !== undefined) el("btAmpMin").value = cfg.thresholds.amp_min;
-    if (cfg.thresholds.range_min !== undefined) el("btRangeMin").value = cfg.thresholds.range_min;
-  }
+  if (cfg.entry) mapSide("btEntry", cfg.entry);
+  if (cfg.exit) mapSide("btExit", cfg.exit);
 
-  if (cfg.flags) {
-    if (cfg.flags.use_change !== undefined) el("btUseChange").checked = cfg.flags.use_change;
-    if (cfg.flags.use_volume !== undefined) el("btUseVolume").checked = cfg.flags.use_volume;
-    if (cfg.flags.use_return !== undefined) el("btUseReturn").checked = cfg.flags.use_return;
-    if (cfg.flags.use_ma !== undefined) el("btUseMa").checked = cfg.flags.use_ma;
-    if (cfg.flags.use_amp !== undefined) el("btUseAmp").checked = cfg.flags.use_amp;
-    if (cfg.flags.use_range !== undefined) el("btUseRange").checked = cfg.flags.use_range;
-  }
-
-  if (cfg.flags) {
-    if (cfg.flags.use_change !== undefined) el("btUseChange").checked = cfg.flags.use_change;
-    if (cfg.flags.use_volume !== undefined) el("btUseVolume").checked = cfg.flags.use_volume;
-    if (cfg.flags.use_return !== undefined) el("btUseReturn").checked = cfg.flags.use_return;
-    if (cfg.flags.use_ma !== undefined) el("btUseMa").checked = cfg.flags.use_ma;
+  // Transition support for legacy presets
+  if (cfg.weights && !cfg.entry) {
+    // Basic mapping for score and common flags
+    el("btEntryScoreWeight").value = cfg.weights.score || 50;
+    el("btEntryTotalMin").value = cfg.thresholds?.total_min || 60;
   }
 
   if (cfg.horizons) el("btHorizons").value = cfg.horizons.join(",");
@@ -499,90 +463,86 @@ async function confirmSaveScoringStrategy() {
   setBusy("confirmSaveStrategyBtn", true, "儲存中");
   try {
     const rules = [];
+
+    // 1. Entry Rules
     rules.push({
-      condition_name: "AI 核心評分",
+      condition_name: "進場 AI 核心評分",
       type: "BASE_SCORE",
       params: {},
-      weight: parseFloat(el("btScoreWeight").value) || 0,
-      rule_type: el("btSideScore").value
+      weight: parseFloat(el("btEntryScoreWeight").value) || 0,
+      rule_type: "entry"
     });
-    if (el("btUseChange").checked) {
+
+    if (el("btEntryUseChange").checked) {
       rules.push({
-        condition_name: "日漲跌條件",
+        condition_name: "進場漲幅要求",
         type: "PRICE_RETURN",
-        params: {
-          days: 1,
-          min: (parseFloat(el("btChangeMin").value) || 0) / 100
-        },
-        weight: parseFloat(el("btChangeBonus").value) || 0,
-        rule_type: el("btSideChange").value
+        params: { days: 1, min: (parseFloat(el("btEntryChangeMin").value) || 0) / 100 },
+        weight: parseFloat(el("btEntryChangeBonus").value) || 0,
+        rule_type: "entry"
       });
     }
-    if (el("btUseVolume").checked) {
+    if (el("btEntryUseVolume").checked) {
       rules.push({
-        condition_name: "量能激增",
+        condition_name: "進場量能激增",
         type: "VOLUME_SURGE",
-        params: {
-          min: parseFloat(el("btVolMin").value) || 0
-        },
-        weight: parseFloat(el("btVolumeBonus").value) || 0,
-        rule_type: el("btSideVolume").value
+        params: { min: parseFloat(el("btEntryVolMin").value) || 0 },
+        weight: parseFloat(el("btEntryVolumeBonus").value) || 0,
+        rule_type: "entry"
       });
     }
-    if (el("btUseReturn").checked) {
+    if (el("btEntryUseMa").checked) {
       rules.push({
-        condition_name: "近5日報酬",
-        type: "PRICE_RETURN",
-        params: {
-          days: 5,
-          min: (parseFloat(el("btRet5Min").value) || 0) / 100
-        },
-        weight: parseFloat(el("btReturnBonus").value) || 0,
-        rule_type: el("btSideReturn").value
-      });
-    }
-    if (el("btUseMa").checked) {
-      rules.push({
-        condition_name: "MA 乖離",
+        condition_name: "進場均線偏離",
         type: "MA_DEVIATION",
-        params: {
-          ma: 20,
-          min: (parseFloat(el("btMaGapMin").value) || 0) / 100
-        },
-        weight: parseFloat(el("btMaBonus").value) || 0,
-        rule_type: el("btSideMa").value
+        params: { ma: 20, min: (parseFloat(el("btEntryMaGapMin").value) || 0) / 100 },
+        weight: parseFloat(el("btEntryMaBonus").value) || 0,
+        rule_type: "entry"
       });
     }
-    if (el("btUseAmp").checked) {
+    if (el("btEntryUseRange")?.checked) {
       rules.push({
-        condition_name: "波動激增",
-        type: "AMPLITUDE_SURGE",
-        params: {
-          min: parseFloat(el("btAmpMin").value) || 0
-        },
-        weight: parseFloat(el("btAmpBonus").value) || 0,
-        rule_type: el("btSideAmp").value
-      });
-    }
-    if (el("btUseRange").checked) {
-      rules.push({
-        condition_name: "位階限制",
+        condition_name: "進場位階限制",
         type: "RANGE_POS",
-        params: {
-          days: 20,
-          min: (parseFloat(el("btRangeMin").value) || 0) / 100
-        },
-        weight: parseFloat(el("btRangeBonus").value) || 0,
-        rule_type: el("btSideRange").value
+        params: { days: 20, min: (parseFloat(el("btEntryRangeMin").value) || 0) / 100 },
+        weight: parseFloat(el("btEntryRangeBonus").value) || 0,
+        rule_type: "entry"
       });
     }
 
+    // 2. Exit Rules
+    rules.push({
+      condition_name: "出場 AI 核心評分",
+      type: "BASE_SCORE",
+      params: {},
+      weight: parseFloat(el("btExitScoreWeight").value) || 0,
+      rule_type: "exit"
+    });
+
+    if (el("btExitUseChange").checked) {
+      rules.push({
+        condition_name: "出場跌幅止損",
+        type: "PRICE_RETURN",
+        params: { days: 1, min: (parseFloat(el("btExitChangeMin").value) || 0) / 100 },
+        weight: parseFloat(el("btExitChangeBonus").value) || 0,
+        rule_type: "exit"
+      });
+    }
+    if (el("btExitUseMa").checked) {
+      rules.push({
+        condition_name: "出場均線支撐",
+        type: "MA_DEVIATION",
+        params: { ma: 20, min: (parseFloat(el("btExitMaGapMin").value) || 0) / 100 },
+        weight: parseFloat(el("btExitMaBonus").value) || 0,
+        rule_type: "exit"
+      });
+    }
 
     const payload = {
       name: name,
       slug: slug,
-      threshold: parseFloat(el("btTotalMin").value) || 0,
-      exit_threshold: parseFloat(el("btExitMin").value) || 0,
+      threshold: parseFloat(el("btEntryTotalMin").value) || 0,
+      exit_threshold: parseFloat(el("btExitTotalMin").value) || 0,
       rules: rules
     };
 
@@ -632,69 +592,42 @@ async function loadStrategyDetails(slug) {
     if (res.strategy) {
       const s = res.strategy;
       const cfg = {
-        thresholds: {
-          total_min: s.threshold,
-          exit_min: s.exit_threshold || 10
-        },
-        weights: {
-          score: 0,
-          change_bonus: 0,
-          volume_bonus: 0,
-          return_bonus: 0,
-          ma_bonus: 0
-        },
-        flags: {
-          use_change: false,
-          use_volume: false,
-          use_return: false,
-          use_ma: false,
-        }
+        symbol: s.base_symbol,
+        entry: { weights: { score: 0 }, thresholds: {}, flags: {}, total_min: s.threshold },
+        exit: { weights: { score: 0 }, thresholds: {}, flags: {}, total_min: s.exit_threshold || 45 }
       };
+
       (s.rules || []).forEach(r => {
         const type = r.condition?.type;
         const params = r.condition?.params || {};
-        const side = r.rule_type || "entry";
+        const side = r.rule_type === "exit" ? "exit" : "entry";
+        const target = cfg[side];
 
         if (type === "PRICE_RETURN" && params.days === 1) {
-          cfg.weights.change_bonus = r.weight;
-          cfg.thresholds.change_min = Math.abs(params.min * 100); // UI likes absolute for common patterns
-          cfg.flags.use_change = true;
-          el("btSideChange").value = side;
+          target.weights.change_bonus = r.weight;
+          target.thresholds.change_min = params.min * 100;
+          target.flags.use_change = true;
         } else if (type === "VOLUME_SURGE") {
-          cfg.weights.volume_bonus = r.weight;
-          cfg.thresholds.volume_ratio_min = params.min;
-          cfg.flags.use_volume = true;
-          el("btSideVolume").value = side;
-        } else if (type === "PRICE_RETURN" && params.days === 5) {
-          cfg.weights.return_bonus = r.weight;
-          cfg.thresholds.return5_min = Math.abs(params.min * 100);
-          cfg.flags.use_return = true;
-          el("btSideReturn").value = side;
+          target.weights.volume_bonus = r.weight;
+          target.thresholds.volume_ratio_min = params.min;
+          target.flags.use_volume = true;
         } else if (type === "MA_DEVIATION") {
-          cfg.weights.ma_bonus = r.weight;
-          cfg.thresholds.ma_gap_min = Math.abs(params.min * 100);
-          cfg.flags.use_ma = true;
-          el("btSideMa").value = side;
+          target.weights.ma_bonus = r.weight;
+          target.thresholds.ma_gap_min = params.min * 100;
+          target.flags.use_ma = true;
         } else if (type === "BASE_SCORE") {
-          cfg.weights.score = r.weight;
-          el("btSideScore").value = side;
+          target.weights.score = r.weight;
         } else if (type === "RANGE_POS") {
-          cfg.weights.range_bonus = r.weight;
-          cfg.thresholds.range_min = (r.condition.params?.min || 0) * 100;
-          cfg.flags.use_range = true;
-          el("btSideRange").value = side;
-        } else if (type === "AMPLITUDE_SURGE") {
-          cfg.weights.amp_bonus = r.weight;
-          cfg.thresholds.amp_min = r.condition.params?.min || 0;
-          cfg.flags.use_amp = true;
-          el("btSideAmp").value = side;
+          target.weights.range_bonus = r.weight;
+          target.thresholds.range_min = params.min * 100;
+          target.flags.use_range = true;
         } else {
           // Fallback for unknown types (like rsi_oversold) - add to score to keep Max Score accurate
           console.log("Adding unknown rule weight to score for visualization:", type, r.weight);
-          cfg.weights.score += r.weight;
+          target.weights.score += r.weight;
         }
       });
-      if (el("newStrategyExitThreshold")) el("newStrategyExitThreshold").value = cfg.exit_threshold;
+      fillForm(cfg);
 
       // Pre-fill Save Form for Editing
       if (el("newStrategyName")) el("newStrategyName").value = s.name;
@@ -838,23 +771,34 @@ function bootstrap() {
     }
   });
 
-  ["btUseChange", "btUseVolume", "btUseReturn", "btUseMa", "btUseAmp", "btUseRange"].forEach((id) => {
-    el(id).addEventListener("change", () => {
-      updateVisibility();
-      debouncedRunBacktest();
-    });
+  // Checkboxes
+  const checkboxes = [
+    "btEntryUseChange", "btEntryUseVolume", "btEntryUseMa", "btEntryUseRange",
+    "btExitUseChange", "btExitUseMa", "btExitUseVolume"
+  ];
+  checkboxes.forEach((id) => {
+    const input = el(id);
+    if (input) {
+      input.addEventListener("change", () => {
+        updateVisibility();
+        debouncedRunBacktest();
+      });
+    }
   });
 
-  // Auto-trigger on all inputs
-  [
-    "btSymbol", "btStart", "btEnd", "btTotalMin", "btExitMin", "btScoreWeight",
-    "btChangeBonus", "btVolumeBonus", "btReturnBonus", "btMaBonus", "btAmpBonus", "btRangeBonus",
-    "btChangeMin", "btVolMin", "btRet5Min", "btMaGapMin", "btAmpMin", "btRangeMin", "btHorizons",
-    "btSideScore", "btSideChange", "btSideVolume", "btSideReturn", "btSideMa", "btSideAmp", "btSideRange"
-  ].forEach(id => {
+  // Numeric and Text Inputs
+  const inputs = [
+    "btSymbol", "btStart", "btEnd", "btHorizons",
+    "btEntryTotalMin", "btEntryScoreWeight", "btEntryChangeMin", "btEntryChangeBonus",
+    "btEntryVolMin", "btEntryVolumeBonus", "btEntryMaGapMin", "btEntryMaBonus",
+    "btEntryRangeMin", "btEntryRangeBonus",
+    "btExitTotalMin", "btExitScoreWeight", "btExitChangeMin", "btExitChangeBonus",
+    "btExitMaGapMin", "btExitMaBonus", "btExitVolMin", "btExitVolumeBonus"
+  ];
+  inputs.forEach(id => {
     const input = el(id);
     if (!input) return;
-    const eventType = input.type === "date" || input.type === "checkbox" ? "change" : "input";
+    const eventType = input.type === "date" ? "change" : "input";
     input.addEventListener(eventType, debouncedRunBacktest);
   });
 

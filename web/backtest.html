@@ -274,175 +274,159 @@
           </div>
 
           <!-- Main Weighting Controls -->
-          <div class="md:col-span-3 space-y-10">
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
-              <!-- Thresholds -->
-              <div class="space-y-6">
-                <h4
-                  class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-4 pr-10 border-b border-surface-border/30 pb-2">
-                  啟動閾值 (Entry Thresholds)</h4>
-                <div class="grid grid-cols-2 gap-6">
-                  <div class="space-y-1.5">
-                    <span class="text-[10px] text-slate-500 font-bold">總分最低門檻 (TOTAL MIN)</span>
-                    <input id="btTotalMin" type="number" step="1" value="60"
-                      class="w-full bg-background-dark border border-surface-border rounded-xl px-4 py-3 text-lg font-black text-primary focus:border-primary focus:ring-1" />
-                  </div>
-                  <div class="space-y-1.5">
-                    <span class="text-[10px] text-slate-500 font-bold text-danger/80">出場分門檻 (EXIT MIN)</span>
-                    <input id="btExitMin" type="number" step="1" value="10"
-                      class="w-full bg-background-dark border border-surface-border rounded-xl px-4 py-3 text-lg font-black text-danger/80 focus:border-danger focus:ring-1" />
-                  </div>
-                  <div id="wrapper-btChangeMin" class="space-y-1.5">
-                    <span class="text-[10px] text-slate-500 font-bold">當日漲幅門檻 %</span>
-                    <input id="btChangeMin" type="number" step="0.1" value="0.5"
-                      class="w-full bg-background-dark border border-surface-border rounded-xl px-4 py-3 text-lg font-black text-white focus:border-primary focus:ring-1" />
-                  </div>
-                  <div id="wrapper-btVolMin" class="space-y-1.5">
-                    <span class="text-[10px] text-slate-500 font-bold">成交量倍數門檻</span>
-                    <input id="btVolMin" type="number" step="0.1" value="1.2"
-                      class="w-full bg-background-dark border border-surface-border rounded-xl px-4 py-3 text-lg font-black text-white focus:border-primary focus:ring-1" />
-                  </div>
-                  <div id="wrapper-btRet5Min" class="space-y-1.5">
-                    <span class="text-[10px] text-slate-500 font-bold">5日漲幅門檻 %</span>
-                    <input id="btRet5Min" type="number" step="0.1" value="1.0"
-                      class="w-full bg-background-dark border border-surface-border rounded-xl px-4 py-3 text-lg font-black text-white focus:border-primary focus:ring-1" />
-                  </div>
-                  <div id="wrapper-btMaGapMin" class="space-y-1.5">
-                    <span class="text-[10px] text-slate-500 font-bold">均線偏離門檻 %</span>
-                    <input id="btMaGapMin" type="number" step="0.1" value="1.0"
-                      class="w-full bg-background-dark border border-surface-border rounded-xl px-4 py-3 text-lg font-black text-white focus:border-primary focus:ring-1" />
-                  </div>
-                  <div id="wrapper-btAmpMin" class="space-y-1.5">
-                    <span class="text-[10px] text-slate-500 font-bold">波動放大倍數</span>
-                    <input id="btAmpMin" type="number" step="0.1" value="1.5"
-                      class="w-full bg-background-dark border border-surface-border rounded-xl px-4 py-3 text-lg font-black text-white focus:border-primary focus:ring-1" />
-                  </div>
-                  <div id="wrapper-btRangeMin" class="space-y-1.5">
-                    <span class="text-[10px] text-slate-500 font-bold">股價位階門檻 %</span>
-                    <input id="btRangeMin" type="number" step="1" value="80"
-                      class="w-full bg-background-dark border border-surface-border rounded-xl px-4 py-3 text-lg font-black text-white focus:border-primary focus:ring-1" />
-                  </div>
-                </div>
-              </div>
+          <div class="md:col-span-3">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
 
-              <!-- Weights -->
-              <div class="space-y-6">
-                <h4
-                  class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-4 pr-10 border-b border-surface-border/30 pb-2">
-                  權重配分 (Scoring Weights)</h4>
+              <!-- 進場策略配置 (Entry Strategy) -->
+              <div class="bg-background-dark/20 rounded-3xl p-6 border border-primary/20 space-y-6">
+                <div class="flex items-center gap-3 border-b border-primary/10 pb-4 mb-2">
+                  <span class="material-symbols-outlined text-primary">login</span>
+                  <h3 class="text-sm font-black text-white uppercase tracking-widest">進場條件 (Entry Strategy)</h3>
+                </div>
+
                 <div class="space-y-4">
-                  <div
-                    class="flex items-center justify-between gap-6 p-4 bg-background-dark/30 rounded-2xl border border-surface-border">
-                    <div class="flex-1">
-                      <div class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">AI 核心分析評等 (Base Score)
-                      </div>
-                      <div class="text-[10px] text-slate-600 mt-1">AI 原始預測分數的乘數 (0~100)</div>
-                    </div>
-                    <select id="btSideScore"
-                      class="bg-transparent border-0 text-[10px] font-black text-slate-500 focus:ring-0 mr-2">
-                      <option value="entry">ENTRY ONLY</option>
-                      <option value="exit">EXIT ONLY</option>
-                      <option value="both" selected>BOTH</option>
-                    </select>
-                    <input id="btScoreWeight" type="number" step="0.1" value="1.0"
-                      class="w-20 bg-transparent text-right text-xl font-black text-primary border-0 focus:ring-0" />
+                  <!-- Entry Total Threshold -->
+                  <div class="bg-primary/5 p-4 rounded-2xl border border-primary/10">
+                    <label class="block text-[10px] text-primary font-bold uppercase tracking-widest mb-1">進場最低分數門檻
+                      (Entry Threshold)</label>
+                    <input id="btEntryTotalMin" type="number" value="65"
+                      class="w-full bg-transparent text-2xl font-black text-white border-0 focus:ring-0 p-0" />
                   </div>
 
                   <div class="space-y-3">
-                    <!-- Toggleable Bonus Rows -->
+                    <!-- AI Score Entry -->
                     <div
-                      class="flex items-center gap-4 bg-background-dark/30 p-3 rounded-2xl border border-surface-border">
-                      <input id="btUseChange" type="checkbox" checked
-                        class="rounded text-primary border-surface-border bg-background-dark focus:ring-primary h-5 w-5" />
-                      <div class="flex-1 text-xs font-bold uppercase tracking-wider text-slate-400">當日漲幅加成 (Daily Chg)
+                      class="flex items-center justify-between p-3 bg-background-dark/40 rounded-xl border border-surface-border">
+                      <div class="flex-1">
+                        <div class="text-[10px] text-slate-500 font-bold">AI 核心評分權重</div>
                       </div>
-                      <select id="btSideChange"
-                        class="bg-transparent border-0 text-[10px] font-black text-slate-500 focus:ring-0">
-                        <option value="entry">僅進場</option>
-                        <option value="exit">僅出場</option>
-                        <option value="both">兩者皆套用</option>
-                      </select>
-                      <div id="wrapper-btChangeBonus"><input id="btChangeBonus" type="number" value="10"
-                          class="w-16 bg-transparent text-right font-black border-0 focus:ring-0" /></div>
+                      <input id="btEntryScoreWeight" type="number" value="50"
+                        class="w-16 bg-transparent text-right font-black text-primary border-0 focus:ring-0" />
                     </div>
-                    <div
-                      class="flex items-center gap-4 bg-background-dark/30 p-3 rounded-2xl border border-surface-border">
-                      <input id="btUseVolume" type="checkbox" checked
-                        class="rounded text-primary border-surface-border bg-background-dark focus:ring-primary h-5 w-5" />
-                      <div class="flex-1 text-xs font-bold uppercase tracking-wider text-slate-400">成交量爆發加成 (Vol Surge)
+
+                    <!-- Entry Rules -->
+                    <div class="space-y-2">
+                      <div
+                        class="flex items-center gap-3 p-3 bg-background-dark/40 rounded-xl border border-surface-border">
+                        <input id="btEntryUseChange" type="checkbox" checked
+                          class="rounded text-primary border-surface-border" />
+                        <div class="flex-1 text-[10px] text-slate-400 font-bold">漲幅門檻 % / 加成</div>
+                        <input id="btEntryChangeMin" type="number" step="0.1" value="1.2"
+                          class="w-12 bg-transparent text-right text-[10px] font-mono border-0 focus:ring-0" />
+                        <span class="text-slate-700">|</span>
+                        <input id="btEntryChangeBonus" type="number" value="20"
+                          class="w-12 bg-transparent text-right font-black text-primary border-0 focus:ring-0" />
                       </div>
-                      <select id="btSideVolume"
-                        class="bg-transparent border-0 text-[10px] font-black text-slate-500 focus:ring-0">
-                        <option value="entry">僅進場</option>
-                        <option value="exit">僅出場</option>
-                        <option value="both">兩者皆套用</option>
-                      </select>
-                      <div id="wrapper-btVolumeBonus"><input id="btVolumeBonus" type="number" value="10"
-                          class="w-16 bg-transparent text-right font-black border-0 focus:ring-0" /></div>
-                    </div>
-                    <div
-                      class="flex items-center gap-4 bg-background-dark/30 p-3 rounded-2xl border border-surface-border">
-                      <input id="btUseReturn" type="checkbox" checked
-                        class="rounded text-primary border-surface-border bg-background-dark focus:ring-primary h-5 w-5" />
-                      <div class="flex-1 text-xs font-bold uppercase tracking-wider text-slate-400">5日累積漲幅加成 (5D Ret)
+
+                      <div
+                        class="flex items-center gap-3 p-3 bg-background-dark/40 rounded-xl border border-surface-border">
+                        <input id="btEntryUseVolume" type="checkbox" checked
+                          class="rounded text-primary border-surface-border" />
+                        <div class="flex-1 text-[10px] text-slate-400 font-bold">成交量倍數 / 加成</div>
+                        <input id="btEntryVolMin" type="number" step="0.1" value="1.5"
+                          class="w-12 bg-transparent text-right text-[10px] font-mono border-0 focus:ring-0" />
+                        <span class="text-slate-700">|</span>
+                        <input id="btEntryVolumeBonus" type="number" value="15"
+                          class="w-12 bg-transparent text-right font-black text-primary border-0 focus:ring-0" />
                       </div>
-                      <select id="btSideReturn"
-                        class="bg-transparent border-0 text-[10px] font-black text-slate-500 focus:ring-0">
-                        <option value="entry">僅進場</option>
-                        <option value="exit">僅出場</option>
-                        <option value="both">兩者皆套用</option>
-                      </select>
-                      <div id="wrapper-btReturnBonus"><input id="btReturnBonus" type="number" value="8"
-                          class="w-16 bg-transparent text-right font-black border-0 focus:ring-0" /></div>
-                    </div>
-                    <div
-                      class="flex items-center gap-4 bg-background-dark/30 p-3 rounded-2xl border border-surface-border">
-                      <input id="btUseMa" type="checkbox" checked
-                        class="rounded text-primary border-surface-border bg-background-dark focus:ring-primary h-5 w-5" />
-                      <div class="flex-1 text-xs font-bold uppercase tracking-wider text-slate-400">均線偏離加成 (MA Dev)
+
+                      <div
+                        class="flex items-center gap-3 p-3 bg-background-dark/40 rounded-xl border border-surface-border">
+                        <input id="btEntryUseMa" type="checkbox" checked
+                          class="rounded text-primary border-surface-border" />
+                        <div class="flex-1 text-[10px] text-slate-400 font-bold">MA 偏離 % / 加成</div>
+                        <input id="btEntryMaGapMin" type="number" step="0.1" value="1.0"
+                          class="w-12 bg-transparent text-right text-[10px] font-mono border-0 focus:ring-0" />
+                        <span class="text-slate-700">|</span>
+                        <input id="btEntryMaBonus" type="number" value="15"
+                          class="w-12 bg-transparent text-right font-black text-primary border-0 focus:ring-0" />
                       </div>
-                      <select id="btSideMa"
-                        class="bg-transparent border-0 text-[10px] font-black text-slate-500 focus:ring-0">
-                        <option value="entry">僅進場</option>
-                        <option value="exit">僅出場</option>
-                        <option value="both">兩者皆套用</option>
-                      </select>
-                      <div id="wrapper-btMaBonus"><input id="btMaBonus" type="number" value="5"
-                          class="w-16 bg-transparent text-right font-black border-0 focus:ring-0" /></div>
-                    </div>
-                    <div
-                      class="flex items-center gap-4 bg-background-dark/30 p-3 rounded-2xl border border-surface-border">
-                      <input id="btUseAmp" type="checkbox"
-                        class="rounded text-primary border-surface-border bg-background-dark focus:ring-primary h-5 w-5" />
-                      <div class="flex-1 text-xs font-bold uppercase tracking-wider text-slate-400">波動放大加成 (Amplitude)
+
+                      <div
+                        class="flex items-center gap-3 p-3 bg-background-dark/40 rounded-xl border border-surface-border">
+                        <input id="btEntryUseRange" type="checkbox"
+                          class="rounded text-primary border-surface-border" />
+                        <div class="flex-1 text-[10px] text-slate-400 font-bold">位階門檻 % / 加成</div>
+                        <input id="btEntryRangeMin" type="number" value="80"
+                          class="w-12 bg-transparent text-right text-[10px] font-mono border-0 focus:ring-0" />
+                        <span class="text-slate-700">|</span>
+                        <input id="btEntryRangeBonus" type="number" value="10"
+                          class="w-12 bg-transparent text-right font-black text-primary border-0 focus:ring-0" />
                       </div>
-                      <select id="btSideAmp"
-                        class="bg-transparent border-0 text-[10px] font-black text-slate-500 focus:ring-0">
-                        <option value="entry">ENTRY ONLY</option>
-                        <option value="exit">EXIT ONLY</option>
-                        <option value="both" selected>BOTH</option>
-                      </select>
-                      <div id="wrapper-btAmpBonus"><input id="btAmpBonus" type="number" value="5"
-                          class="w-16 bg-transparent text-right font-black border-0 focus:ring-0" /></div>
-                    </div>
-                    <div
-                      class="flex items-center gap-4 bg-background-dark/30 p-3 rounded-2xl border border-surface-border">
-                      <input id="btUseRange" type="checkbox"
-                        class="rounded text-primary border-surface-border bg-background-dark focus:ring-primary h-5 w-5" />
-                      <div class="flex-1 text-xs font-bold uppercase tracking-wider text-slate-400">股價位階加成 (Range Pos)
-                      </div>
-                      <select id="btSideRange"
-                        class="bg-transparent border-0 text-[10px] font-black text-slate-500 focus:ring-0">
-                        <option value="entry">ENTRY ONLY</option>
-                        <option value="exit">EXIT ONLY</option>
-                        <option value="both" selected>BOTH</option>
-                      </select>
-                      <div id="wrapper-btRangeBonus"><input id="btRangeBonus" type="number" value="5"
-                          class="w-16 bg-transparent text-right font-black border-0 focus:ring-0" /></div>
                     </div>
                   </div>
                 </div>
               </div>
+
+              <!-- 出場策略配置 (Exit Strategy) -->
+              <div class="bg-background-dark/20 rounded-3xl p-6 border border-danger/20 space-y-6">
+                <div class="flex items-center gap-3 border-b border-danger/10 pb-4 mb-2">
+                  <span class="material-symbols-outlined text-danger">logout</span>
+                  <h3 class="text-sm font-black text-white uppercase tracking-widest">出場條件 (Exit Strategy)</h3>
+                </div>
+
+                <div class="space-y-4">
+                  <!-- Exit Total Threshold -->
+                  <div class="bg-danger/5 p-4 rounded-2xl border border-danger/10">
+                    <label class="block text-[10px] text-danger/70 font-bold uppercase tracking-widest mb-1">維持/出場分數門檻
+                      (Keep Threshold)</label>
+                    <input id="btExitTotalMin" type="number" value="45"
+                      class="w-full bg-transparent text-2xl font-black text-white border-0 focus:ring-0 p-0" />
+                    <p class="text-[9px] text-slate-600 mt-1">低於此分數時執行出場</p>
+                  </div>
+
+                  <div class="space-y-3">
+                    <!-- AI Score Exit -->
+                    <div
+                      class="flex items-center justify-between p-3 bg-background-dark/40 rounded-xl border border-surface-border">
+                      <div class="flex-1">
+                        <div class="text-[10px] text-slate-500 font-bold">AI 核心評分權重</div>
+                      </div>
+                      <input id="btExitScoreWeight" type="number" value="40"
+                        class="w-16 bg-transparent text-right font-black text-danger/70 border-0 focus:ring-0" />
+                    </div>
+
+                    <!-- Exit Rules -->
+                    <div class="space-y-2">
+                      <div
+                        class="flex items-center gap-3 p-3 bg-background-dark/40 rounded-xl border border-surface-border">
+                        <input id="btExitUseChange" type="checkbox" checked
+                          class="rounded text-danger border-surface-border" />
+                        <div class="flex-1 text-[10px] text-slate-400 font-bold">跌幅止損 % / 加成</div>
+                        <input id="btExitChangeMin" type="number" step="0.1" value="-1.5"
+                          class="w-12 bg-transparent text-right text-[10px] font-mono border-0 focus:ring-0" />
+                        <span class="text-slate-700">|</span>
+                        <input id="btExitChangeBonus" type="number" value="30"
+                          class="w-12 bg-transparent text-right font-black text-danger/70 border-0 focus:ring-0" />
+                      </div>
+
+                      <div
+                        class="flex items-center gap-3 p-3 bg-background-dark/40 rounded-xl border border-surface-border">
+                        <input id="btExitUseMa" type="checkbox" checked
+                          class="rounded text-danger border-surface-border" />
+                        <div class="flex-1 text-[10px] text-slate-400 font-bold">均線支撐 % / 加成</div>
+                        <input id="btExitMaGapMin" type="number" step="0.1" value="-0.5"
+                          class="w-12 bg-transparent text-right text-[10px] font-mono border-0 focus:ring-0" />
+                        <span class="text-slate-700">|</span>
+                        <input id="btExitMaBonus" type="number" value="20"
+                          class="w-12 bg-transparent text-right font-black text-danger/70 border-0 focus:ring-0" />
+                      </div>
+
+                      <div
+                        class="flex items-center gap-3 p-3 bg-background-dark/40 rounded-xl border border-surface-border opacity-50">
+                        <input id="btExitUseVolume" type="checkbox" class="rounded text-danger border-surface-border" />
+                        <div class="flex-1 text-[10px] text-slate-400 font-bold">量能萎縮 / 加成</div>
+                        <input id="btExitVolMin" type="number" step="0.1" value="0.8"
+                          class="w-12 bg-transparent text-right text-[10px] font-mono border-0 focus:ring-0" />
+                        <span class="text-slate-700">|</span>
+                        <input id="btExitVolumeBonus" type="number" value="10"
+                          class="w-12 bg-transparent text-right font-black text-danger/70 border-0 focus:ring-0" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
             </div>
           </div>
         </div>

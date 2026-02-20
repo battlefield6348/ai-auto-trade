@@ -1284,12 +1284,18 @@ func normalizeBacktestRequest(req analysisBacktestRequest) (parsedBacktestInput,
 	horizons := normalizeHorizons(req.Horizons)
 	req.Symbol = symbol
 	req.Horizons = horizons
+	tf := req.Timeframe
+	if tf == "" {
+		tf = "1d"
+	}
+
 	out = parsedBacktestInput{
 		req:       req,
 		symbol:    symbol,
 		startDate: start,
 		endDate:   end,
 		horizons:  horizons,
+		timeframe: tf,
 	}
 	return out, nil
 }
@@ -1317,9 +1323,11 @@ func normalizeHorizons(values []int) []int {
 
 func calcBacktestScore(res analysisDomain.DailyAnalysisResult, params backtestSideParams) (float64, map[string]float64) {
 	total := 0.0
+	totalWeight := 0.0
 	components := make(map[string]float64)
 
 	// AI Core Score
+	totalWeight += params.Weights.Score
 	total += params.Weights.Score * (res.Score / 100.0)
 	if params.Weights.Score != 0 {
 		components["score"] = params.Weights.Score * (res.Score / 100.0)
@@ -1327,6 +1335,7 @@ func calcBacktestScore(res analysisDomain.DailyAnalysisResult, params backtestSi
 
 	// Change Bonus
 	if params.Flags.UseChange {
+		totalWeight += params.Weights.ChangeBonus
 		if res.ChangeRate >= params.Thresholds.ChangeMin {
 			total += params.Weights.ChangeBonus
 			if params.Weights.ChangeBonus != 0 {
@@ -1337,6 +1346,7 @@ func calcBacktestScore(res analysisDomain.DailyAnalysisResult, params backtestSi
 
 	// Volume Bonus
 	if params.Flags.UseVolume {
+		totalWeight += params.Weights.VolumeBonus
 		vol := 0.0
 		if res.VolumeMultiple != nil {
 			vol = *res.VolumeMultiple
@@ -1351,6 +1361,7 @@ func calcBacktestScore(res analysisDomain.DailyAnalysisResult, params backtestSi
 
 	// Return Bonus
 	if params.Flags.UseReturn {
+		totalWeight += params.Weights.ReturnBonus
 		ret := 0.0
 		if res.Return5 != nil {
 			ret = *res.Return5
@@ -1365,6 +1376,7 @@ func calcBacktestScore(res analysisDomain.DailyAnalysisResult, params backtestSi
 
 	// MA Bonus
 	if params.Flags.UseMa {
+		totalWeight += params.Weights.MaBonus
 		gap := 0.0
 		if res.Deviation20 != nil {
 			gap = *res.Deviation20
@@ -1379,6 +1391,7 @@ func calcBacktestScore(res analysisDomain.DailyAnalysisResult, params backtestSi
 
 	// Amplitude Bonus
 	if params.Flags.UseAmp {
+		totalWeight += params.Weights.AmpBonus
 		amp := 0.0
 		if res.Amplitude != nil {
 			amp = *res.Amplitude
@@ -1393,6 +1406,7 @@ func calcBacktestScore(res analysisDomain.DailyAnalysisResult, params backtestSi
 
 	// Range Bonus
 	if params.Flags.UseRange {
+		totalWeight += params.Weights.RangeBonus
 		rangePos := 0.0
 		if res.RangePos20 != nil {
 			rangePos = *res.RangePos20
@@ -1403,6 +1417,14 @@ func calcBacktestScore(res analysisDomain.DailyAnalysisResult, params backtestSi
 				components["range"] = params.Weights.RangeBonus
 			}
 		}
+	}
+
+	if totalWeight > 0 {
+		normalizedTotal := (total / totalWeight) * 100.0
+		for k, v := range components {
+			components[k] = (v / totalWeight) * 100.0
+		}
+		return normalizedTotal, components
 	}
 
 	return total, components

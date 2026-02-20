@@ -86,18 +86,24 @@ function readForm() {
       volume_bonus: parse(prefix + "VolumeBonus", 10),
       ma_bonus: parse(prefix + "MaBonus", 5),
       range_bonus: parse(prefix + "RangeBonus", 5),
+      return_bonus: 0,
+      amp_bonus: 0
     },
     thresholds: {
       change_min: parse(prefix + "ChangeMin", 0.5) / 100,
       volume_ratio_min: parse(prefix + "VolMin", 1.2),
       ma_gap_min: parse(prefix + "MaGapMin", 1) / 100,
       range_min: parse(prefix + "RangeMin", 80),
+      return5_min: 0,
+      amp_min: 0
     },
     flags: {
       use_change: el(prefix + "UseChange").checked,
       use_volume: el(prefix + "UseVolume").checked,
       use_ma: el(prefix + "UseMa").checked,
       use_range: el(prefix + "UseRange").checked,
+      use_return: false,
+      use_amp: false
     },
     total_min: parse(prefix + "TotalMin", 60)
   });
@@ -109,6 +115,7 @@ function readForm() {
     entry: buildSide("btEntry"),
     exit: buildSide("btExit"),
     horizons: horizons.length ? horizons : [3, 5, 10],
+    timeframe: "1d"
   };
 }
 

@@ -335,13 +335,11 @@ function renderCharts(events) {
   const labels = sorted.map((e) => e.trade_date);
   const scoreData = sorted.map((e) => e.total_score ?? null);
   const closeData = sorted.map((e) => e.close_price ?? null);
+  const signalData = sorted.map((e, idx) => (e.is_triggered ? closeData[idx] : null));
   const fwd5 = sorted.map((e) => {
     const v = e.forward_returns?.d5;
     return v == null ? null : v * 100;
   });
-
-  const radii = sorted.map((e) => (e.is_triggered ? 5 : 0));
-  const pointBg = sorted.map((e) => (e.is_triggered ? "#facc15" : "transparent"));
 
   if (state.btScoreChart) state.btScoreChart.destroy();
   if (state.btReturnChart) state.btReturnChart.destroy();
@@ -355,37 +353,82 @@ function renderCharts(events) {
         labels,
         datasets: [
           {
-            label: "總分",
-            data: scoreData,
-            borderColor: "#7c3aed",
-            backgroundColor: "rgba(124,58,237,0.2)",
-            yAxisID: "y1",
-            pointRadius: radii,
-            pointBackgroundColor: pointBg,
-            pointBorderColor: "#7c3aed",
-            pointHoverRadius: 7,
-            tension: 0.1
+            label: "買入訊號",
+            data: signalData,
+            type: "scatter",
+            backgroundColor: "#facc15",
+            borderColor: "#fff",
+            borderWidth: 1.5,
+            pointRadius: 6,
+            pointHoverRadius: 9,
+            yAxisID: "y",
+            zIndex: 10
           },
           {
-            label: "收盤",
+            label: "收盤價格",
             data: closeData,
             borderColor: "#0ddff2",
-            backgroundColor: "rgba(13,223,242,0.15)",
+            backgroundColor: "rgba(13,223,242,0.05)",
+            borderWidth: 2,
+            fill: true,
             yAxisID: "y",
             pointRadius: 0,
-            tension: 0.1
+            tension: 0.2,
+            zIndex: 5
+          },
+          {
+            label: "量化總分",
+            data: scoreData,
+            borderColor: "rgba(124,58,237,0.4)",
+            backgroundColor: "transparent",
+            borderWidth: 1,
+            fill: false,
+            yAxisID: "y1",
+            pointRadius: 0,
+            tension: 0.1,
+            zIndex: 1
           },
         ],
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
         scales: {
-          y: { position: "left", ticks: { color: "#cbd5e1" }, grid: { color: "rgba(255,255,255,0.05)" } },
-          y1: { position: "right", ticks: { color: "#cbd5e1" }, grid: { drawOnChartArea: false } },
-          x: { ticks: { color: "#94a3b8" }, grid: { color: "rgba(255,255,255,0.05)" } },
+          y: {
+            position: "left",
+            title: { display: true, text: "價格 (USDT)", color: "#64748b", font: { size: 10, weight: "bold" } },
+            ticks: { color: "#cbd5e1", font: { family: "JetBrains Mono, monospace", size: 10 } },
+            grid: { color: "rgba(255,255,255,0.03)" }
+          },
+          y1: {
+            position: "right",
+            min: 0,
+            max: 100,
+            title: { display: true, text: "評分", color: "#64748b", font: { size: 10, weight: "bold" } },
+            ticks: { color: "rgba(124,58,237,0.6)", font: { size: 10 } },
+            grid: { drawOnChartArea: false }
+          },
+          x: {
+            ticks: { color: "#64748b", font: { size: 9 }, maxRotation: 45, minRotation: 45 },
+            grid: { display: false }
+          },
         },
-        plugins: { legend: { labels: { color: "#e2e8f0" } } },
+        plugins: {
+          legend: {
+            position: "top",
+            align: "end",
+            labels: { color: "#94a3b8", font: { size: 10, weight: "bold" }, usePointStyle: true, boxWidth: 6 }
+          },
+          tooltip: {
+            backgroundColor: "rgba(15, 23, 42, 0.9)",
+            titleFont: { size: 12 },
+            bodyFont: { size: 11 },
+            padding: 12,
+            borderColor: "rgba(255,255,255,0.1)",
+            borderWidth: 1
+          }
+        },
       },
     });
   }

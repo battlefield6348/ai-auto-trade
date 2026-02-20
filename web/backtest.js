@@ -264,7 +264,7 @@ function renderResult(res) {
   if (stats.returns) {
     rows.push(`<div class="mt-4 text-[10px] text-slate-500 uppercase font-bold">統計預估：</div>`);
     const items = Object.entries(stats.returns).map(
-      ([k, v]) => `<span class="text-xs text-slate-300">${k}: ${(v.avg_return * 100).toFixed(2)}% (${(v.win_rate * 100).toFixed(1)}%)</span>`
+      ([k, v]) => `<span class="text-xs text-slate-300">${k.replace('d', '')}日後: ${(v.avg_return * 100).toFixed(2)}% (勝率 ${(v.win_rate * 100).toFixed(1)}%)</span>`
     );
     rows.push(`<div class="flex flex-wrap gap-x-4 gap-y-1">${items.join("")}</div>`);
   }
@@ -286,11 +286,11 @@ function renderResult(res) {
         div.innerHTML = `
           <div class="flex justify-between items-start mb-2">
             <div class="flex flex-col">
-              <span class="text-[10px] text-slate-500 font-bold uppercase">Entry</span>
+              <span class="text-[10px] text-slate-500 font-bold uppercase">進場 (Entry)</span>
               <span class="text-xs text-white font-mono">${t.entry_date}</span>
             </div>
             <div class="flex flex-col items-end">
-              <span class="text-[10px] text-slate-500 font-bold uppercase">Exit</span>
+              <span class="text-[10px] text-slate-500 font-bold uppercase">出場 (Exit)</span>
               <span class="text-xs text-white font-mono">${t.exit_date}</span>
             </div>
           </div>
@@ -457,7 +457,7 @@ async function confirmSaveScoringStrategy() {
   try {
     const rules = [];
     rules.push({
-      condition_name: "AI Core Score",
+      condition_name: "AI 核心評分",
       type: "BASE_SCORE",
       params: {},
       weight: parseFloat(el("btScoreWeight").value) || 0,

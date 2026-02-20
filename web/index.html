@@ -169,11 +169,11 @@
         <!-- Global Environment Selector -->
         <div class="flex items-center gap-2 bg-surface-dark border border-surface-border rounded-lg p-1">
           <button class="env-selector px-3 py-1 rounded text-[10px] font-bold uppercase transition-all"
-            data-env="test">Test</button>
+            data-env="test">測試 (Test)</button>
           <button class="env-selector px-3 py-1 rounded text-[10px] font-bold uppercase transition-all"
-            data-env="paper">Paper</button>
+            data-env="paper">模擬 (Paper)</button>
           <button class="env-selector px-3 py-1 rounded text-[10px] font-bold uppercase transition-all"
-            data-env="real">Live</button>
+            data-env="real">實盤 (Live)</button>
         </div>
         <div id="clock" class="text-xs font-mono text-primary font-bold">00:00:00</div>
         <div class="h-4 w-px bg-surface-border"></div>
@@ -199,7 +199,7 @@
           <div id="nextRun" class="text-3xl font-black font-mono tracking-tighter text-white">--:--</div>
           <div id="nextRunHuman" class="text-[10px] text-primary mt-1 font-bold"></div>
           <div class="mt-4 pt-4 border-t border-surface-border/50">
-            <div class="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">Retry Strategy</div>
+            <div class="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">重試機制 (Retry Strategy)</div>
             <div id="retryStrategy" class="text-xs font-mono text-slate-300">--</div>
           </div>
         </div>
@@ -213,12 +213,12 @@
           </div>
           <div class="grid grid-cols-2 md:grid-cols-3 gap-6 font-mono">
             <div>
-              <p class="text-[10px] text-slate-600 uppercase font-bold tracking-widest mb-1">Execution</p>
+              <p class="text-[10px] text-slate-600 uppercase font-bold tracking-widest mb-1">執行耗時 (Execution)</p>
               <p id="lastDuration" class="text-xl font-black text-primary leading-none">--</p>
               <p id="lastStart" class="text-[10px] text-slate-500 mt-1">--</p>
             </div>
             <div>
-              <p class="text-[10px] text-slate-600 uppercase font-bold tracking-widest mb-1">Succ / Fail</p>
+              <p class="text-[10px] text-slate-600 uppercase font-bold tracking-widest mb-1">成功 / 失敗 (Succ/Fail)</p>
               <div class="flex items-baseline gap-2">
                 <span id="lastSucc" class="text-xl font-black text-success leading-none">--</span>
                 <span class="text-slate-700">/</span>
@@ -227,7 +227,7 @@
               <p id="lastEnd" class="text-[10px] text-slate-500 mt-1">--</p>
             </div>
             <div class="col-span-2 md:col-span-1">
-              <p class="text-[10px] text-slate-600 uppercase font-bold tracking-widest mb-1">Last Error</p>
+              <p class="text-[10px] text-slate-600 uppercase font-bold tracking-widest mb-1">錯誤日誌 (Last Error)</p>
               <p id="lastError" class="text-xs font-bold text-slate-400 truncate max-w-full" title="--">--</p>
             </div>
           </div>
@@ -238,15 +238,15 @@
           <h3 class="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-6">資料配置 (Config)</h3>
           <div class="space-y-4">
             <div class="flex justify-between items-center text-xs">
-              <span class="text-slate-500 font-bold uppercase tracking-widest">Synthetic</span>
+              <span class="text-slate-500 font-bold uppercase tracking-widest">合成數據 (Synthetic)</span>
               <span id="syntheticBadge" class="font-mono text-white">--</span>
             </div>
             <div class="flex justify-between items-center text-xs">
-              <span class="text-slate-500 font-bold uppercase tracking-widest">Interval</span>
+              <span class="text-slate-500 font-bold uppercase tracking-widest">執行間隔 (Interval)</span>
               <span id="autoInterval" class="font-mono text-primary font-bold">--</span>
             </div>
             <div class="flex justify-between items-center text-xs">
-              <span class="text-slate-500 font-bold uppercase tracking-widest">Source</span>
+              <span class="text-slate-500 font-bold uppercase tracking-widest">數據來源 (Source)</span>
               <span id="dataSource" class="font-mono text-slate-300">--</span>
             </div>
           </div>

@@ -181,11 +181,11 @@
         <!-- Global Environment Selector -->
         <div class="flex items-center gap-2 bg-surface-dark border border-surface-border rounded-lg p-1">
           <button class="env-selector px-3 py-1 rounded text-[10px] font-bold uppercase transition-all"
-            data-env="test">Test</button>
+            data-env="test">測試 (Test)</button>
           <button class="env-selector px-3 py-1 rounded text-[10px] font-bold uppercase transition-all"
-            data-env="paper">Paper</button>
+            data-env="paper">模擬 (Paper)</button>
           <button class="env-selector px-3 py-1 rounded text-[10px] font-bold uppercase transition-all"
-            data-env="real">Live</button>
+            data-env="real">實盤 (Live)</button>
         </div>
         <div id="serverClock" class="text-xs font-mono text-primary font-bold">00:00:00</div>
         <div class="h-4 w-px bg-surface-border"></div>
@@ -244,22 +244,22 @@
               <label class="block text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-4">基本回測設定</label>
               <div class="space-y-4">
                 <div class="bg-background-dark/30 p-4 rounded-2xl border border-surface-border/50">
-                  <span class="text-[10px] text-slate-600 block mb-2 uppercase font-bold">Symbol</span>
+                  <span class="text-[10px] text-slate-600 block mb-2 uppercase font-bold">交易對 (Symbol)</span>
                   <input id="btSymbol" type="text" value="BTCUSDT"
                     class="w-full bg-transparent border-b border-surface-border text-lg font-black text-white focus:border-primary focus:ring-0 uppercase font-mono" />
                 </div>
                 <div class="bg-background-dark/30 p-4 rounded-2xl border border-surface-border/50">
-                  <span class="text-[10px] text-slate-600 block mb-2 uppercase font-bold">Start Date</span>
+                  <span class="text-[10px] text-slate-600 block mb-2 uppercase font-bold">起始日期 (Start)</span>
                   <input id="btStart" type="date"
                     class="w-full bg-transparent border-0 p-0 text-sm font-mono text-slate-300 focus:ring-0" />
                 </div>
                 <div class="bg-background-dark/30 p-4 rounded-2xl border border-surface-border/50">
-                  <span class="text-[10px] text-slate-600 block mb-2 uppercase font-bold">End Date</span>
+                  <span class="text-[10px] text-slate-600 block mb-2 uppercase font-bold">結束日期 (End)</span>
                   <input id="btEnd" type="date"
                     class="w-full bg-transparent border-0 p-0 text-sm font-mono text-slate-300 focus:ring-0" />
                 </div>
                 <div class="bg-background-dark/30 p-4 rounded-2xl border border-surface-border/50">
-                  <span class="text-[10px] text-slate-600 block mb-2 uppercase font-bold">Horizons (days)</span>
+                  <span class="text-[10px] text-slate-600 block mb-2 uppercase font-bold">預期天數 (Horizons)</span>
                   <input id="btHorizons" type="text" value="3,5,10"
                     class="w-full bg-transparent border-b border-surface-border text-sm font-mono text-slate-300 focus:border-primary focus:ring-0" />
                 </div>
@@ -283,42 +283,42 @@
                   啟動閾值 (Entry Thresholds)</h4>
                 <div class="grid grid-cols-2 gap-6">
                   <div class="space-y-1.5">
-                    <span class="text-[10px] text-slate-500 font-bold">TOTAL MIN SCORE</span>
+                    <span class="text-[10px] text-slate-500 font-bold">總分最低門檻 (TOTAL MIN)</span>
                     <input id="btTotalMin" type="number" step="1" value="60"
                       class="w-full bg-background-dark border border-surface-border rounded-xl px-4 py-3 text-lg font-black text-primary focus:border-primary focus:ring-1" />
                   </div>
                   <div class="space-y-1.5">
-                    <span class="text-[10px] text-slate-500 font-bold text-danger/80">EXIT MIN SCORE</span>
+                    <span class="text-[10px] text-slate-500 font-bold text-danger/80">出場分門檻 (EXIT MIN)</span>
                     <input id="btExitMin" type="number" step="1" value="10"
                       class="w-full bg-background-dark border border-surface-border rounded-xl px-4 py-3 text-lg font-black text-danger/80 focus:border-danger focus:ring-1" />
                   </div>
                   <div id="wrapper-btChangeMin" class="space-y-1.5">
-                    <span class="text-[10px] text-slate-500 font-bold">DAILY CHG MIN %</span>
+                    <span class="text-[10px] text-slate-500 font-bold">當日漲幅門檻 %</span>
                     <input id="btChangeMin" type="number" step="0.1" value="0.5"
                       class="w-full bg-background-dark border border-surface-border rounded-xl px-4 py-3 text-lg font-black text-white focus:border-primary focus:ring-1" />
                   </div>
                   <div id="wrapper-btVolMin" class="space-y-1.5">
-                    <span class="text-[10px] text-slate-500 font-bold">VOL RATIO MIN</span>
+                    <span class="text-[10px] text-slate-500 font-bold">成交量倍數門檻</span>
                     <input id="btVolMin" type="number" step="0.1" value="1.2"
                       class="w-full bg-background-dark border border-surface-border rounded-xl px-4 py-3 text-lg font-black text-white focus:border-primary focus:ring-1" />
                   </div>
                   <div id="wrapper-btRet5Min" class="space-y-1.5">
-                    <span class="text-[10px] text-slate-500 font-bold">5D RETURN MIN %</span>
+                    <span class="text-[10px] text-slate-500 font-bold">5日漲幅門檻 %</span>
                     <input id="btRet5Min" type="number" step="0.1" value="1.0"
                       class="w-full bg-background-dark border border-surface-border rounded-xl px-4 py-3 text-lg font-black text-white focus:border-primary focus:ring-1" />
                   </div>
                   <div id="wrapper-btMaGapMin" class="space-y-1.5">
-                    <span class="text-[10px] text-slate-500 font-bold">MA GAP MIN %</span>
+                    <span class="text-[10px] text-slate-500 font-bold">均線偏離門檻 %</span>
                     <input id="btMaGapMin" type="number" step="0.1" value="1.0"
                       class="w-full bg-background-dark border border-surface-border rounded-xl px-4 py-3 text-lg font-black text-white focus:border-primary focus:ring-1" />
                   </div>
                   <div id="wrapper-btAmpMin" class="space-y-1.5">
-                    <span class="text-[10px] text-slate-500 font-bold">VOLATILITY (AMP) MULT</span>
+                    <span class="text-[10px] text-slate-500 font-bold">波動放大倍數</span>
                     <input id="btAmpMin" type="number" step="0.1" value="1.5"
                       class="w-full bg-background-dark border border-surface-border rounded-xl px-4 py-3 text-lg font-black text-white focus:border-primary focus:ring-1" />
                   </div>
                   <div id="wrapper-btRangeMin" class="space-y-1.5">
-                    <span class="text-[10px] text-slate-500 font-bold">RANGE POS MIN %</span>
+                    <span class="text-[10px] text-slate-500 font-bold">股價位階門檻 %</span>
                     <input id="btRangeMin" type="number" step="1" value="80"
                       class="w-full bg-background-dark border border-surface-border rounded-xl px-4 py-3 text-lg font-black text-white focus:border-primary focus:ring-1" />
                   </div>
@@ -334,9 +334,9 @@
                   <div
                     class="flex items-center justify-between gap-6 p-4 bg-background-dark/30 rounded-2xl border border-surface-border">
                     <div class="flex-1">
-                      <div class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Base Analysis Score
+                      <div class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">AI 核心分析評等 (Base Score)
                       </div>
-                      <div class="text-[10px] text-slate-600 mt-1">Multiplier for core AI prediction (0~100)</div>
+                      <div class="text-[10px] text-slate-600 mt-1">AI 原始預測分數的乘數 (0~100)</div>
                     </div>
                     <select id="btSideScore"
                       class="bg-transparent border-0 text-[10px] font-black text-slate-500 focus:ring-0 mr-2">
@@ -354,13 +354,13 @@
                       class="flex items-center gap-4 bg-background-dark/30 p-3 rounded-2xl border border-surface-border">
                       <input id="btUseChange" type="checkbox" checked
                         class="rounded text-primary border-surface-border bg-background-dark focus:ring-primary h-5 w-5" />
-                      <div class="flex-1 text-xs font-bold uppercase tracking-wider text-slate-400">Daily Change Bonus
+                      <div class="flex-1 text-xs font-bold uppercase tracking-wider text-slate-400">當日漲幅加成 (Daily Chg)
                       </div>
                       <select id="btSideChange"
                         class="bg-transparent border-0 text-[10px] font-black text-slate-500 focus:ring-0">
-                        <option value="entry">ENTRY ONLY</option>
-                        <option value="exit">EXIT ONLY</option>
-                        <option value="both">BOTH</option>
+                        <option value="entry">僅進場</option>
+                        <option value="exit">僅出場</option>
+                        <option value="both">兩者皆套用</option>
                       </select>
                       <div id="wrapper-btChangeBonus"><input id="btChangeBonus" type="number" value="10"
                           class="w-16 bg-transparent text-right font-black border-0 focus:ring-0" /></div>
@@ -369,13 +369,13 @@
                       class="flex items-center gap-4 bg-background-dark/30 p-3 rounded-2xl border border-surface-border">
                       <input id="btUseVolume" type="checkbox" checked
                         class="rounded text-primary border-surface-border bg-background-dark focus:ring-primary h-5 w-5" />
-                      <div class="flex-1 text-xs font-bold uppercase tracking-wider text-slate-400">Volume Surge Bonus
+                      <div class="flex-1 text-xs font-bold uppercase tracking-wider text-slate-400">成交量爆發加成 (Vol Surge)
                       </div>
                       <select id="btSideVolume"
                         class="bg-transparent border-0 text-[10px] font-black text-slate-500 focus:ring-0">
-                        <option value="entry">ENTRY ONLY</option>
-                        <option value="exit">EXIT ONLY</option>
-                        <option value="both">BOTH</option>
+                        <option value="entry">僅進場</option>
+                        <option value="exit">僅出場</option>
+                        <option value="both">兩者皆套用</option>
                       </select>
                       <div id="wrapper-btVolumeBonus"><input id="btVolumeBonus" type="number" value="10"
                           class="w-16 bg-transparent text-right font-black border-0 focus:ring-0" /></div>
@@ -384,13 +384,13 @@
                       class="flex items-center gap-4 bg-background-dark/30 p-3 rounded-2xl border border-surface-border">
                       <input id="btUseReturn" type="checkbox" checked
                         class="rounded text-primary border-surface-border bg-background-dark focus:ring-primary h-5 w-5" />
-                      <div class="flex-1 text-xs font-bold uppercase tracking-wider text-slate-400">5D Return Bonus
+                      <div class="flex-1 text-xs font-bold uppercase tracking-wider text-slate-400">5日累積漲幅加成 (5D Ret)
                       </div>
                       <select id="btSideReturn"
                         class="bg-transparent border-0 text-[10px] font-black text-slate-500 focus:ring-0">
-                        <option value="entry">ENTRY ONLY</option>
-                        <option value="exit">EXIT ONLY</option>
-                        <option value="both">BOTH</option>
+                        <option value="entry">僅進場</option>
+                        <option value="exit">僅出場</option>
+                        <option value="both">兩者皆套用</option>
                       </select>
                       <div id="wrapper-btReturnBonus"><input id="btReturnBonus" type="number" value="8"
                           class="w-16 bg-transparent text-right font-black border-0 focus:ring-0" /></div>
@@ -399,13 +399,13 @@
                       class="flex items-center gap-4 bg-background-dark/30 p-3 rounded-2xl border border-surface-border">
                       <input id="btUseMa" type="checkbox" checked
                         class="rounded text-primary border-surface-border bg-background-dark focus:ring-primary h-5 w-5" />
-                      <div class="flex-1 text-xs font-bold uppercase tracking-wider text-slate-400">MA Deviation Bonus
+                      <div class="flex-1 text-xs font-bold uppercase tracking-wider text-slate-400">均線偏離加成 (MA Dev)
                       </div>
                       <select id="btSideMa"
                         class="bg-transparent border-0 text-[10px] font-black text-slate-500 focus:ring-0">
-                        <option value="entry">ENTRY ONLY</option>
-                        <option value="exit">EXIT ONLY</option>
-                        <option value="both">BOTH</option>
+                        <option value="entry">僅進場</option>
+                        <option value="exit">僅出場</option>
+                        <option value="both">兩者皆套用</option>
                       </select>
                       <div id="wrapper-btMaBonus"><input id="btMaBonus" type="number" value="5"
                           class="w-16 bg-transparent text-right font-black border-0 focus:ring-0" /></div>
@@ -414,7 +414,7 @@
                       class="flex items-center gap-4 bg-background-dark/30 p-3 rounded-2xl border border-surface-border">
                       <input id="btUseAmp" type="checkbox"
                         class="rounded text-primary border-surface-border bg-background-dark focus:ring-primary h-5 w-5" />
-                      <div class="flex-1 text-xs font-bold uppercase tracking-wider text-slate-400">Volatility Surge
+                      <div class="flex-1 text-xs font-bold uppercase tracking-wider text-slate-400">波動放大加成 (Amplitude)
                       </div>
                       <select id="btSideAmp"
                         class="bg-transparent border-0 text-[10px] font-black text-slate-500 focus:ring-0">
@@ -429,7 +429,7 @@
                       class="flex items-center gap-4 bg-background-dark/30 p-3 rounded-2xl border border-surface-border">
                       <input id="btUseRange" type="checkbox"
                         class="rounded text-primary border-surface-border bg-background-dark focus:ring-primary h-5 w-5" />
-                      <div class="flex-1 text-xs font-bold uppercase tracking-wider text-slate-400">Range Position
+                      <div class="flex-1 text-xs font-bold uppercase tracking-wider text-slate-400">股價位階加成 (Range Pos)
                       </div>
                       <select id="btSideRange"
                         class="bg-transparent border-0 text-[10px] font-black text-slate-500 focus:ring-0">
@@ -460,25 +460,25 @@
           <div>
             <h3 id="saveFormTitle" class="text-xl font-black text-white italic">儲存策略 (Save / Update)</h3>
             <p id="saveFormSubtitle" class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">
-              Persisting current weighted parameters to database</p>
+              將目前的加權參數儲存至資料庫 (Save to DB)</p>
           </div>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>
-            <label class="block text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2 ml-1">Strategy
-              Name</label>
+            <label class="block text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2 ml-1">策略名稱 (Strategy
+              Name)</label>
             <input id="newStrategyName" type="text" placeholder="例如：BTC 激增追蹤"
               class="w-full bg-background-dark border border-surface-border rounded-2xl px-4 py-3 text-sm text-white focus:border-secondary focus:ring-1" />
           </div>
           <div>
-            <label class="block text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2 ml-1">Unique
-              Slug</label>
+            <label class="block text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2 ml-1">唯一代號 (Unique
+              Slug)</label>
             <input id="newStrategySlug" type="text" placeholder="例如：btc-surge-01"
               class="w-full bg-background-dark border border-surface-border rounded-2xl px-4 py-3 text-sm text-white focus:border-secondary focus:ring-1 font-mono uppercase" />
           </div>
           <div>
-            <label class="block text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2 ml-1">Exit Threshold
-              (Min Score to Keep)</label>
+            <label class="block text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2 ml-1">出場分門檻 (Exit
+              Threshold)</label>
             <input id="newStrategyExitThreshold" type="number" step="1" value="10"
               class="w-full bg-background-dark border border-surface-border rounded-2xl px-4 py-3 text-sm text-white focus:border-secondary focus:ring-1 font-mono" />
           </div>
@@ -509,7 +509,7 @@
           <div class="bg-surface-dark border border-surface-border rounded-3xl p-8 shadow-xl">
             <div class="flex items-center justify-between mb-8">
               <h3 class="text-sm font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                <span class="material-symbols-outlined text-sm text-success">bar_chart</span> 未來收益分析 (Forward Returns)
+                <span class="material-symbols-outlined text-sm text-success">bar_chart</span> 未來預期獲利 (Forward Returns)
               </h3>
             </div>
             <div class="h-[240px] relative">
@@ -520,13 +520,13 @@
 
         <div class="space-y-8">
           <div class="bg-surface-dark border border-surface-border rounded-3xl p-8 shadow-xl flex flex-col min-h-full">
-            <h3 class="text-sm font-bold text-slate-500 uppercase tracking-widest mb-6">回測數據摘要 (Summary)</h3>
+            <h3 class="text-sm font-bold text-slate-500 uppercase tracking-widest mb-6">本次回測報表 (Backtest Summary)</h3>
             <div id="btResult"
               class="bg-background-dark/50 rounded-2xl p-6 border border-surface-border text-sm font-medium leading-relaxed mb-6">
               尚未執行回測
             </div>
 
-            <h3 class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-4">事件軌跡 (Recent Hits)</h3>
+            <h3 class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-4">近期觸發事件 (Recent Hits)</h3>
             <div id="btEvents" class="space-y-3 flex-1 scrollbar-thin pr-2">
               <!-- Events list here -->
             </div>
@@ -550,17 +550,18 @@
               </div>
               <div id="monitoringStatus"
                 class="flex items-center gap-1.5 text-[10px] uppercase font-bold text-slate-500 italic">
-                <div class="size-1.5 rounded-full bg-slate-500"></div> STANDBY
+                <div class="size-1.5 rounded-full bg-slate-500"></div> 待命中 (STANDBY)
               </div>
             </div>
           </div>
           <div class="flex items-center gap-8">
             <div class="text-right">
-              <div class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Account Balance</div>
+              <div class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">帳戶餘額 (Account Balance)
+              </div>
               <div id="binanceBalance" class="text-2xl font-black font-mono text-white leading-none">-- <span
                   class="text-xs font-normal text-slate-500">USDT</span></div>
               <div id="binanceAssets" class="text-[10px] font-mono text-slate-500 mt-1 uppercase tracking-tighter">
-                Connecting Engine...</div>
+                引擎連線中 (Connecting Engine...)</div>
             </div>
             <button id="refreshBinanceBtn"
               class="p-3 rounded-2xl bg-white/5 hover:bg-white/10 text-slate-500 hover:text-primary transition-all">
@@ -571,7 +572,7 @@
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start pt-8 border-t border-white/5">
           <div class="lg:col-span-2 bg-background-dark/50 rounded-2xl p-6 border border-surface-border">
             <div class="flex items-center justify-between mb-4">
-              <span class="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em]">Execution Log</span>
+              <span class="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em]">執行日誌 (Execution Log)</span>
             </div>
             <div id="executionLog"
               class="h-24 bg-black/40 rounded-xl p-4 font-mono text-xs text-slate-500 overflow-y-auto scrollbar-thin italic">
@@ -606,7 +607,6 @@
           </div>
           <div>
             <h2 class="text-2xl font-bold font-display tracking-tight text-white leading-tight">Binance API 設定</h2>
-            <p class="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] font-mono">Channel Configuration
             </p>
           </div>
         </div>

@@ -8,7 +8,7 @@ import (
 	"log"
 )
 
-// seedScoringStrategies 預設建立幾個常用的計分策略。
+// seedScoringStrategies 預設建立幾套最強的計分策略。
 func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 	// 1. 取得管理員 ID
 	var adminID string
@@ -17,7 +17,7 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("find admin user: %w", err)
 	}
 
-	// 2. 定義預設策略 - 保留 Nexus 系列最強策略
+	// 2. 定義預設策略 - Nexus 高效系列
 	strategies := []struct {
 		Name          string
 		Slug          string
@@ -35,12 +35,12 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 		}
 	}{
 		{
-			Name:          "Nexus Prime 核心動能策略 (Nexus Prime Momentum)",
-			Slug:          "nexus-prime-momentum",
+			Name:          "Nexus Apex 最強收益版 (Nexus Apex Optimized)",
+			Slug:          "nexus-apex-high-profit",
 			Timeframe:     "1d",
 			BaseSymbol:    "BTCUSDT",
-			Threshold:     70.0,
-			ExitThreshold: 45.0,
+			Threshold:     65.0,
+			ExitThreshold: 90.0, // 極速止損：只要任一健康條件不滿足即退出
 			IsActive:      true,
 			Rules: []struct {
 				Type     string
@@ -49,21 +49,24 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 				Weight   float64
 				RuleType string
 			}{
-				{Type: "BASE_SCORE", Name: "AI 核心評分", Params: map[string]interface{}{}, Weight: 50.0, RuleType: "entry"},
-				{Type: "PRICE_RETURN", Name: "短線動能漲幅 > 1.5%", Params: map[string]interface{}{"days": 1.0, "min": 0.015}, Weight: 20.0, RuleType: "entry"},
-				{Type: "VOLUME_SURGE", Name: "量能爆發 > 1.8倍", Params: map[string]interface{}{"min": 1.8}, Weight: 15.0, RuleType: "entry"},
-				{Type: "MA_DEVIATION", Name: "趨勢延續 (MA20 > 1%)", Params: map[string]interface{}{"ma": 20.0, "min": 0.01}, Weight: 15.0, RuleType: "entry"},
-				{Type: "PRICE_RETURN", Name: "緊急止損 (-2%)", Params: map[string]interface{}{"days": 1.0, "min": -0.02}, Weight: 50.0, RuleType: "exit"},
-				{Type: "MA_DEVIATION", Name: "趨勢破壞 (MA20 < 0%)", Params: map[string]interface{}{"ma": 20.0, "min": 0.0}, Weight: 50.0, RuleType: "exit"},
+				// 進場邏輯：AI + 動能 + 趨勢
+				{Type: "BASE_SCORE", Name: "AI 核心預測支撐", Params: map[string]interface{}{}, Weight: 45.0, RuleType: "entry"},
+				{Type: "PRICE_RETURN", Name: "短線發動 (> 1.2%)", Params: map[string]interface{}{"days": 1.0, "min": 0.012}, Weight: 30.0, RuleType: "entry"},
+				{Type: "VOLUME_SURGE", Name: "量能確認 (> 1.5倍)", Params: map[string]interface{}{"min": 1.5}, Weight: 15.0, RuleType: "entry"},
+				{Type: "MA_DEVIATION", Name: "均線上方安全區 (MA20 > 1%)", Params: map[string]interface{}{"ma": 20.0, "min": 0.01}, Weight: 10.0, RuleType: "entry"},
+				
+				// 出場邏輯 (必須全部滿足才留著，任一失敗即退出)
+				{Type: "PRICE_RETURN", Name: "持倉安全 (漲跌 > -1.2%)", Params: map[string]interface{}{"days": 1.0, "min": -0.012}, Weight: 60.0, RuleType: "exit"},
+				{Type: "MA_DEVIATION", Name: "趨勢未破 (MA20 > -0.5%)", Params: map[string]interface{}{"ma": 20.0, "min": -0.005}, Weight: 40.0, RuleType: "exit"},
 			},
 		},
 		{
-			Name:          "Nexus Quantum 超高頻動能策略 (Nexus Quantum Scalper)",
-			Slug:          "nexus-quantum-scalper",
+			Name:          "Nexus Quantum v2 高頻修正版 (Quantum Scalper)",
+			Slug:          "nexus-quantum-v2",
 			Timeframe:     "1d",
 			BaseSymbol:    "BTCUSDT",
-			Threshold:     50.0,
-			ExitThreshold: 40.0,
+			Threshold:     55.0,
+			ExitThreshold: 85.0, // 修正止損遲鈍問題
 			IsActive:      true,
 			Rules: []struct {
 				Type     string
@@ -72,12 +75,13 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 				Weight   float64
 				RuleType string
 			}{
-				{Type: "BASE_SCORE", Name: "AI 核心評分", Params: map[string]interface{}{}, Weight: 40.0, RuleType: "entry"},
-				{Type: "PRICE_RETURN", Name: "短線極速觸發 (漲幅 > 0.7%)", Params: map[string]interface{}{"days": 1.0, "min": 0.007}, Weight: 30.0, RuleType: "entry"},
-				{Type: "VOLUME_SURGE", Name: "溫量確認 (> 1.25倍)", Params: map[string]interface{}{"min": 1.25}, Weight: 20.0, RuleType: "entry"},
-				{Type: "MA_DEVIATION", Name: "均線上方支撐 (MA20 > 0.5%)", Params: map[string]interface{}{"ma": 20.0, "min": 0.005}, Weight: 10.0, RuleType: "entry"},
-				{Type: "PRICE_RETURN", Name: "極速止損 (-1.5%)", Params: map[string]interface{}{"days": 1.0, "min": -0.015}, Weight: 60.0, RuleType: "exit"},
-				{Type: "VOLUME_SURGE", Name: "量能萎縮退出 (< 0.8倍)", Params: map[string]interface{}{"min": 0.8}, Weight: 40.0, RuleType: "exit"},
+				{Type: "BASE_SCORE", Name: "AI 預測得分", Params: map[string]interface{}{}, Weight: 40.0, RuleType: "entry"},
+				{Type: "PRICE_RETURN", Name: "極速脈衝 (> 0.8%)", Params: map[string]interface{}{"days": 1.0, "min": 0.008}, Weight: 30.0, RuleType: "entry"},
+				{Type: "VOLUME_SURGE", Name: "溫量支撐 (> 1.2倍)", Params: map[string]interface{}{"min": 1.2}, Weight: 20.0, RuleType: "entry"},
+				{Type: "MA_DEVIATION", Name: "多頭位階 (MA20 > 0%)", Params: map[string]interface{}{"ma": 20.0, "min": 0.0}, Weight: 10.0, RuleType: "entry"},
+				
+				{Type: "PRICE_RETURN", Name: "移動止損 (-1.0%)", Params: map[string]interface{}{"days": 1.0, "min": -0.01}, Weight: 70.0, RuleType: "exit"},
+				{Type: "MA_DEVIATION", Name: "趨勢過濾 (MA20 > -1%)", Params: map[string]interface{}{"ma": 20.0, "min": -0.01}, Weight: 30.0, RuleType: "exit"},
 			},
 		},
 	}
@@ -102,13 +106,11 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 		for _, r := range s.Rules {
 			paramsBytes, _ := json.Marshal(r.Params)
 			var cid string
-			// 1. Check if condition exists
 			err = db.QueryRowContext(ctx, `
 				SELECT id FROM conditions WHERE name = $1 AND type = $2 AND params::jsonb = $3::jsonb
 			`, r.Name, r.Type, paramsBytes).Scan(&cid)
 
 			if err == sql.ErrNoRows {
-				// 2. Insert if not exists
 				err = db.QueryRowContext(ctx, `
 					INSERT INTO conditions (name, type, params)
 					VALUES ($1, $2, $3)
@@ -121,15 +123,11 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 				continue
 			}
 
-			ruleType := r.RuleType
-			if ruleType == "" {
-				ruleType = "entry"
-			}
 			_, err = db.ExecContext(ctx, `
 				INSERT INTO strategy_rules (strategy_id, condition_id, weight, rule_type)
 				VALUES ($1, $2, $3, $4)
 				ON CONFLICT DO NOTHING
-			`, sid, cid, r.Weight, ruleType)
+			`, sid, cid, r.Weight, r.RuleType)
 
 			if err != nil {
 				log.Printf("[Seed] Link rule %s to %s failed: %v", r.Name, s.Slug, err)
@@ -137,12 +135,12 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 		}
 	}
 
-	// 額外清理：刪除不在 strategies 列表中的其他舊策略
-	_, err = db.ExecContext(ctx, "DELETE FROM strategies WHERE slug NOT IN ('nexus-prime-momentum', 'nexus-quantum-scalper')")
+	// 額外清理：刪除表現不佳或舊的策略，僅保留最新最強版本
+	_, err = db.ExecContext(ctx, "DELETE FROM strategies WHERE slug NOT IN ('nexus-apex-high-profit', 'nexus-quantum-v2')")
 	if err != nil {
 		log.Printf("[Seed] Cleanup old strategies failed: %v", err)
 	}
 
-	log.Printf("[Seed] Default scoring strategies seeded successfully (Nexus Series)")
+	log.Printf("[Seed] Default scoring strategies UPDATED with high-profit focus (Nexus Apex)")
 	return nil
 }

@@ -17,7 +17,7 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("find admin user: %w", err)
 	}
 
-	// 2. 定義預設策略 - 目前僅保留 Nexus Prime 高勝率策略
+	// 2. 定義預設策略 - 保留 Nexus 系列最強策略
 	strategies := []struct {
 		Name          string
 		Slug          string
@@ -57,12 +57,29 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 				{Type: "MA_DEVIATION", Name: "趨勢破壞 (MA20 < 0%)", Params: map[string]interface{}{"ma": 20.0, "min": 0.0}, Weight: 50.0, RuleType: "exit"},
 			},
 		},
-	}
-
-	// 取得當前所有要保留的 Slugs
-	var keptSlugs []string
-	for _, s := range strategies {
-		keptSlugs = append(keptSlugs, s.Slug)
+		{
+			Name:          "Nexus Quantum 超高頻動能策略 (Nexus Quantum Scalper)",
+			Slug:          "nexus-quantum-scalper",
+			Timeframe:     "1d",
+			BaseSymbol:    "BTCUSDT",
+			Threshold:     50.0,
+			ExitThreshold: 40.0,
+			IsActive:      true,
+			Rules: []struct {
+				Type     string
+				Name     string
+				Params   map[string]interface{}
+				Weight   float64
+				RuleType string
+			}{
+				{Type: "BASE_SCORE", Name: "AI 核心評分", Params: map[string]interface{}{}, Weight: 40.0, RuleType: "entry"},
+				{Type: "PRICE_RETURN", Name: "短線極速觸發 (漲幅 > 0.7%)", Params: map[string]interface{}{"days": 1.0, "min": 0.007}, Weight: 30.0, RuleType: "entry"},
+				{Type: "VOLUME_SURGE", Name: "溫量確認 (> 1.25倍)", Params: map[string]interface{}{"min": 1.25}, Weight: 20.0, RuleType: "entry"},
+				{Type: "MA_DEVIATION", Name: "均線上方支撐 (MA20 > 0.5%)", Params: map[string]interface{}{"ma": 20.0, "min": 0.005}, Weight: 10.0, RuleType: "entry"},
+				{Type: "PRICE_RETURN", Name: "極速止損 (-1.5%)", Params: map[string]interface{}{"days": 1.0, "min": -0.015}, Weight: 60.0, RuleType: "exit"},
+				{Type: "VOLUME_SURGE", Name: "量能萎縮退出 (< 0.8倍)", Params: map[string]interface{}{"min": 0.8}, Weight: 40.0, RuleType: "exit"},
+			},
+		},
 	}
 
 	for _, s := range strategies {
@@ -120,12 +137,12 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 		}
 	}
 
-	// 額外清理：刪除不在 strategies 列表中的其他策略
-	_, err = db.ExecContext(ctx, "DELETE FROM strategies WHERE slug NOT IN ('nexus-prime-momentum')")
+	// 額外清理：刪除不在 strategies 列表中的其他舊策略
+	_, err = db.ExecContext(ctx, "DELETE FROM strategies WHERE slug NOT IN ('nexus-prime-momentum', 'nexus-quantum-scalper')")
 	if err != nil {
 		log.Printf("[Seed] Cleanup old strategies failed: %v", err)
 	}
 
-	log.Printf("[Seed] Default scoring strategies seeded successfully (Nexus Prime only)")
+	log.Printf("[Seed] Default scoring strategies seeded successfully (Nexus Series)")
 	return nil
 }

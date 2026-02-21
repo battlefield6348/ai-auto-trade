@@ -23,6 +23,8 @@ import (
 	"ai-auto-trade/internal/domain/strategy"
 	tradingDomain "ai-auto-trade/internal/domain/trading"
 	"ai-auto-trade/internal/infra/memory"
+
+	"github.com/gin-gonic/gin"
 )
 
 const (
@@ -144,9 +146,6 @@ type analysisBacktestRequest struct {
 	Exit      backtestSideParams `json:"exit"`
 	Horizons  []int              `json:"horizons"`
 	Timeframe string             `json:"timeframe"`
-
-	// Legacy fields for compatibility during transition (optional)
-	Thresholds backtestThresholds `json:"thresholds,omitempty"`
 }
 
 type backtestSideParams struct {
@@ -175,7 +174,6 @@ type backtestThresholds struct {
 	MaGapMin       float64 `json:"ma_gap_min"`
 	AmpMin         float64 `json:"amp_min"`
 	RangeMin       float64 `json:"range_min"`
-	TotalMin       float64 `json:"total_min"` // Fallback for legacy
 }
 
 type backtestFlags struct {
@@ -219,10 +217,51 @@ type parsedBacktestInput struct {
 	timeframe string
 }
 
+// --- Helpers ---
+
+// --- Helpers ---
+
+func (s *Server) getSymbol(c *gin.Context) string {
+	return strings.ToUpper(strings.TrimSpace(c.DefaultQuery("symbol", "BTCUSDT")))
+}
+
+func (s *Server) getTimeframe(c *gin.Context, def string) string {
+	return c.DefaultQuery("timeframe", def)
+}
+
+func (s *Server) parseDateRange(c *gin.Context) (time.Time, time.Time, error) {
+	startStr := c.Query("start_date")
+	endStr := c.Query("end_date")
+
+	if startStr == "" {
+		// Default to last 30 days
+		end := time.Now()
+		start := end.AddDate(0, 0, -30)
+		return start, end, nil
+	}
+
+	start, err := time.Parse("2006-01-02", startStr)
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("invalid start_date")
+	}
+
+	var end time.Time
+	if endStr == "" {
+		end = time.Now()
+	} else {
+		end, err = time.Parse("2006-01-02", endStr)
+		if err != nil {
+			return time.Time{}, time.Time{}, fmt.Errorf("invalid end_date")
+		}
+	}
+
+	return start, end, nil
+}
+
 // --- Handlers ---
 
-func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+func (s *Server) handlePing(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
 		"success":   true,
 		"message":   "pong",
 		"timestamp": time.Now().Unix(),
@@ -230,20 +269,20 @@ func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleHealth(c *gin.Context) {
 	dbStatus := "unavailable"
 	if s.db == nil {
 		dbStatus = "not_configured"
 	} else {
-		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
 		defer cancel()
-		if s.db != nil { // Redundant check, but added as per instruction
+		if s.db != nil {
 			if err := s.db.PingContext(ctx); err == nil {
-				dbStatus = "ok" // Reverted to original logic for dbStatus
+				dbStatus = "ok"
 			}
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success":        true,
 		"db":             dbStatus,
 		"use_synthetic":  s.useSynthetic,
@@ -253,30 +292,30 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleLogin(c *gin.Context) {
 	var body struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid body", "error_code": errCodeBadRequest})
 		return
 	}
-	res, err := s.loginUC.Execute(r.Context(), auth.LoginInput{
+	res, err := s.loginUC.Execute(c.Request.Context(), auth.LoginInput{
 		Email:     body.Email,
 		Password:  body.Password,
-		UserAgent: r.UserAgent(),
-		IP:        clientIP(r),
+		UserAgent: c.Request.UserAgent(),
+		IP:        c.ClientIP(),
 	})
 	if err != nil {
 		log.Printf("login failed email=%s: %v", body.Email, err)
-		writeError(w, http.StatusUnauthorized, errCodeInvalidCredentials, "invalid credentials")
+		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": "invalid credentials", "error_code": errCodeInvalidCredentials})
 		return
 	}
 	log.Printf("login success user_id=%s role=%s email=%s", res.User.ID, res.User.Role, res.User.Email)
 
-	s.setRefreshCookie(w, r, res.Token.RefreshToken, res.Token.RefreshExpiry)
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	s.setRefreshCookie(c, res.Token.RefreshToken, res.Token.RefreshExpiry)
+	c.JSON(http.StatusOK, gin.H{
 		"success":            true,
 		"access_token":       res.Token.AccessToken,
 		"token_type":         "Bearer",
@@ -285,46 +324,22 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-		Name     string `json:"name"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
-		return
-	}
-	uid, err := s.registerUC.Execute(r.Context(), auth.RegisterInput{
-		Email:    body.Email,
-		Password: body.Password,
-		Name:     body.Name,
-	})
-	if err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, err.Error())
-		return
-	}
+// handleRegister removed (single-user mode)
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"success": true,
-		"user_id": uid,
-	})
-}
-
-func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie(refreshCookieName)
-	if err != nil || cookie.Value == "" {
-		writeError(w, http.StatusUnauthorized, errCodeUnauthorized, "missing refresh token")
+func (s *Server) handleRefresh(c *gin.Context) {
+	cookie, err := c.Cookie(refreshCookieName)
+	if err != nil || cookie == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": "missing refresh token", "error_code": errCodeUnauthorized})
 		return
 	}
-	pair, err := s.tokenSvc.Refresh(r.Context(), cookie.Value)
+	pair, err := s.tokenSvc.Refresh(c.Request.Context(), cookie)
 	if err != nil {
 		log.Printf("refresh token failed: %v", err)
-		writeError(w, http.StatusUnauthorized, errCodeUnauthorized, "refresh token expired or invalid")
+		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": "refresh token expired or invalid", "error_code": errCodeUnauthorized})
 		return
 	}
-	s.setRefreshCookie(w, r, pair.RefreshToken, pair.RefreshExpiry)
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	s.setRefreshCookie(c, pair.RefreshToken, pair.RefreshExpiry)
+	c.JSON(http.StatusOK, gin.H{
 		"success":            true,
 		"access_token":       pair.AccessToken,
 		"token_type":         "Bearer",
@@ -333,48 +348,48 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie(refreshCookieName)
-	if err == nil && cookie.Value != "" {
+func (s *Server) handleLogout(c *gin.Context) {
+	cookie, err := c.Cookie(refreshCookieName)
+	if err == nil && cookie != "" {
 		if s.logoutUC != nil {
-			if revokeErr := s.logoutUC.Execute(r.Context(), cookie.Value); revokeErr != nil {
+			if revokeErr := s.logoutUC.Execute(c.Request.Context(), cookie); revokeErr != nil {
 				log.Printf("logout revoke refresh failed: %v", revokeErr)
 			}
 		}
 	}
-	s.setRefreshCookie(w, r, "", time.Now().Add(-time.Hour))
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	s.setRefreshCookie(c, "", time.Now().Add(-time.Hour))
+	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "logged out",
 	})
 }
 
-func (s *Server) handleIngestionBackfill(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleIngestionBackfill(c *gin.Context) {
 	var body struct {
 		StartDate   string `json:"start_date"`
 		EndDate     string `json:"end_date"`
 		RunAnalysis *bool  `json:"run_analysis"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid body", "error_code": errCodeBadRequest})
 		return
 	}
 	if body.StartDate == "" || body.EndDate == "" {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "start_date and end_date required")
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "start_date and end_date required", "error_code": errCodeBadRequest})
 		return
 	}
 	startDate, err := time.Parse("2006-01-02", body.StartDate)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid start_date")
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid start_date", "error_code": errCodeBadRequest})
 		return
 	}
 	endDate, err := time.Parse("2006-01-02", body.EndDate)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid end_date")
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid end_date", "error_code": errCodeBadRequest})
 		return
 	}
 	if endDate.Before(startDate) {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "end_date must be after start_date")
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "end_date must be after start_date", "error_code": errCodeBadRequest})
 		return
 	}
 	runAnalysis := true
@@ -393,9 +408,9 @@ func (s *Server) handleIngestionBackfill(w http.ResponseWriter, r *http.Request)
 		totalDays++
 		var ingestErr error
 		if s.useSynthetic {
-			ingestErr = s.generateDailyPrices(r.Context(), d)
+			ingestErr = s.generateDailyPrices(c.Request.Context(), d)
 		} else {
-			ingestErr = s.generateDailyPricesStrict(r.Context(), d)
+			ingestErr = s.generateDailyPricesStrict(c.Request.Context(), d)
 		}
 		if ingestErr != nil {
 			failures = append(failures, backfillFailure{
@@ -407,7 +422,7 @@ func (s *Server) handleIngestionBackfill(w http.ResponseWriter, r *http.Request)
 		}
 		ingestionSuccessDays++
 		if runAnalysis {
-			if _, err := s.runAnalysisForDate(r.Context(), d); err != nil {
+			if _, err := s.runAnalysisForDate(c.Request.Context(), d); err != nil {
 				failures = append(failures, backfillFailure{
 					TradeDate: d.Format("2006-01-02"),
 					Stage:     "analysis",
@@ -422,7 +437,7 @@ func (s *Server) handleIngestionBackfill(w http.ResponseWriter, r *http.Request)
 	log.Printf("ingestion backfill done days=%d ingestion_success=%d analysis_success=%d failures=%d duration=%s", totalDays, ingestionSuccessDays, analysisSuccessDays, len(failures), time.Since(start))
 	s.recordJob(jobRun{
 		Kind:          "backfill",
-		TriggeredBy:   currentUserID(r),
+		TriggeredBy:   currentUserID(c),
 		Start:         start,
 		End:           time.Now(),
 		IngestionOK:   len(failures) == 0,
@@ -433,7 +448,7 @@ func (s *Server) handleIngestionBackfill(w http.ResponseWriter, r *http.Request)
 		AnalysisFail:  totalDays - analysisSuccessDays,
 		Failures:      failures,
 	})
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success":                true,
 		"start_date":             startDate.Format("2006-01-02"),
 		"end_date":               endDate.Format("2006-01-02"),
@@ -446,22 +461,22 @@ func (s *Server) handleIngestionBackfill(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-func (s *Server) handleIngestionDaily(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleIngestionDaily(c *gin.Context) {
 	var body struct {
 		TradeDate   string `json:"trade_date"`
 		RunAnalysis *bool  `json:"run_analysis"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid body", "error_code": errCodeBadRequest})
 		return
 	}
 	if body.TradeDate == "" {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "trade_date required")
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "trade_date required", "error_code": errCodeBadRequest})
 		return
 	}
 	tradeDate, err := time.Parse("2006-01-02", body.TradeDate)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid trade_date")
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid trade_date", "error_code": errCodeBadRequest})
 		return
 	}
 	runAnalysis := true
@@ -472,20 +487,20 @@ func (s *Server) handleIngestionDaily(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	var ingestionErr error
 	if s.useSynthetic {
-		ingestionErr = s.generateDailyPrices(r.Context(), tradeDate)
+		ingestionErr = s.generateDailyPrices(c.Request.Context(), tradeDate)
 	} else {
-		ingestionErr = s.generateDailyPricesStrict(r.Context(), tradeDate)
+		ingestionErr = s.generateDailyPricesStrict(c.Request.Context(), tradeDate)
 	}
 
 	var stats analysisRunSummary
 	var analysisErr error
 	if ingestionErr == nil && runAnalysis {
-		stats, analysisErr = s.runAnalysisForDate(r.Context(), tradeDate)
+		stats, analysisErr = s.runAnalysisForDate(c.Request.Context(), tradeDate)
 	}
 
 	s.recordJob(jobRun{
 		Kind:          "ingestion_daily",
-		TriggeredBy:   currentUserID(r),
+		TriggeredBy:   currentUserID(c),
 		Start:         start,
 		End:           time.Now(),
 		IngestionOK:   ingestionErr == nil,
@@ -498,7 +513,7 @@ func (s *Server) handleIngestionDaily(w http.ResponseWriter, r *http.Request) {
 		AnalysisErr:   errorText(analysisErr),
 	})
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success":          ingestionErr == nil && (!runAnalysis || analysisErr == nil),
 		"trade_date":       tradeDate.Format("2006-01-02"),
 		"duration_seconds": int(time.Since(start).Seconds()),
@@ -544,39 +559,39 @@ func (s *Server) runAnalysisForDate(ctx context.Context, tradeDate time.Time) (a
 	return stats, nil
 }
 
-func (s *Server) handleAnalysisDaily(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAnalysisDaily(c *gin.Context) {
 	var body struct {
 		TradeDate string `json:"trade_date"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid body", "error_code": errCodeBadRequest})
 		return
 	}
 	if body.TradeDate == "" {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "trade_date required")
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "trade_date required", "error_code": errCodeBadRequest})
 		return
 	}
 	tradeDate, err := time.Parse("2006-01-02", body.TradeDate)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid trade_date")
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid trade_date", "error_code": errCodeBadRequest})
 		return
 	}
 
 	start := time.Now()
-	stats, runErr := s.runAnalysisForDate(r.Context(), tradeDate)
+	stats, runErr := s.runAnalysisForDate(c.Request.Context(), tradeDate)
 	if errors.Is(runErr, errNoPrices) {
-		writeError(w, http.StatusNotFound, errCodeAnalysisNotReady, "ingestion data not ready for trade_date")
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "ingestion data not ready for trade_date", "error_code": errCodeAnalysisNotReady})
 		return
 	}
 	if runErr != nil {
 		log.Printf("analysis daily failed date=%s: %v", tradeDate.Format("2006-01-02"), runErr)
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "analysis failed")
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "analysis failed", "error_code": errCodeInternal})
 		return
 	}
 
 	s.recordJob(jobRun{
 		Kind:          "analysis_daily",
-		TriggeredBy:   currentUserID(r),
+		TriggeredBy:   currentUserID(c),
 		Start:         start,
 		End:           time.Now(),
 		IngestionOK:   true,
@@ -588,7 +603,7 @@ func (s *Server) handleAnalysisDaily(w http.ResponseWriter, r *http.Request) {
 		AnalysisErr:   errorText(runErr),
 	})
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success":          true,
 		"trade_date":       tradeDate.Format("2006-01-02"),
 		"total":            stats.total,
@@ -598,28 +613,25 @@ func (s *Server) handleAnalysisDaily(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleAnalysisQuery(w http.ResponseWriter, r *http.Request) {
-	tradeDateStr := r.URL.Query().Get("trade_date")
+func (s *Server) handleAnalysisQuery(c *gin.Context) {
+	tradeDateStr := c.Query("trade_date")
 	if tradeDateStr == "" {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "trade_date required")
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "trade_date required", "error_code": errCodeBadRequest})
 		return
 	}
 	tradeDate, err := time.Parse("2006-01-02", tradeDateStr)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid trade_date")
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid trade_date", "error_code": errCodeBadRequest})
 		return
 	}
-	timeframe := r.URL.Query().Get("timeframe")
-	if timeframe == "" {
-		timeframe = "1d"
-	}
-	limit := parseIntDefault(r.URL.Query().Get("limit"), 100)
+	timeframe := s.getTimeframe(c, "1d")
+	limit := parseIntDefault(c.Query("limit"), 100)
 	if limit > 1000 {
 		limit = 1000
 	}
-	offset := parseIntDefault(r.URL.Query().Get("offset"), 0)
+	offset := parseIntDefault(c.Query("offset"), 0)
 
-	out, err := s.queryUC.QueryByDate(r.Context(), analysis.QueryByDateInput{
+	out, err := s.queryUC.QueryByDate(c.Request.Context(), analysis.QueryByDateInput{
 		Date: tradeDate,
 		Filter: analysis.QueryFilter{
 			OnlySuccess: true,
@@ -632,11 +644,11 @@ func (s *Server) handleAnalysisQuery(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		log.Printf("analysis query failed date=%s: %v", tradeDate.Format("2006-01-02"), err)
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "internal error")
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "internal error", "error_code": errCodeInternal})
 		return
 	}
 	if out.Total == 0 {
-		writeError(w, http.StatusNotFound, errCodeAnalysisNotReady, "analysis results not ready for trade_date")
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "analysis results not ready for trade_date", "error_code": errCodeAnalysisNotReady})
 		return
 	}
 
@@ -658,14 +670,14 @@ func (s *Server) handleAnalysisQuery(w http.ResponseWriter, r *http.Request) {
 			ClosePrice:    r.Close,
 			ChangePercent: r.ChangeRate,
 			Return5d:      r.Return5,
-			Volume:        r.Volume,
+			Volume:        int64(r.Volume),
 			VolumeRatio:   r.VolumeMultiple,
 			Score:         r.Score,
 		})
 	}
 
 	log.Printf("analysis query done date=%s total=%d limit=%d offset=%d", tradeDate.Format("2006-01-02"), out.Total, limit, offset)
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success":     true,
 		"trade_date":  tradeDate.Format("2006-01-02"),
 		"total_count": out.Total,
@@ -673,55 +685,29 @@ func (s *Server) handleAnalysisQuery(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleAnalysisHistory(w http.ResponseWriter, r *http.Request) {
-	symbol := strings.TrimSpace(r.URL.Query().Get("symbol"))
-	if symbol == "" {
-		symbol = "BTCUSDT"
-	}
-
-	var startDate *time.Time
-	startDateStr := r.URL.Query().Get("start_date")
-	if startDateStr != "" {
-		val, err := time.Parse("2006-01-02", startDateStr)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid start_date")
-			return
-		}
-		startDate = &val
-	}
-	var endDate *time.Time
-	endDateStr := r.URL.Query().Get("end_date")
-	if endDateStr != "" {
-		val, err := time.Parse("2006-01-02", endDateStr)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid end_date")
-			return
-		}
-		endDate = &val
-	}
-	if startDate != nil && endDate != nil && endDate.Before(*startDate) {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "end_date must be after start_date")
+func (s *Server) handleAnalysisHistory(c *gin.Context) {
+	symbol := s.getSymbol(c)
+	startDate, endDate, err := s.parseDateRange(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error(), "error_code": errCodeBadRequest})
 		return
 	}
 
-	limit := parseIntDefault(r.URL.Query().Get("limit"), 1000)
-	onlySuccess := parseBoolDefault(r.URL.Query().Get("only_success"), true)
-	timeframe := r.URL.Query().Get("timeframe")
-	if timeframe == "" {
-		timeframe = "1d"
-	}
+	limit := parseIntDefault(c.Query("limit"), 1000)
+	onlySuccess := parseBoolDefault(c.Query("only_success"), true)
+	timeframe := s.getTimeframe(c, "1d")
 
-	out, err := s.queryUC.QueryHistory(r.Context(), analysis.QueryHistoryInput{
+	out, err := s.queryUC.QueryHistory(c.Request.Context(), analysis.QueryHistoryInput{
 		Symbol:      symbol,
 		Timeframe:   timeframe,
-		From:        startDate,
-		To:          endDate,
+		From:        &startDate,
+		To:          &endDate,
 		Limit:       limit,
 		OnlySuccess: onlySuccess,
 	})
 	if err != nil {
 		log.Printf("analysis history failed symbol=%s: %v", symbol, err)
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "internal error")
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "internal error", "error_code": errCodeInternal})
 		return
 	}
 
@@ -750,7 +736,7 @@ func (s *Server) handleAnalysisHistory(w http.ResponseWriter, r *http.Request) {
 			ClosePrice:    r.Close,
 			ChangePercent: r.ChangeRate,
 			Return5d:      r.Return5,
-			Volume:        r.Volume,
+			Volume:        int64(r.Volume),
 			VolumeRatio:   r.VolumeMultiple,
 			Score:         r.Score,
 			Success:       r.Success,
@@ -759,10 +745,10 @@ func (s *Server) handleAnalysisHistory(w http.ResponseWriter, r *http.Request) {
 
 	respStart := ""
 	respEnd := ""
-	if startDate != nil {
+	if !startDate.IsZero() {
 		respStart = startDate.Format("2006-01-02")
 	}
-	if endDate != nil {
+	if !endDate.IsZero() {
 		respEnd = endDate.Format("2006-01-02")
 	}
 	if respStart == "" && len(out) > 0 {
@@ -772,7 +758,7 @@ func (s *Server) handleAnalysisHistory(w http.ResponseWriter, r *http.Request) {
 		respEnd = out[len(out)-1].TradeDate.Format("2006-01-02")
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success":     true,
 		"symbol":      symbol,
 		"start_date":  respStart,
@@ -782,13 +768,13 @@ func (s *Server) handleAnalysisHistory(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleAnalysisSummary(w http.ResponseWriter, r *http.Request) {
-	latestDate, err := s.dataRepo.LatestAnalysisDate(r.Context())
+func (s *Server) handleAnalysisSummary(c *gin.Context) {
+	latestDate, err := s.dataRepo.LatestAnalysisDate(c.Request.Context())
 	if err != nil || latestDate.IsZero() {
-		writeError(w, http.StatusNotFound, errCodeAnalysisNotReady, "analysis results not ready")
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "analysis results not ready", "error_code": errCodeAnalysisNotReady})
 		return
 	}
-	out, err := s.queryUC.QueryByDate(r.Context(), analysis.QueryByDateInput{
+	out, err := s.queryUC.QueryByDate(c.Request.Context(), analysis.QueryByDateInput{
 		Date: latestDate,
 		Filter: analysis.QueryFilter{
 			OnlySuccess: true,
@@ -799,7 +785,7 @@ func (s *Server) handleAnalysisSummary(w http.ResponseWriter, r *http.Request) {
 		},
 	})
 	if err != nil || len(out.Results) == 0 {
-		writeError(w, http.StatusNotFound, errCodeAnalysisNotReady, "analysis results not ready")
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "analysis results not ready", "error_code": errCodeAnalysisNotReady})
 		return
 	}
 
@@ -825,7 +811,7 @@ func (s *Server) handleAnalysisSummary(w http.ResponseWriter, r *http.Request) {
 		advice = "偏空：宜觀望或減碼，避免追價。"
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success":      true,
 		"trade_date":   latestDate.Format("2006-01-02"),
 		"trading_pair": best.Symbol,
@@ -841,21 +827,21 @@ func (s *Server) handleAnalysisSummary(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleAnalysisBacktest(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAnalysisBacktest(c *gin.Context) {
 	var body analysisBacktestRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid body", "error_code": errCodeBadRequest})
 		return
 	}
 	input, err := normalizeBacktestRequest(body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error(), "error_code": errCodeBadRequest})
 		return
 	}
 
-	history, err := s.dataRepo.FindHistory(r.Context(), input.symbol, input.timeframe, &input.startDate, &input.endDate, 5000, true)
+	history, err := s.dataRepo.FindHistory(c.Request.Context(), input.symbol, input.timeframe, &input.startDate, &input.endDate, 5000, true)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "query history failed")
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "query history failed", "error_code": errCodeInternal})
 		return
 	}
 	sort.Slice(history, func(i, j int) bool {
@@ -1006,7 +992,7 @@ func (s *Server) handleAnalysisBacktest(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success":      true,
 		"symbol":       input.symbol,
 		"start_date":   input.startDate.Format("2006-01-02"),
@@ -1029,21 +1015,21 @@ type slugBacktestRequest struct {
 	EndDate   string `json:"end_date"`
 }
 
-func (s *Server) handleSlugBacktest(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSlugBacktest(c *gin.Context) {
 	var body slugBacktestRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid body", "error_code": errCodeBadRequest})
 		return
 	}
 
 	start, err := time.Parse("2006-01-02", body.StartDate)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid start_date")
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid start_date", "error_code": errCodeBadRequest})
 		return
 	}
 	end, err := time.Parse("2006-01-02", body.EndDate)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid end_date")
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid end_date", "error_code": errCodeBadRequest})
 		return
 	}
 	symbol := strings.ToUpper(body.Symbol)
@@ -1052,62 +1038,66 @@ func (s *Server) handleSlugBacktest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.scoringBtUC == nil {
-		writeError(w, http.StatusNotFound, errCodeNotFound, "database storage not available")
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "database storage not available", "error_code": errCodeNotFound})
 		return
 	}
-	res, err := s.scoringBtUC.Execute(r.Context(), body.Slug, symbol, start, end)
+	res, err := s.scoringBtUC.Execute(c.Request.Context(), body.Slug, symbol, start, end)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error(), "error_code": errCodeInternal})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"result":  res,
 	})
 }
 
-func (s *Server) handleStrategyExecute(w http.ResponseWriter, r *http.Request) {
-	slug := strings.TrimPrefix(r.URL.Path, "/api/admin/strategies/execute/")
+func (s *Server) handleStrategyExecute(c *gin.Context) {
+	slug := c.Param("slug")
 	if slug == "" {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "slug is required")
+		// Fallback for non-param route if needed
+		slug = strings.TrimPrefix(c.Request.URL.Path, "/api/admin/strategies/execute/")
+	}
+	if slug == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "slug is required", "error_code": errCodeBadRequest})
 		return
 	}
 
 	// 預設執行環境為 Test (Binance Testnet)
 	env := tradingDomain.EnvTest
-	if r.URL.Query().Get("env") == "prod" {
+	if c.Query("env") == "prod" {
 		env = tradingDomain.EnvProd
 	}
 
-	userID := currentUserID(r)
+	userID := currentUserID(c)
 	if userID == "" {
 		userID = "00000000-0000-0000-0000-000000000001" // Fallback admin
 	}
 
-	err := s.tradingSvc.ExecuteScoringAutoTrade(r.Context(), slug, env, userID)
+	err := s.tradingSvc.ExecuteScoringAutoTrade(c.Request.Context(), slug, env, userID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error(), "error_code": errCodeInternal})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "Strategy check executed",
 	})
 }
 
-func (s *Server) handleListScoringStrategies(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleListScoringStrategies(c *gin.Context) {
 	if s.db == nil {
-		writeJSON(w, http.StatusOK, map[string]interface{}{
+		c.JSON(http.StatusOK, gin.H{
 			"success":    true,
 			"strategies": []interface{}{},
 		})
 		return
 	}
-	userID := currentUserID(r)
+	userID := currentUserID(c)
 	// 查詢使用者自己的策略，或者是系統預設策略 (由 admin@example.com 擁有)
-	rows, err := s.db.QueryContext(r.Context(), `
+	rows, err := s.db.QueryContext(c.Request.Context(), `
 		SELECT id, name, slug, threshold, env, is_active, updated_at 
 		FROM strategies 
 		WHERE slug IS NOT NULL 
@@ -1116,7 +1106,7 @@ func (s *Server) handleListScoringStrategies(w http.ResponseWriter, r *http.Requ
 	`, userID)
 
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "failed to query strategies")
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "failed to query strategies", "error_code": errCodeInternal})
 		return
 	}
 	defer rows.Close()
@@ -1140,127 +1130,125 @@ func (s *Server) handleListScoringStrategies(w http.ResponseWriter, r *http.Requ
 		list = append(list, i)
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success":    true,
 		"strategies": list,
 	})
 }
 
-func (s *Server) handleSaveScoringStrategy(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSaveScoringStrategy(c *gin.Context) {
 	var body appStrategy.SaveScoringStrategyInput
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid body", "error_code": errCodeBadRequest})
 		return
 	}
 
 	if body.Slug == "" || body.Name == "" {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "name and slug are required")
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "name and slug are required", "error_code": errCodeBadRequest})
 		return
 	}
 
-	body.UserID = currentUserID(r)
+	body.UserID = currentUserID(c)
 	if s.saveScoringBtUC == nil {
-		writeError(w, http.StatusNotFound, errCodeNotFound, "database storage not available")
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "database storage not available", "error_code": errCodeNotFound})
 		return
 	}
-	if err := s.saveScoringBtUC.Execute(r.Context(), body); err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
+	if err := s.saveScoringBtUC.Execute(c.Request.Context(), body); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error(), "error_code": errCodeInternal})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 	})
 }
 
-func (s *Server) handleGetScoringStrategy(w http.ResponseWriter, r *http.Request) {
-	slug := r.URL.Query().Get("slug")
+func (s *Server) handleGetScoringStrategy(c *gin.Context) {
+	slug := c.Query("slug")
 	if slug == "" {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "slug is required")
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "slug is required", "error_code": errCodeBadRequest})
 		return
 	}
 
 	if s.db == nil {
-		writeError(w, http.StatusNotFound, errCodeNotFound, "database not available")
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "database not available", "error_code": errCodeNotFound})
 		return
 	}
-	strat, err := strategy.LoadScoringStrategyBySlug(r.Context(), s.db, slug)
+	strat, err := strategy.LoadScoringStrategyBySlug(c.Request.Context(), s.db, slug)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error(), "error_code": errCodeInternal})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success":  true,
 		"strategy": strat,
 	})
 }
 
 
-func (s *Server) handleGetBacktestPreset(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleGetBacktestPreset(c *gin.Context) {
 	if s.presetStore == nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "preset store not ready")
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "preset store not ready", "error_code": errCodeInternal})
 		return
 	}
-	userID := currentUserID(r)
-	raw, err := s.presetStore.Load(r.Context(), userID)
+	userID := currentUserID(c)
+	raw, err := s.presetStore.Load(c.Request.Context(), userID)
 	if err != nil {
 		if s.presetStore.NotFound(err) {
-			writeJSON(w, http.StatusOK, map[string]interface{}{
+			c.JSON(http.StatusOK, gin.H{
 				"success": true,
 				"message": "尚無預設",
 			})
 			return
 		}
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "load preset failed")
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "load preset failed", "error_code": errCodeInternal})
 		return
 	}
 	var preset analysisBacktestRequest
 	if err := json.Unmarshal(raw, &preset); err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "invalid preset data")
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "invalid preset data", "error_code": errCodeInternal})
 		return
 	}
 	if len(preset.Horizons) == 0 {
 		preset.Horizons = []int{3, 5, 10}
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"preset":  preset,
 	})
 }
 
-func (s *Server) handleSaveBacktestPreset(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSaveBacktestPreset(c *gin.Context) {
 	if s.presetStore == nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "preset store not ready")
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "preset store not ready", "error_code": errCodeInternal})
 		return
 	}
 	var body analysisBacktestRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid body", "error_code": errCodeBadRequest})
 		return
 	}
 	input, err := normalizeBacktestRequest(body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error(), "error_code": errCodeBadRequest})
 		return
 	}
 	payload, err := json.Marshal(input.req)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "encode preset failed")
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "encode preset failed", "error_code": errCodeInternal})
 		return
 	}
-	if err := s.presetStore.Save(r.Context(), currentUserID(r), payload); err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "save preset failed")
+	if err := s.presetStore.Save(c.Request.Context(), currentUserID(c), payload); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "save preset failed", "error_code": errCodeInternal})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 	})
 }
 
-func (s *Server) handleStrongStocks(w http.ResponseWriter, r *http.Request) {
-	// 已移除強勢篩選功能。
-}
+// handleStrongStocks removed.
 
 func normalizeBacktestRequest(req analysisBacktestRequest) (parsedBacktestInput, error) {
 	var out parsedBacktestInput
@@ -1458,7 +1446,7 @@ func calcForwardReturns(history []analysisDomain.DailyAnalysisResult, idx int, h
 	return out
 }
 
-func (s *Server) handleJobsStatus(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleJobsStatus(c *gin.Context) {
 	loc := taipeiLocation()
 	s.jobMu.Lock()
 	var last *jobRun
@@ -1476,7 +1464,7 @@ func (s *Server) handleJobsStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	s.jobMu.Unlock()
 
-	resp := map[string]interface{}{
+	resp := gin.H{
 		"success":               true,
 		"next_run":              nextRun,
 		"retry_strategy":        []string{"20:00", "20:30"},
@@ -1488,11 +1476,11 @@ func (s *Server) handleJobsStatus(w http.ResponseWriter, r *http.Request) {
 	if last != nil {
 		resp["last_run"] = jobRunToMap(*last, loc)
 	}
-	writeJSON(w, http.StatusOK, resp)
+	c.JSON(http.StatusOK, resp)
 }
 
-func (s *Server) handleJobsHistory(w http.ResponseWriter, r *http.Request) {
-	limit := parseIntDefault(r.URL.Query().Get("limit"), 20)
+func (s *Server) handleJobsHistory(c *gin.Context) {
+	limit := parseIntDefault(c.Query("limit"), 20)
 	if limit <= 0 {
 		limit = 20
 	}
@@ -1516,7 +1504,7 @@ func (s *Server) handleJobsHistory(w http.ResponseWriter, r *http.Request) {
 		items = append(items, jobRunToMap(history[i], loc))
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"total":   len(items),
 		"items":   items,
@@ -1525,149 +1513,90 @@ func (s *Server) handleJobsHistory(w http.ResponseWriter, r *http.Request) {
 
 // --- Strategies / Backtest / Trades ---
 
-func (s *Server) handleCreateStrategy(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleCreateStrategy(c *gin.Context) {
 	var body tradingDomain.Strategy
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid body", "error_code": errCodeBadRequest})
 		return
 	}
-	userID := currentUserID(r)
+	userID := currentUserID(c)
 	if userID == "" {
-		writeError(w, http.StatusUnauthorized, errCodeUnauthorized, "missing user")
+		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": "missing user", "error_code": errCodeUnauthorized})
 		return
 	}
 	body.CreatedBy = userID
 	body.UpdatedBy = userID
-	strat, err := s.tradingSvc.CreateStrategy(r.Context(), body)
+	strat, err := s.tradingSvc.CreateStrategy(c.Request.Context(), body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error(), "error_code": errCodeBadRequest})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success":  true,
 		"strategy": strat,
 	})
 }
 
-func (s *Server) handleListStrategies(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
+func (s *Server) handleListStrategies(c *gin.Context) {
 	filter := trading.StrategyFilter{
-		Name: q.Get("name"),
+		Name: c.Query("name"),
 	}
-	if status := q.Get("status"); status != "" {
+	if status := c.Query("status"); status != "" {
 		filter.Status = tradingDomain.Status(status)
 	}
-	if env := q.Get("env"); env != "" {
+	if env := c.Query("env"); env != "" {
 		filter.Env = tradingDomain.Environment(env)
 	}
-	list, err := s.tradingSvc.ListStrategies(r.Context(), filter)
+	list, err := s.tradingSvc.ListStrategies(c.Request.Context(), filter)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "list strategies failed")
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "list strategies failed", "error_code": errCodeInternal})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success":    true,
 		"strategies": list,
 	})
 }
 
-func (s *Server) handleStrategyRoute(w http.ResponseWriter, r *http.Request) {
-	id, tail := parseStrategyPath(r.URL.Path)
-	if id == "" {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "strategy id required")
-		return
-	}
-	switch tail {
-	case "":
-		s.handleStrategyGetOrUpdate(w, r, id)
-	case "backtest":
-		if r.Method != http.MethodPost {
-			writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
-			return
-		}
-		s.handleStrategyBacktest(w, r, id)
-	case "backtests":
-		if r.Method != http.MethodGet {
-			writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
-			return
-		}
-		s.handleListStrategyBacktests(w, r, id)
-	case "run":
-		if r.Method != http.MethodPost {
-			writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
-			return
-		}
-		s.handleRunStrategy(w, r, id)
-	case "activate":
-		if r.Method != http.MethodPost {
-			writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
-			return
-		}
-		s.handleActivateStrategy(w, r, id)
-	case "deactivate":
-		if r.Method != http.MethodPost {
-			writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
-			return
-		}
-		s.handleDeactivateStrategy(w, r, id)
-	case "reports":
-		switch r.Method {
-		case http.MethodGet:
-			s.handleListReports(w, r, id)
-		case http.MethodPost:
-			s.handleCreateReport(w, r, id)
-		default:
-			writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
-		}
-	case "logs":
-		if r.Method != http.MethodGet {
-			writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
-			return
-		}
-		s.handleListLogs(w, r, id)
-	default:
-		writeError(w, http.StatusNotFound, errCodeNotFound, "not found")
-	}
-}
 
-func (s *Server) handleStrategyGetOrUpdate(w http.ResponseWriter, r *http.Request, id string) {
-	switch r.Method {
+func (s *Server) handleStrategyGetOrUpdate(c *gin.Context, id string) {
+	switch c.Request.Method {
 	case http.MethodGet:
-		strat, err := s.tradingSvc.GetStrategy(r.Context(), id)
+		strat, err := s.tradingSvc.GetStrategy(c.Request.Context(), id)
 		if err != nil {
-			writeError(w, http.StatusNotFound, errCodeNotFound, "strategy not found")
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "strategy not found", "error_code": errCodeNotFound})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]interface{}{
+		c.JSON(http.StatusOK, gin.H{
 			"success":  true,
 			"strategy": strat,
 		})
 	case http.MethodDelete:
-		if err := s.tradingSvc.DeleteStrategy(r.Context(), id); err != nil {
-			writeError(w, http.StatusBadRequest, errCodeBadRequest, err.Error())
+		if err := s.tradingSvc.DeleteStrategy(c.Request.Context(), id); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error(), "error_code": errCodeBadRequest})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]interface{}{
+		c.JSON(http.StatusOK, gin.H{
 			"success": true,
 		})
 	case http.MethodPut:
 		var body tradingDomain.Strategy
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid body", "error_code": errCodeBadRequest})
 			return
 		}
-		body.UpdatedBy = currentUserID(r)
-		strat, err := s.tradingSvc.UpdateStrategy(r.Context(), id, body)
+		body.UpdatedBy = currentUserID(c)
+		strat, err := s.tradingSvc.UpdateStrategy(c.Request.Context(), id, body)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, errCodeBadRequest, err.Error())
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error(), "error_code": errCodeBadRequest})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]interface{}{
+		c.JSON(http.StatusOK, gin.H{
 			"success":  true,
 			"strategy": strat,
 		})
 	default:
-		writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
+		c.JSON(http.StatusMethodNotAllowed, gin.H{"success": false, "error": "method not allowed", "error_code": errCodeMethodNotAllowed})
 	}
 }
 
@@ -1687,103 +1616,104 @@ type strategyBacktestRequest struct {
 	Strategy        *tradingDomain.Strategy `json:"strategy,omitempty"`
 }
 
-func (s *Server) handleStrategyBacktest(w http.ResponseWriter, r *http.Request, strategyID string) {
+func (s *Server) handleStrategyBacktest(c *gin.Context, strategyID string) {
 	var body strategyBacktestRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid body", "error_code": errCodeBadRequest})
 		return
 	}
 	input, err := buildBacktestInput(body, strategyID, nil)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error(), "error_code": errCodeBadRequest})
 		return
 	}
 	input.Save = true
-	input.CreatedBy = currentUserID(r)
-	rec, err := s.tradingSvc.Backtest(r.Context(), input)
+	input.CreatedBy = currentUserID(c)
+	rec, err := s.tradingSvc.Backtest(c.Request.Context(), input)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error(), "error_code": errCodeInternal})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"result":  rec,
 	})
 }
 
-func (s *Server) handleInlineBacktest(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleInlineBacktest(c *gin.Context) {
 	var body strategyBacktestRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid body", "error_code": errCodeBadRequest})
 		return
 	}
 	if body.Strategy == nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "strategy required")
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "strategy required", "error_code": errCodeBadRequest})
 		return
 	}
 	input, err := buildBacktestInput(body, "", body.Strategy)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error(), "error_code": errCodeBadRequest})
 		return
 	}
 	input.Save = false
-	input.CreatedBy = currentUserID(r)
-	rec, err := s.tradingSvc.Backtest(r.Context(), input)
+	input.CreatedBy = currentUserID(c)
+	rec, err := s.tradingSvc.Backtest(c.Request.Context(), input)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error(), "error_code": errCodeInternal})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"result":  rec,
 	})
 }
 
-func (s *Server) handleListStrategyBacktests(w http.ResponseWriter, r *http.Request, strategyID string) {
-	list, err := s.tradingSvc.ListBacktests(r.Context(), strategyID)
+func (s *Server) handleListStrategyBacktests(c *gin.Context, strategyID string) {
+	list, err := s.tradingSvc.ListBacktests(c.Request.Context(), strategyID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "list backtests failed")
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "list backtests failed", "error_code": errCodeInternal})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success":   true,
 		"backtests": list,
 	})
 }
 
-func (s *Server) handleRunStrategy(w http.ResponseWriter, r *http.Request, strategyID string) {
+func (s *Server) handleRunStrategy(c *gin.Context, strategyID string) {
 	env := tradingDomain.EnvTest
-	if e := r.URL.Query().Get("env"); e != "" {
+	if e := c.Query("env"); e != "" {
 		env = tradingDomain.Environment(e)
 	}
-	trades, err := s.tradingSvc.RunOnce(r.Context(), strategyID, env, currentUserID(r))
+	_, err := s.tradingSvc.RunOnce(c.Request.Context(), strategyID, env, currentUserID(c))
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error(), "error_code": errCodeInternal})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+
+	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"trades":  trades,
+		"message": "Strategy executed manually",
 	})
 }
 
-func (s *Server) handleActivateStrategy(w http.ResponseWriter, r *http.Request, strategyID string) {
+func (s *Server) handleActivateStrategy(c *gin.Context, strategyID string) {
 	var body struct {
 		Env                string  `json:"env"`
 		AutoStopMinBalance float64 `json:"auto_stop_min_balance"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&body)
+	_ = c.ShouldBindJSON(&body)
 
 	if body.AutoStopMinBalance > 0 {
 		// 嘗試獲取現有策略以更新風控設定
-		rows, err := s.db.QueryContext(r.Context(), "SELECT risk_settings FROM strategies WHERE id = $1", strategyID)
+		rows, err := s.db.QueryContext(c.Request.Context(), "SELECT risk_settings FROM strategies WHERE id = $1", strategyID)
 		if err == nil && rows.Next() {
 			var riskRaw []byte
 			if err := rows.Scan(&riskRaw); err == nil {
 				var risk tradingDomain.RiskSettings
 				_ = json.Unmarshal(riskRaw, &risk)
 				risk.AutoStopMinBalance = body.AutoStopMinBalance
-				_ = s.tradingSvc.UpdateRiskSettings(r.Context(), strategyID, risk)
+				_ = s.tradingSvc.UpdateRiskSettings(c.Request.Context(), strategyID, risk)
 			}
 			rows.Close()
 		}
@@ -1793,101 +1723,100 @@ func (s *Server) handleActivateStrategy(w http.ResponseWriter, r *http.Request, 
 	if env == "" {
 		env = s.defaultEnv
 	}
-	if err := s.tradingSvc.SetStatus(r.Context(), strategyID, tradingDomain.StatusActive, env); err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
+	if err := s.tradingSvc.SetStatus(c.Request.Context(), strategyID, tradingDomain.StatusActive, env); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error(), "error_code": errCodeInternal})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"env":     env,
 		"status":  tradingDomain.StatusActive,
 	})
 }
 
-func (s *Server) handleDeactivateStrategy(w http.ResponseWriter, r *http.Request, strategyID string) {
-	if err := s.tradingSvc.SetStatus(r.Context(), strategyID, tradingDomain.StatusDraft, ""); err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
+func (s *Server) handleDeactivateStrategy(c *gin.Context, strategyID string) {
+	if err := s.tradingSvc.SetStatus(c.Request.Context(), strategyID, tradingDomain.StatusDraft, ""); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error(), "error_code": errCodeInternal})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"status":  tradingDomain.StatusDraft,
 	})
 }
 
-func (s *Server) handleListTrades(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
+func (s *Server) handleListTrades(c *gin.Context) {
 	var startPtr, endPtr *time.Time
-	if v := q.Get("start_date"); v != "" {
+	if v := c.Query("start_date"); v != "" {
 		t, err := time.Parse("2006-01-02", v)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid start_date")
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid start_date", "error_code": errCodeBadRequest})
 			return
 		}
 		startPtr = &t
 	}
-	if v := q.Get("end_date"); v != "" {
+	if v := c.Query("end_date"); v != "" {
 		t, err := time.Parse("2006-01-02", v)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid end_date")
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid end_date", "error_code": errCodeBadRequest})
 			return
 		}
 		endPtr = &t
 	}
 	filter := tradingDomain.TradeFilter{
-		StrategyID: q.Get("strategy_id"),
-		Env:        tradingDomain.Environment(q.Get("env")),
+		StrategyID: c.Query("strategy_id"),
+		Env:        tradingDomain.Environment(c.Query("env")),
 		StartDate:  startPtr,
 		EndDate:    endPtr,
 	}
-	trades, err := s.tradingSvc.ListTrades(r.Context(), filter)
+	trades, err := s.tradingSvc.ListTrades(c.Request.Context(), filter)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "list trades failed")
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "list trades failed", "error_code": errCodeInternal})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"trades":  trades,
 	})
 }
-func (s *Server) handleManualBuy(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleManualBuy(c *gin.Context) {
 	var body struct {
 		Symbol string  `json:"symbol"`
 		Amount float64 `json:"amount"`
 		Env    string  `json:"env"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid body", "error_code": errCodeBadRequest})
 		return
 	}
 	if body.Symbol == "" || body.Amount <= 0 {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "symbol and amount are required")
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "symbol and amount are required", "error_code": errCodeBadRequest})
 		return
 	}
 	env := tradingDomain.Environment(body.Env)
 	if env == "" {
 		env = tradingDomain.EnvTest
 	}
-	userID := currentUserID(r)
+	userID := currentUserID(c)
 
-	if err := s.tradingSvc.ExecuteManualBuy(r.Context(), body.Symbol, body.Amount, env, userID); err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
+	if err := s.tradingSvc.ExecuteManualBuy(c.Request.Context(), body.Symbol, body.Amount, env, userID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error(), "error_code": errCodeInternal})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 	})
 }
 
 
-func (s *Server) handleListPositions(w http.ResponseWriter, r *http.Request) {
-	positions, err := s.tradingSvc.ListPositions(r.Context())
+func (s *Server) handleListPositions(c *gin.Context) {
+	positions, err := s.tradingSvc.ListPositions(c.Request.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "list positions failed")
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "list positions failed", "error_code": errCodeInternal})
 		return
 	}
-	envFilter := tradingDomain.Environment(r.URL.Query().Get("env"))
+	envFilter := tradingDomain.Environment(c.Query("env"))
 	if envFilter != "" {
 		filtered := make([]tradingDomain.Position, 0, len(positions))
 		for _, p := range positions {
@@ -1897,7 +1826,7 @@ func (s *Server) handleListPositions(w http.ResponseWriter, r *http.Request) {
 		}
 		positions = filtered
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success":   true,
 		"positions": positions,
 	})
@@ -1911,20 +1840,20 @@ type reportRequest struct {
 	TradesRef   interface{} `json:"trades_ref"`
 }
 
-func (s *Server) handleCreateReport(w http.ResponseWriter, r *http.Request, strategyID string) {
+func (s *Server) handleCreateReport(c *gin.Context, strategyID string) {
 	var body reportRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid body", "error_code": errCodeBadRequest})
 		return
 	}
 	start, err := time.Parse("2006-01-02", body.PeriodStart)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid period_start")
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid period_start", "error_code": errCodeBadRequest})
 		return
 	}
 	end, err := time.Parse("2006-01-02", body.PeriodEnd)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid period_end")
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid period_end", "error_code": errCodeBadRequest})
 		return
 	}
 	rep := tradingDomain.Report{
@@ -1934,46 +1863,46 @@ func (s *Server) handleCreateReport(w http.ResponseWriter, r *http.Request, stra
 		PeriodEnd:   end,
 		Summary:     body.Summary,
 		TradesRef:   body.TradesRef,
-		CreatedBy:   currentUserID(r),
+		CreatedBy:   currentUserID(c),
 		CreatedAt:   time.Now(),
 	}
-	id, err := s.tradingSvc.SaveReport(r.Context(), rep)
+	id, err := s.tradingSvc.SaveReport(c.Request.Context(), rep)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "save report failed")
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "save report failed", "error_code": errCodeInternal})
 		return
 	}
 	rep.ID = id
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"report":  rep,
 	})
 }
 
-func (s *Server) handleListReports(w http.ResponseWriter, r *http.Request, strategyID string) {
-	reps, err := s.tradingSvc.ListReports(r.Context(), strategyID)
+func (s *Server) handleListReports(c *gin.Context, strategyID string) {
+	reps, err := s.tradingSvc.ListReports(c.Request.Context(), strategyID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "list reports failed")
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "list reports failed", "error_code": errCodeInternal})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"reports": reps,
 	})
 }
 
-func (s *Server) handleListLogs(w http.ResponseWriter, r *http.Request, strategyID string) {
-	env := tradingDomain.Environment(r.URL.Query().Get("env"))
-	limit := parseIntDefault(r.URL.Query().Get("limit"), 50)
-	logs, err := s.tradingSvc.ListLogs(r.Context(), tradingDomain.LogFilter{
+func (s *Server) handleListLogs(c *gin.Context, strategyID string) {
+	env := tradingDomain.Environment(c.Query("env"))
+	limit := parseIntDefault(c.Query("limit"), 50)
+	logs, err := s.tradingSvc.ListLogs(c.Request.Context(), tradingDomain.LogFilter{
 		StrategyID: strategyID,
 		Env:        env,
 		Limit:      limit,
 	})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "list logs failed")
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "list logs failed", "error_code": errCodeInternal})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"logs":    logs,
 	})
@@ -2242,36 +2171,19 @@ func (s *Server) runPipelineOnce() {
 
 // --- Helpers ---
 
-func (s *Server) setRefreshCookie(w http.ResponseWriter, r *http.Request, token string, expiry time.Time) {
+func (s *Server) setRefreshCookie(c *gin.Context, token string, expiry time.Time) {
 	// 為了透過 ngrok/https 跨網域攜帶 cookie，強制使用 SameSite=None 且 Secure=true。
-	sameSite := http.SameSiteNoneMode
-	useHTTPS := true
 	if token == "" {
-		http.SetCookie(w, &http.Cookie{
-			Name:     refreshCookieName,
-			Value:    "",
-			Path:     "/",
-			MaxAge:   -1,
-			HttpOnly: true,
-			SameSite: sameSite,
-			Secure:   useHTTPS,
-		})
+		c.SetSameSite(http.SameSiteNoneMode)
+		c.SetCookie(refreshCookieName, "", -1, "/", "", true, true)
 		return
 	}
 	seconds := int(time.Until(expiry).Seconds())
-	if seconds <= 0 {
+	if seconds < 0 {
 		seconds = 0
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     refreshCookieName,
-		Value:    token,
-		Path:     "/",
-		Expires:  expiry,
-		MaxAge:   seconds,
-		HttpOnly: true,
-		SameSite: sameSite,
-		Secure:   useHTTPS,
-	})
+	c.SetSameSite(http.SameSiteNoneMode)
+	c.SetCookie(refreshCookieName, token, seconds, "/", "", true, true)
 }
 
 func errorString(err error) interface{} {
@@ -2357,83 +2269,48 @@ func clientIP(r *http.Request) string {
 	return r.RemoteAddr
 }
 
-func (s *Server) requireAuth(perm auth.Permission, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := parseBearer(r.Header.Get("Authorization"))
+func (s *Server) requireAuth(perm auth.Permission) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		token := parseBearer(c.GetHeader("Authorization"))
 		if token == "" {
-			writeError(w, http.StatusUnauthorized, errCodeUnauthorized, "missing token")
+			c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": "unauthorized", "error_code": errCodeUnauthorized})
+			c.Abort()
 			return
 		}
 		claims, err := s.tokenSvc.ParseAccessToken(token)
 		if err != nil {
-			writeError(w, http.StatusUnauthorized, errCodeUnauthorized, "invalid token")
+			c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": "invalid token", "error_code": errCodeUnauthorized})
+			c.Abort()
 			return
 		}
-		user, err := s.authRepo.FindByID(r.Context(), claims.UserID)
+		user, err := s.authRepo.FindByID(c.Request.Context(), claims.UserID)
 		if err != nil {
-			writeError(w, http.StatusUnauthorized, errCodeUnauthorized, "invalid token")
+			c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": "invalid token", "error_code": errCodeUnauthorized})
+			c.Abort()
 			return
 		}
-		res, err := s.authz.Authorize(r.Context(), auth.AuthorizeInput{
+		res, err := s.authz.Authorize(c.Request.Context(), auth.AuthorizeInput{
 			UserID:   user.ID,
 			Required: []auth.Permission{perm},
 		})
 		if err != nil {
 			log.Printf("auth check failed user_id=%s: %v", user.ID, err)
-			writeError(w, http.StatusInternalServerError, errCodeInternal, "internal error")
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "internal error", "error_code": errCodeInternal})
+			c.Abort()
 			return
 		}
 		if !res.Allowed {
-			writeError(w, http.StatusForbidden, errCodeForbidden, "forbidden")
+			c.JSON(http.StatusForbidden, gin.H{"success": false, "error": "forbidden", "error_code": errCodeForbidden})
+			c.Abort()
 			return
 		}
-		w.Header().Set("X-User-Role", string(user.Role))
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKeyUserID{}, user.ID)))
-	})
+		c.Set("userID", user.ID)
+		c.Header("X-User-Role", string(user.Role))
+		c.Next()
+	}
 }
 
-type ctxKeyUserID struct{}
 
-func (s *Server) wrapGet(next http.HandlerFunc) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-func (s *Server) wrapPost(next http.HandlerFunc) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-func (s *Server) wrapDelete(next http.HandlerFunc) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodDelete {
-			writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-func (s *Server) wrapMethods(handlers map[string]http.HandlerFunc) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h, ok := handlers[r.Method]
-		if !ok {
-			writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
-			return
-		}
-		h.ServeHTTP(w, r)
-	})
-}
 
 func parseBearer(h string) string {
 	if h == "" {
@@ -2449,8 +2326,8 @@ func parseBearer(h string) string {
 	return parts[1]
 }
 
-func currentUserID(r *http.Request) string {
-	if v := r.Context().Value(ctxKeyUserID{}); v != nil {
+func currentUserID(c *gin.Context) string {
+	if v, ok := c.Get("userID"); ok {
 		if id, ok := v.(string); ok {
 			return id
 		}
@@ -2827,9 +2704,9 @@ func (s *Server) fetchBTCSeries(ctx context.Context, tradeDate time.Time) ([]dat
 	return nil, lastErr
 }
 
-func (s *Server) handleBinanceAccount(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleBinanceAccount(c *gin.Context) {
 	if s.binanceClient == nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, "binance client not initialized")
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "binance client not initialized", "error_code": errCodeInternal})
 		return
 	}
 	info, err := s.binanceClient.GetAccountInfo()
@@ -2837,12 +2714,12 @@ func (s *Server) handleBinanceAccount(w http.ResponseWriter, r *http.Request) {
 		// If we are in Paper mode, don't return an error even if key is invalid.
 		// Return a mock balance instead.
 		if s.defaultEnv == tradingDomain.EnvPaper {
-			writeJSON(w, http.StatusOK, map[string]interface{}{
+			c.JSON(http.StatusOK, gin.H{
 				"success": true,
 				"is_mock": true,
-				"account": map[string]interface{}{
+				"account": gin.H{
 					"accountType": "SPOT",
-					"balances": []map[string]interface{}{
+					"balances": []gin.H{
 						{"asset": "USDT", "free": "0.00", "locked": "0.00"},
 						{"asset": "BTC", "free": "0.000000", "locked": "0.000000"},
 					},
@@ -2850,82 +2727,57 @@ func (s *Server) handleBinanceAccount(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error(), "error_code": errCodeInternal})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"account": info,
 	})
 }
 
-func (s *Server) handleBinancePrice(w http.ResponseWriter, r *http.Request) {
-	symbol := r.URL.Query().Get("symbol")
+func (s *Server) handleBinancePrice(c *gin.Context) {
+	symbol := c.Query("symbol")
 	if symbol == "" {
 		symbol = "BTCUSDT"
 	}
-	price, err := s.tradingSvc.GetExchangePrice(r.Context(), symbol)
+	price, err := s.tradingSvc.GetExchangePrice(c.Request.Context(), symbol)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error(), "error_code": errCodeInternal})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"symbol":  symbol,
 		"price":   price,
 	})
 }
 
-func (s *Server) handlePositionClose(w http.ResponseWriter, r *http.Request, id string) {
-	if err := s.tradingSvc.ClosePositionManually(r.Context(), id); err != nil {
-		writeError(w, http.StatusInternalServerError, errCodeInternal, err.Error())
+func (s *Server) handlePositionClose(c *gin.Context, id string) {
+	if err := s.tradingSvc.ClosePositionManually(c.Request.Context(), id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error(), "error_code": errCodeInternal})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 	})
 }
-func (s *Server) handlePositionRoute(w http.ResponseWriter, r *http.Request) {
-	// Path: /api/admin/positions/:id/:tail
-	parts := strings.Split(r.URL.Path, "/")
-	if len(parts) < 5 {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "position id required")
-		return
-	}
-	// [ , api, admin, positions, {id}, {tail}]
-	id := parts[4]
-	tail := ""
-	if len(parts) > 5 {
-		tail = parts[5]
-	}
 
-	switch tail {
-	case "close":
-		if r.Method != http.MethodPost {
-			writeError(w, http.StatusMethodNotAllowed, errCodeMethodNotAllowed, "method not allowed")
-			return
-		}
-		s.handlePositionClose(w, r, id)
-	default:
-		writeError(w, http.StatusNotFound, errCodeNotFound, "not found")
-	}
-}
-
-func (s *Server) handleGetBinanceConfig(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleGetBinanceConfig(c *gin.Context) {
 	s.configMu.Lock()
 	defer s.configMu.Unlock()
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success":    true,
 		"active_env": s.defaultEnv,
 	})
 }
 
-func (s *Server) handleUpdateBinanceConfig(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleUpdateBinanceConfig(c *gin.Context) {
 	var body struct {
 		ActiveEnv string `json:"active_env"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "invalid body")
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid body", "error_code": errCodeBadRequest})
 		return
 	}
 
@@ -2934,7 +2786,7 @@ func (s *Server) handleUpdateBinanceConfig(w http.ResponseWriter, r *http.Reques
 	switch newEnv {
 	case tradingDomain.EnvProd, tradingDomain.EnvPaper, tradingDomain.EnvTest:
 	default:
-		writeError(w, http.StatusBadRequest, errCodeBadRequest, "unsupported environment")
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "unsupported environment", "error_code": errCodeBadRequest})
 		return
 	}
 
@@ -2946,7 +2798,7 @@ func (s *Server) handleUpdateBinanceConfig(w http.ResponseWriter, r *http.Reques
 	}
 	s.defaultEnv = newEnv
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": fmt.Sprintf("System environment switched to %s", newEnv),
 	})

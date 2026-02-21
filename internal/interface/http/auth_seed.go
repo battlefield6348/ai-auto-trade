@@ -27,13 +27,9 @@ func seedAuth(ctx context.Context, repo auth.UserRepository) error {
 	allPerms := []string{
 		string(auth.PermUserManage),
 		string(auth.PermSystemHealth),
-		string(auth.PermScreener),
-		string(auth.PermScreenerUse),
 		string(auth.PermAnalysisQuery),
 		string(auth.PermStrategy),
-		string(auth.PermSubscription),
 		string(auth.PermInternalAPI),
-		string(auth.PermReportsFull),
 		string(auth.PermIngestionTriggerDaily),
 		string(auth.PermIngestionTriggerBackfill),
 		string(auth.PermAnalysisTriggerDaily),

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,6 +21,8 @@ import (
 	"ai-auto-trade/internal/infrastructure/external/binance"
 	"ai-auto-trade/internal/infrastructure/notify"
 	"ai-auto-trade/internal/infrastructure/persistence/postgres"
+
+	"github.com/gin-gonic/gin"
 )
 
 type backtestPresetStore interface {
@@ -32,10 +35,9 @@ const seedTimeout = 5 * time.Second
 
 // Server 封裝 HTTP 路由與依賴。
 type Server struct {
-	mux           *http.ServeMux
+	engine        *gin.Engine
 	store         *memory.Store
 	loginUC       *auth.LoginUseCase
-	registerUC    *auth.RegisterUseCase
 	logoutUC      *auth.LogoutUseCase
 	authz         *auth.Authorizer
 	queryUC       *analysis.QueryUseCase
@@ -101,7 +103,6 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 	}
 	tokenSvc := authinfra.NewJWTIssuer(cfg.Auth.Secret, ttl, refreshTTL, sessionStore, authRepo)
 	loginUC := auth.NewLoginUseCase(authRepo, authinfra.BcryptHasher{}, tokenSvc)
-	registerUC := auth.NewRegisterUseCase(authRepo, authinfra.BcryptHasher{})
 	logoutUC := auth.NewLogoutUseCase(tokenSvc)
 	authz := auth.NewAuthorizer(authRepo, memory.OwnerChecker{})
 	queryUC := analysis.NewQueryUseCase(dataRepo)
@@ -128,11 +129,14 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 		source = "synthetic"
 	}
 
+	gin.SetMode(gin.ReleaseMode)
+	engine := gin.New()
+	engine.Use(gin.Recovery())
+
 	s := &Server{
-		mux:           http.NewServeMux(),
+		engine:        engine,
 		store:         store,
 		loginUC:       loginUC,
-		registerUC:    registerUC,
 		logoutUC:      logoutUC,
 		authz:         authz,
 		queryUC:       queryUC,
@@ -151,7 +155,6 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 		dataSource:    source,
 		presetStore:   presetStore,
 	}
-
 
 	if db != nil {
 		s.scoringBtUC = appStrategy.NewBacktestUseCase(db, dataRepo)
@@ -190,52 +193,9 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 	return s
 }
 
-type loggingResponseWriter struct {
-	http.ResponseWriter
-	statusCode int
-}
-
-func (lrw *loggingResponseWriter) WriteHeader(code int) {
-	lrw.statusCode = code
-	lrw.ResponseWriter.WriteHeader(code)
-}
-
 // Handler 回傳路由處理器，供 HTTP server 掛載。
 func (s *Server) Handler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-
-		// CORS and OPTIONS handling
-		origin := r.Header.Get("Origin")
-		if origin != "" {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-			w.Header().Set("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
-			w.Header().Add("Vary", "Origin")
-		}
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-
-		// Wrap response writer to capture status code
-		lrw := &loggingResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
-
-		// Process request
-		s.mux.ServeHTTP(lrw, r)
-
-		// Log request similar to Gin's format
-		duration := time.Since(start)
-		log.Printf("[API] %v | %3d | %13v | %15s | %-7s %s",
-			start.Format("2006/01/02 - 15:04:05"),
-			lrw.statusCode,
-			duration,
-			r.RemoteAddr,
-			r.Method,
-			r.URL.Path,
-		)
-	})
+	return s.engine
 }
 
 // Store 主要用於測試注入初始資料。
@@ -244,49 +204,162 @@ func (s *Server) Store() *memory.Store {
 }
 
 func (s *Server) registerRoutes() {
-	s.mux.Handle("/api/ping", s.wrapGet(s.handlePing))
-	s.mux.Handle("/api/health", s.wrapGet(s.handleHealth))
-	s.mux.Handle("/api/auth/login", s.wrapPost(s.handleLogin))
-	// s.mux.Handle("/api/auth/register", s.wrapPost(s.handleRegister)) // Registration disabled for single-user mode
-	s.mux.Handle("/api/auth/refresh", s.wrapPost(s.handleRefresh))
-	s.mux.Handle("/api/auth/logout", s.wrapPost(s.handleLogout))
-	s.mux.Handle("/api/admin/ingestion/daily", s.requireAuth(auth.PermIngestionTriggerDaily, s.wrapPost(s.handleIngestionDaily)))
-	s.mux.Handle("/api/admin/ingestion/backfill", s.requireAuth(auth.PermIngestionTriggerBackfill, s.wrapPost(s.handleIngestionBackfill)))
-	s.mux.Handle("/api/admin/analysis/daily", s.requireAuth(auth.PermAnalysisTriggerDaily, s.wrapPost(s.handleAnalysisDaily)))
-	s.mux.Handle("/api/analysis/daily", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleAnalysisQuery)))
-	s.mux.Handle("/api/analysis/strategies", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleListScoringStrategies)))
-	s.mux.Handle("/api/analysis/strategies/get", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleGetScoringStrategy)))
-	s.mux.Handle("/api/analysis/strategies/save-scoring", s.requireAuth(auth.PermAnalysisQuery, s.wrapPost(s.handleSaveScoringStrategy)))
-	s.mux.Handle("/api/analysis/history", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleAnalysisHistory)))
-	s.mux.Handle("/api/analysis/summary", s.requireAuth(auth.PermAnalysisQuery, s.wrapGet(s.handleAnalysisSummary)))
-	s.mux.Handle("/api/analysis/backtest", s.requireAuth(auth.PermAnalysisQuery, s.wrapPost(s.handleAnalysisBacktest)))
-	s.mux.Handle("/api/analysis/backtest/slug", s.requireAuth(auth.PermAnalysisQuery, s.wrapPost(s.handleSlugBacktest)))
-	s.mux.Handle("/api/analysis/backtest/preset", s.requireAuth(auth.PermAnalysisQuery, s.wrapMethods(map[string]http.HandlerFunc{
-		http.MethodGet:  s.handleGetBacktestPreset,
-		http.MethodPost: s.handleSaveBacktestPreset,
-	})))
-	s.mux.Handle("/api/admin/jobs/status", s.requireAuth(auth.PermSystemHealth, s.wrapGet(s.handleJobsStatus)))
-	s.mux.Handle("/api/admin/jobs/history", s.requireAuth(auth.PermSystemHealth, s.wrapGet(s.handleJobsHistory)))
-	// 策略與交易
-	s.mux.Handle("/api/admin/strategies", s.requireAuth(auth.PermStrategy, s.wrapMethods(map[string]http.HandlerFunc{
-		http.MethodGet:  s.handleListStrategies,
-		http.MethodPost: s.handleCreateStrategy,
-	})))
-	s.mux.Handle("/api/admin/strategies/backtest", s.requireAuth(auth.PermStrategy, s.wrapPost(s.handleInlineBacktest)))
-	s.mux.Handle("/api/admin/strategies/execute/", s.requireAuth(auth.PermStrategy, http.HandlerFunc(s.handleStrategyExecute)))
-	s.mux.Handle("/api/admin/strategies/", s.requireAuth(auth.PermStrategy, http.HandlerFunc(s.handleStrategyRoute)))
-	s.mux.Handle("/api/admin/trades", s.requireAuth(auth.PermStrategy, s.wrapGet(s.handleListTrades)))
-	s.mux.Handle("/api/admin/trades/manual-buy", s.requireAuth(auth.PermStrategy, s.wrapPost(s.handleManualBuy)))
-	s.mux.Handle("/api/admin/positions", s.requireAuth(auth.PermStrategy, s.wrapGet(s.handleListPositions)))
-	s.mux.Handle("/api/admin/positions/", s.requireAuth(auth.PermStrategy, http.HandlerFunc(s.handlePositionRoute)))
-	s.mux.Handle("/api/admin/binance/account", s.requireAuth(auth.PermStrategy, s.wrapGet(s.handleBinanceAccount)))
-	s.mux.Handle("/api/admin/binance/price", s.requireAuth(auth.PermStrategy, s.wrapGet(s.handleBinancePrice)))
-	s.mux.Handle("/api/admin/binance/config", s.requireAuth(auth.PermStrategy, s.wrapMethods(map[string]http.HandlerFunc{
-		http.MethodGet:  s.handleGetBinanceConfig,
-		http.MethodPost: s.handleUpdateBinanceConfig,
-	})))
+	s.engine.Use(s.corsMiddleware())
+	s.engine.Use(s.ginLogger())
+
+	api := s.engine.Group("/api")
+	{
+		api.GET("/ping", s.handlePing)
+		api.GET("/health", s.handleHealth)
+
+		authG := api.Group("/auth")
+		{
+			authG.POST("/login", s.handleLogin)
+			authG.POST("/refresh", s.handleRefresh)
+			authG.POST("/logout", s.handleLogout)
+		}
+
+		admin := api.Group("/admin")
+		{
+			ingest := admin.Group("/ingestion")
+			ingest.Use(s.requireAuth(auth.PermIngestionTriggerDaily))
+			{
+				ingest.POST("/daily", s.handleIngestionDaily)
+				ingest.POST("/backfill", s.handleIngestionBackfill)
+			}
+
+			analysisG := admin.Group("/analysis")
+			analysisG.Use(s.requireAuth(auth.PermAnalysisTriggerDaily))
+			{
+				analysisG.POST("/daily", s.handleAnalysisDaily)
+			}
+
+			jobs := admin.Group("/jobs")
+			jobs.Use(s.requireAuth(auth.PermSystemHealth))
+			{
+				jobs.GET("/status", s.handleJobsStatus)
+				jobs.GET("/history", s.handleJobsHistory)
+			}
+
+			strategies := admin.Group("/strategies")
+			strategies.Use(s.requireAuth(auth.PermStrategy))
+			{
+				strategies.GET("", s.handleListStrategies)
+				strategies.POST("", s.handleCreateStrategy)
+				strategies.POST("/backtest", s.handleInlineBacktest)
+				strategies.Any("/execute/:slug", s.handleStrategyExecute)
+
+				instance := strategies.Group("/:id")
+				{
+					instance.GET("", func(c *gin.Context) { s.handleStrategyGetOrUpdate(c, c.Param("id")) })
+					instance.PUT("", func(c *gin.Context) { s.handleStrategyGetOrUpdate(c, c.Param("id")) })
+					instance.POST("/backtest", func(c *gin.Context) { s.handleStrategyBacktest(c, c.Param("id")) })
+					instance.GET("/backtests", func(c *gin.Context) { s.handleListStrategyBacktests(c, c.Param("id")) })
+					instance.POST("/run", func(c *gin.Context) { s.handleRunStrategy(c, c.Param("id")) })
+					instance.POST("/activate", func(c *gin.Context) { s.handleActivateStrategy(c, c.Param("id")) })
+					instance.POST("/deactivate", func(c *gin.Context) { s.handleDeactivateStrategy(c, c.Param("id")) })
+					instance.GET("/reports", func(c *gin.Context) { s.handleListReports(c, c.Param("id")) })
+					instance.POST("/reports", func(c *gin.Context) { s.handleCreateReport(c, c.Param("id")) })
+					instance.GET("/logs", func(c *gin.Context) { s.handleListLogs(c, c.Param("id")) })
+				}
+			}
+
+			trades := admin.Group("/trades")
+			trades.Use(s.requireAuth(auth.PermStrategy))
+			{
+				trades.GET("", s.handleListTrades)
+				trades.POST("/manual-buy", s.handleManualBuy)
+			}
+
+			pos := admin.Group("/positions")
+			pos.Use(s.requireAuth(auth.PermStrategy))
+			{
+				pos.GET("", s.handleListPositions)
+				pos.POST("/:id/close", func(c *gin.Context) { s.handlePositionClose(c, c.Param("id")) })
+			}
+
+			binanceG := admin.Group("/binance")
+			binanceG.Use(s.requireAuth(auth.PermStrategy))
+			{
+				binanceG.GET("/account", s.handleBinanceAccount)
+				binanceG.GET("/price", s.handleBinancePrice)
+				binanceG.GET("/config", s.handleGetBinanceConfig)
+				binanceG.POST("/config", s.handleUpdateBinanceConfig)
+			}
+		}
+
+		// Analysis public-ish (requires analysis query perm)
+		analysisQuery := api.Group("/analysis")
+		analysisQuery.Use(s.requireAuth(auth.PermAnalysisQuery))
+		{
+			analysisQuery.GET("/daily", s.handleAnalysisQuery)
+			analysisQuery.GET("/strategies", s.handleListScoringStrategies)
+			analysisQuery.GET("/strategies/get", s.handleGetScoringStrategy)
+			analysisQuery.POST("/strategies/save-scoring", s.handleSaveScoringStrategy)
+			analysisQuery.GET("/history", s.handleAnalysisHistory)
+			analysisQuery.GET("/summary", s.handleAnalysisSummary)
+			analysisQuery.POST("/backtest", s.handleAnalysisBacktest)
+			analysisQuery.POST("/backtest/slug", s.handleSlugBacktest)
+			analysisQuery.GET("/backtest/preset", s.handleGetBacktestPreset)
+			analysisQuery.POST("/backtest/preset", s.handleSaveBacktestPreset)
+		}
+	}
+
 	// 前端操作介面
-	s.mux.Handle("/", http.FileServer(http.Dir("web")))
+	s.engine.NoRoute(func(c *gin.Context) {
+		path := c.Request.URL.Path
+		if strings.HasPrefix(path, "/api") {
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "api not found"})
+			return
+		}
+		http.FileServer(http.Dir("web")).ServeHTTP(c.Writer, c.Request)
+	})
+}
+
+func (s *Server) corsMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		origin := c.Request.Header.Get("Origin")
+		if origin != "" {
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Access-Control-Allow-Credentials", "true")
+			c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			c.Header("Access-Control-Allow-Methods", "GET,POST,OPTIONS,DELETE,PUT")
+			c.Header("Vary", "Origin")
+		}
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+		c.Next()
+	}
+}
+
+func (s *Server) ginLogger() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		path := c.Request.URL.Path
+		raw := c.Request.URL.RawQuery
+
+		c.Next()
+
+		duration := time.Since(start)
+		clientIP := c.ClientIP()
+		method := c.Request.Method
+		statusCode := c.Writer.Status()
+
+		if raw != "" {
+			path = path + "?" + raw
+		}
+
+		log.Printf("[GIN] %v | %3d | %13v | %15s | %-7s %s",
+			start.Format("2006/01/02 - 15:04:05"),
+			statusCode,
+			duration,
+			clientIP,
+			method,
+			path,
+		)
+	}
 }
 
 type telegramNotifierAdapter struct {

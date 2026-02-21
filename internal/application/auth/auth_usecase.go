@@ -36,13 +36,9 @@ type Permission string
 const (
 	PermUserManage               Permission = "user:manage"
 	PermSystemHealth             Permission = "system:health"
-	PermScreener                 Permission = "screener:use"
 	PermStrategy                 Permission = "strategy:write"
-	PermSubscription             Permission = "subscription:write"
 	PermInternalAPI              Permission = "internal:ops"
-	PermReportsFull              Permission = "reports:full"
 	PermAnalysisQuery            Permission = "analysis_results.query"
-	PermScreenerUse              Permission = "screener.use"
 	PermIngestionTriggerDaily    Permission = "ingestion.trigger_daily"
 	PermIngestionTriggerBackfill Permission = "ingestion.trigger_backfill"
 	PermAnalysisTriggerDaily     Permission = "analysis.trigger_daily"
@@ -53,39 +49,26 @@ var RolePermissions = map[auth.Role][]Permission{
 	auth.RoleAdmin: {
 		PermUserManage,
 		PermSystemHealth,
-		PermScreener,
-		PermScreenerUse,
 		PermAnalysisQuery,
 		PermStrategy,
-		PermSubscription,
 		PermInternalAPI,
-		PermReportsFull,
 		PermIngestionTriggerDaily,
 		PermIngestionTriggerBackfill,
 		PermAnalysisTriggerDaily,
 	},
 	auth.RoleAnalyst: {
 		PermSystemHealth,
-		PermScreener,
-		PermScreenerUse,
 		PermAnalysisQuery,
 		PermStrategy,
-		PermSubscription,
-		PermReportsFull,
 		PermIngestionTriggerDaily,
 		PermIngestionTriggerBackfill,
 		PermAnalysisTriggerDaily,
 	},
 	auth.RoleUser: {
 		PermSystemHealth,
-		PermScreener,
-		PermScreenerUse,
 		PermAnalysisQuery,
 		PermStrategy,
-		PermSubscription,
 	},
-
-
 	auth.RoleService: {
 		PermInternalAPI,
 		PermSystemHealth,
@@ -183,53 +166,7 @@ func (uc *LoginUseCase) Execute(ctx context.Context, input LoginInput) (LoginRes
 	return out, nil
 }
 
-// RegisterUseCase 處理註冊邏輯。
-type RegisterUseCase struct {
-	users  UserRepository
-	hasher PasswordHasher
-}
-
-func NewRegisterUseCase(users UserRepository, hasher PasswordHasher) *RegisterUseCase {
-	return &RegisterUseCase{users: users, hasher: hasher}
-}
-
-type RegisterInput struct {
-	Email    string
-	Password string
-	Name     string
-}
-
-func (uc *RegisterUseCase) Execute(ctx context.Context, input RegisterInput) (string, error) {
-	email := strings.TrimSpace(strings.ToLower(input.Email))
-	if email == "" || input.Password == "" {
-		return "", errors.New("email and password required")
-	}
-
-	// 檢查是否已存在
-	_, err := uc.users.FindByEmail(ctx, email)
-	if err == nil {
-		return "", errors.New("user already exists")
-	}
-
-	hashed, err := uc.hasher.Hash(input.Password)
-	if err != nil {
-		return "", fmt.Errorf("hash password: %w", err)
-	}
-
-	name := input.Name
-	if name == "" {
-		name = strings.Split(email, "@")[0]
-	}
-
-	uid, err := uc.users.Create(ctx, auth.User{
-		Email:    email,
-		Password: hashed,
-		Name:     name,
-		Role:     auth.RoleUser,
-		Status:   auth.StatusActive,
-	})
-	return uid, err
-}
+// RegisterUseCase removed (single-user mode)
 
 
 // LogoutUseCase 處理 refresh token 作廢。

@@ -3,7 +3,6 @@ package httpapi
 import (
 	"context"
 	"database/sql"
-	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -204,7 +203,7 @@ func (s *Server) Store() *memory.Store {
 }
 
 func (s *Server) registerRoutes() {
-	s.engine.Use(s.corsMiddleware())
+	s.engine.Use(corsMiddleware())
 	s.engine.Use(s.ginLogger())
 
 	api := s.engine.Group("/api")
@@ -293,9 +292,9 @@ func (s *Server) registerRoutes() {
 		analysisQuery.Use(s.requireAuth(auth.PermAnalysisQuery))
 		{
 			analysisQuery.GET("/daily", s.handleAnalysisQuery)
-			analysisQuery.GET("/strategies", s.handleListScoringStrategies)
-			analysisQuery.GET("/strategies/get", s.handleGetScoringStrategy)
-			analysisQuery.POST("/strategies/save-scoring", s.handleSaveScoringStrategy)
+			analysisQuery.GET("/strategies", s.handleListStrategies)
+			analysisQuery.GET("/strategies/get", func(c *gin.Context) { s.handleStrategyGetOrUpdate(c, c.Query("id")) })
+			analysisQuery.POST("/strategies/save-scoring", s.handleCreateStrategy)
 			analysisQuery.GET("/history", s.handleAnalysisHistory)
 			analysisQuery.GET("/summary", s.handleAnalysisSummary)
 			analysisQuery.POST("/backtest", s.handleAnalysisBacktest)
@@ -316,51 +315,6 @@ func (s *Server) registerRoutes() {
 	})
 }
 
-func (s *Server) corsMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		origin := c.Request.Header.Get("Origin")
-		if origin != "" {
-			c.Header("Access-Control-Allow-Origin", origin)
-			c.Header("Access-Control-Allow-Credentials", "true")
-			c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
-			c.Header("Access-Control-Allow-Methods", "GET,POST,OPTIONS,DELETE,PUT")
-			c.Header("Vary", "Origin")
-		}
-		if c.Request.Method == http.MethodOptions {
-			c.AbortWithStatus(http.StatusNoContent)
-			return
-		}
-		c.Next()
-	}
-}
-
-func (s *Server) ginLogger() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		start := time.Now()
-		path := c.Request.URL.Path
-		raw := c.Request.URL.RawQuery
-
-		c.Next()
-
-		duration := time.Since(start)
-		clientIP := c.ClientIP()
-		method := c.Request.Method
-		statusCode := c.Writer.Status()
-
-		if raw != "" {
-			path = path + "?" + raw
-		}
-
-		log.Printf("[GIN] %v | %3d | %13v | %15s | %-7s %s",
-			start.Format("2006/01/02 - 15:04:05"),
-			statusCode,
-			duration,
-			clientIP,
-			method,
-			path,
-		)
-	}
-}
 
 type telegramNotifierAdapter struct {
 	client *notify.TelegramClient

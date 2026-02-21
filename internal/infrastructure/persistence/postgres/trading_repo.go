@@ -105,7 +105,7 @@ WHERE id=$12;
 // GetStrategy 取得策略。
 func (r *TradingRepo) GetStrategy(ctx context.Context, id string) (tradingDomain.Strategy, error) {
 	const q = `
-SELECT id, name, description, base_symbol, timeframe, env, status, version, buy_conditions, sell_conditions, risk_settings, created_by, updated_by, last_executed_at, created_at, updated_at
+SELECT id, name, slug, description, base_symbol, timeframe, env, status, version, buy_conditions, sell_conditions, risk_settings, created_by, updated_by, last_executed_at, created_at, updated_at
 FROM strategies WHERE id=$1;
 `
 	var s tradingDomain.Strategy
@@ -113,13 +113,16 @@ FROM strategies WHERE id=$1;
 	var env, status string
 	var createdBy, updatedBy sql.NullString
 	var lastActivated sql.NullTime
+	var desc, slug sql.NullString
 	if err := r.db.QueryRowContext(ctx, q, id).Scan(
-		&s.ID, &s.Name, &s.Description, &s.BaseSymbol, &s.Timeframe,
+		&s.ID, &s.Name, &slug, &desc, &s.BaseSymbol, &s.Timeframe,
 		&env, &status, &s.Version, &buyRaw, &sellRaw, &riskRaw,
 		&createdBy, &updatedBy, &lastActivated, &s.CreatedAt, &s.UpdatedAt,
 	); err != nil {
 		return s, err
 	}
+	s.Description = desc.String
+	s.Slug = slug.String
 	_ = json.Unmarshal(buyRaw, &s.Buy)
 	_ = json.Unmarshal(sellRaw, &s.Sell)
 	_ = json.Unmarshal(riskRaw, &s.Risk)
@@ -147,7 +150,7 @@ func (r *TradingRepo) DeleteStrategy(ctx context.Context, id string) error {
 // ListStrategies 列出策略。
 func (r *TradingRepo) ListStrategies(ctx context.Context, filter trading.StrategyFilter) ([]tradingDomain.Strategy, error) {
 	q := `
-SELECT id, name, description, base_symbol, timeframe, env, status, version, buy_conditions, sell_conditions, risk_settings, created_by, updated_by, last_executed_at, created_at, updated_at
+SELECT id, name, slug, description, base_symbol, timeframe, env, status, version, buy_conditions, sell_conditions, risk_settings, created_by, updated_by, last_executed_at, created_at, updated_at
 FROM strategies
 `
 	conds := []string{}
@@ -182,13 +185,16 @@ FROM strategies
 		var env, status string
 		var createdBy, updatedBy sql.NullString
 		var lastActivated sql.NullTime
+		var desc, slug sql.NullString
 		if err := rows.Scan(
-			&s.ID, &s.Name, &s.Description, &s.BaseSymbol, &s.Timeframe,
+			&s.ID, &s.Name, &slug, &desc, &s.BaseSymbol, &s.Timeframe,
 			&env, &status, &s.Version, &buyRaw, &sellRaw, &riskRaw,
 			&createdBy, &updatedBy, &lastActivated, &s.CreatedAt, &s.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
+		s.Description = desc.String
+		s.Slug = slug.String
 		_ = json.Unmarshal(buyRaw, &s.Buy)
 		_ = json.Unmarshal(sellRaw, &s.Sell)
 		_ = json.Unmarshal(riskRaw, &s.Risk)

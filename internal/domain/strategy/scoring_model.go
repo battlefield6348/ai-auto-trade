@@ -18,6 +18,7 @@ type ScoringStrategy struct {
 	UserID    string         `json:"user_id" db:"user_id"`
 	Name      string         `json:"name" db:"name"`
 	Slug      string         `json:"slug" db:"slug"`
+	Description string       `json:"description" db:"description"`
 	Timeframe string         `json:"timeframe" db:"timeframe"`
 	BaseSymbol string        `json:"base_symbol" db:"base_symbol"`
 	Threshold     float64        `json:"threshold" db:"threshold"`
@@ -85,14 +86,17 @@ func loadScoringStrategy(ctx context.Context, db DBQueryer, field, value string)
 	// 1. Fetch the base Strategy
 	s := &ScoringStrategy{}
 	strategyQuery := fmt.Sprintf(`
-		SELECT id, user_id, name, slug, timeframe, base_symbol, threshold, exit_threshold, is_active, env, risk_settings, created_at, updated_at
+		SELECT id, user_id, name, slug, description, timeframe, base_symbol, threshold, exit_threshold, is_active, env, risk_settings, created_at, updated_at
 		FROM strategies
 		WHERE %s = $1
 	`, field)
 	var riskRaw []byte
+	var slugNull, descNull sql.NullString
 	err := db.QueryRowContext(ctx, strategyQuery, value).Scan(
-		&s.ID, &s.UserID, &s.Name, &s.Slug, &s.Timeframe, &s.BaseSymbol, &s.Threshold, &s.ExitThreshold, &s.IsActive, &s.Env, &riskRaw, &s.CreatedAt, &s.UpdatedAt,
+		&s.ID, &s.UserID, &s.Name, &slugNull, &descNull, &s.Timeframe, &s.BaseSymbol, &s.Threshold, &s.ExitThreshold, &s.IsActive, &s.Env, &riskRaw, &s.CreatedAt, &s.UpdatedAt,
 	)
+	s.Slug = slugNull.String
+	s.Description = descNull.String
 
 	if err == nil && len(riskRaw) > 0 {
 		_ = json.Unmarshal(riskRaw, &s.Risk)

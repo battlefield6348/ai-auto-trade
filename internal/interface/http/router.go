@@ -259,6 +259,7 @@ func (s *Server) registerRoutes() {
 					instance.POST("/deactivate", func(c *gin.Context) { s.handleDeactivateStrategy(c, c.Param("id")) })
 					instance.GET("/reports", func(c *gin.Context) { s.handleListReports(c, c.Param("id")) })
 					instance.POST("/reports", func(c *gin.Context) { s.handleCreateReport(c, c.Param("id")) })
+					instance.POST("/report-generate", func(c *gin.Context) { s.handleGenerateReport(c, c.Param("id")) })
 					instance.GET("/logs", func(c *gin.Context) { s.handleListLogs(c, c.Param("id")) })
 				}
 			}

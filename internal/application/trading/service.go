@@ -24,6 +24,7 @@ type Repository interface {
 	ListStrategies(ctx context.Context, filter StrategyFilter) ([]tradingDomain.Strategy, error)
 	DeleteStrategy(ctx context.Context, id string) error
 	SetStatus(ctx context.Context, id string, status tradingDomain.Status, env tradingDomain.Environment) error
+	UpdateLastActivatedAt(ctx context.Context, id string, t time.Time) error
 	UpdateRiskSettings(ctx context.Context, id string, risk tradingDomain.RiskSettings) error
 	LoadScoringStrategyBySlug(ctx context.Context, slug string) (*strategyDomain.ScoringStrategy, error)
 	LoadScoringStrategyByID(ctx context.Context, id string) (*strategyDomain.ScoringStrategy, error)
@@ -494,48 +495,7 @@ func (s *Service) handleScoringBuy(ctx context.Context, strat *strategyDomain.Sc
 }
 
 func (s *Service) handleScoringSellCheck(ctx context.Context, strat *strategyDomain.ScoringStrategy, pos *tradingDomain.Position, data analysisDomain.DailyAnalysisResult, env tradingDomain.Environment) error {
-	sl := -0.02
-	if strat.Risk.StopLossPct != nil {
-		sl = -(*strat.Risk.StopLossPct)
-		if sl > 0 {
-			sl = -sl
-		} // Ensure negative
-	}
-	tp := 0.05
-	if strat.Risk.TakeProfitPct != nil {
-		tp = *strat.Risk.TakeProfitPct
-	}
-
-	change := (data.Close - pos.EntryPrice) / pos.EntryPrice
-	shouldSell := false
-	reason := ""
-
-	// 1. 固定停利停損
-	if change <= sl {
-		shouldSell = true
-		reason = fmt.Sprintf("止損 (%.1f%%)", sl*100)
-	} else if change >= tp {
-		shouldSell = true
-		reason = fmt.Sprintf("止盈 (%.1f%%)", tp*100)
-	}
-
-	// 2. AI 信號反轉 (分數低於門檻的一半)
-	if !shouldSell {
-		score, _ := strat.CalculateScore(data)
-		if score < (strat.Threshold * 0.5) {
-			shouldSell = true
-			reason = fmt.Sprintf("AI信號轉弱 (分數 %.1f < %.1f)", score, strat.Threshold*0.5)
-		}
-	}
-
-	// 3. 策略自定義出場條件 (從資料庫讀取)
-	if !shouldSell {
-		triggered, score, _ := strat.IsExitTriggered(data)
-		if triggered {
-			shouldSell = true
-			reason = fmt.Sprintf("觸發策略出場條件 (分數 %.1f >= %.1f)", score, strat.ExitThreshold)
-		}
-	}
+	shouldSell, reason := strat.ShouldExit(data, *pos)
 	if shouldSell {
 		var price float64
 		var executedQty float64
@@ -1160,4 +1120,78 @@ func validateConditionSet(set tradingDomain.ConditionSet) error {
 		}
 	}
 	return nil
+}
+
+// GenerateReport 計算並儲存指定期間的策略績效報告。
+func (s *Service) GenerateReport(ctx context.Context, strategyID string, env tradingDomain.Environment, start, end time.Time) (*tradingDomain.Report, error) {
+	strat, err := s.repo.GetStrategy(ctx, strategyID)
+	if err != nil {
+		return nil, err
+	}
+
+	trades, err := s.repo.ListTrades(ctx, tradingDomain.TradeFilter{
+		StrategyID: strategyID,
+		Env:        env,
+		StartDate:  &start,
+		EndDate:    &end,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	summary := tradingDomain.ReportSummary{
+		TotalTrades: len(trades),
+	}
+
+	var totalGain, totalLoss float64
+	var totalHoldDays float64
+	var closedCount int
+
+	for _, t := range trades {
+		if t.PNL != nil {
+			summary.TotalPNL += *t.PNL
+			if *t.PNL > 0 {
+				summary.WinCount++
+				totalGain += *t.PNL
+			} else if *t.PNL < 0 {
+				summary.LossCount++
+				totalLoss += -(*t.PNL)
+			}
+		}
+		if t.PNLPct != nil {
+			summary.TotalPNLPct += *t.PNLPct
+		}
+		if t.HoldDays != nil {
+			totalHoldDays += float64(*t.HoldDays)
+			closedCount++
+		}
+	}
+
+	if summary.TotalTrades > 0 {
+		summary.WinRate = float64(summary.WinCount) / float64(summary.TotalTrades)
+	}
+	if totalLoss > 0 {
+		summary.ProfitFactor = totalGain / totalLoss
+	}
+	if closedCount > 0 {
+		summary.AvgHoldDays = totalHoldDays / float64(closedCount)
+	}
+
+	report := tradingDomain.Report{
+		StrategyID:      strat.ID,
+		StrategyVersion: strat.Version,
+		Env:             env,
+		PeriodStart:     start,
+		PeriodEnd:       end,
+		Summary:         summary,
+		TradesRef:       len(trades), // 紀錄交易數量作為引用參考
+		CreatedAt:       s.now(),
+	}
+
+	id, err := s.repo.SaveReport(ctx, report)
+	if err != nil {
+		return nil, err
+	}
+	report.ID = id
+	return &report, nil
 }

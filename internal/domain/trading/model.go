@@ -84,8 +84,21 @@ type Strategy struct {
 
 	CreatedBy string    `json:"created_by"`
 	UpdatedBy string    `json:"updated_by"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	LastActivatedAt *time.Time `json:"last_activated_at,omitempty"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+}
+
+// ReportSummary 定義報告內部的統計數據。
+type ReportSummary struct {
+	TotalTrades  int     `json:"total_trades"`
+	WinCount     int     `json:"win_count"`
+	LossCount    int     `json:"loss_count"`
+	WinRate      float64 `json:"win_rate"`
+	TotalPNL     float64 `json:"total_pnl"`
+	TotalPNLPct  float64 `json:"total_pnl_pct"`
+	ProfitFactor float64 `json:"profit_factor"`
+	AvgHoldDays  float64 `json:"avg_hold_days"`
 }
 
 // Validate 檢查策略基本合理性。

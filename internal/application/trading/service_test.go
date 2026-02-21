@@ -544,6 +544,9 @@ func (f *fakeRepo) ListStrategies(context.Context, StrategyFilter) ([]tradingDom
 func (f *fakeRepo) SetStatus(context.Context, string, tradingDomain.Status, tradingDomain.Environment) error {
 	return nil
 }
+func (f *fakeRepo) UpdateLastActivatedAt(context.Context, string, time.Time) error {
+	return nil
+}
 func (f *fakeRepo) UpdateRiskSettings(context.Context, string, tradingDomain.RiskSettings) error {
 	return nil
 }

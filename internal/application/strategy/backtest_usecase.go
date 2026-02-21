@@ -9,6 +9,7 @@ import (
 
 	analysisDomain "ai-auto-trade/internal/domain/analysis"
 	strategyDomain "ai-auto-trade/internal/domain/strategy"
+	tradingDomain "ai-auto-trade/internal/domain/trading"
 )
 
 type BacktestResult struct {
@@ -143,17 +144,14 @@ func (u *BacktestUseCase) Execute(ctx context.Context, slug string, symbol strin
 			}
 		} else {
 			// Check Exit
-			exitTriggered := exitScore < s.ExitThreshold
-			
-			// Also auto-exit if entry score drops below 50% of threshold (builtin protection)
-			if !exitTriggered {
-				if score < (s.Threshold * 0.5) {
-					exitTriggered = true
-					reason := fmt.Sprintf("AI信號轉弱 (%.1f < %.1f)", score, s.Threshold*0.5)
-					currentPosition.Reason = reason
-				}
-			} else {
-				currentPosition.Reason = fmt.Sprintf("AI信號轉弱 (%.1f < %.1f)", exitScore, s.ExitThreshold)
+			// Check Exit using unified domain logic
+			dummyPos := tradingDomain.Position{
+				EntryPrice: currentPosition.EntryPrice,
+				EntryDate:  start, // Not strictly used for TP/SL but good for completeness
+			}
+			exitTriggered, reason := s.ShouldExit(res, dummyPos)
+			if exitTriggered {
+				currentPosition.Reason = reason
 			}
 
 			if exitTriggered {

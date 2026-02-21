@@ -100,6 +100,23 @@ func (r *TradingRepo) SetStatus(_ context.Context, id string, status tradingDoma
 	if env != "" {
 		s.Env = env
 	}
+	if status == tradingDomain.StatusActive {
+		now := time.Now()
+		s.LastActivatedAt = &now
+	}
+	s.UpdatedAt = time.Now()
+	r.strategies[id] = s
+	return nil
+}
+
+func (r *TradingRepo) UpdateLastActivatedAt(_ context.Context, id string, t time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, ok := r.strategies[id]
+	if !ok {
+		return fmt.Errorf("strategy not found")
+	}
+	s.LastActivatedAt = &t
 	s.UpdatedAt = time.Now()
 	r.strategies[id] = s
 	return nil

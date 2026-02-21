@@ -105,17 +105,18 @@ WHERE id=$12;
 // GetStrategy 取得策略。
 func (r *TradingRepo) GetStrategy(ctx context.Context, id string) (tradingDomain.Strategy, error) {
 	const q = `
-SELECT id, name, description, base_symbol, timeframe, env, status, version, buy_conditions, sell_conditions, risk_settings, created_by, updated_by, created_at, updated_at
+SELECT id, name, description, base_symbol, timeframe, env, status, version, buy_conditions, sell_conditions, risk_settings, created_by, updated_by, last_executed_at, created_at, updated_at
 FROM strategies WHERE id=$1;
 `
 	var s tradingDomain.Strategy
 	var buyRaw, sellRaw, riskRaw []byte
 	var env, status string
 	var createdBy, updatedBy sql.NullString
+	var lastActivated sql.NullTime
 	if err := r.db.QueryRowContext(ctx, q, id).Scan(
 		&s.ID, &s.Name, &s.Description, &s.BaseSymbol, &s.Timeframe,
 		&env, &status, &s.Version, &buyRaw, &sellRaw, &riskRaw,
-		&createdBy, &updatedBy, &s.CreatedAt, &s.UpdatedAt,
+		&createdBy, &updatedBy, &lastActivated, &s.CreatedAt, &s.UpdatedAt,
 	); err != nil {
 		return s, err
 	}
@@ -130,6 +131,9 @@ FROM strategies WHERE id=$1;
 	if updatedBy.Valid {
 		s.UpdatedBy = updatedBy.String
 	}
+	if lastActivated.Valid {
+		s.LastActivatedAt = &lastActivated.Time
+	}
 	return s, nil
 }
 
@@ -143,7 +147,7 @@ func (r *TradingRepo) DeleteStrategy(ctx context.Context, id string) error {
 // ListStrategies 列出策略。
 func (r *TradingRepo) ListStrategies(ctx context.Context, filter trading.StrategyFilter) ([]tradingDomain.Strategy, error) {
 	q := `
-SELECT id, name, description, base_symbol, timeframe, env, status, version, buy_conditions, sell_conditions, risk_settings, created_by, updated_by, created_at, updated_at
+SELECT id, name, description, base_symbol, timeframe, env, status, version, buy_conditions, sell_conditions, risk_settings, created_by, updated_by, last_executed_at, created_at, updated_at
 FROM strategies
 `
 	conds := []string{}
@@ -177,10 +181,11 @@ FROM strategies
 		var buyRaw, sellRaw, riskRaw []byte
 		var env, status string
 		var createdBy, updatedBy sql.NullString
+		var lastActivated sql.NullTime
 		if err := rows.Scan(
 			&s.ID, &s.Name, &s.Description, &s.BaseSymbol, &s.Timeframe,
 			&env, &status, &s.Version, &buyRaw, &sellRaw, &riskRaw,
-			&createdBy, &updatedBy, &s.CreatedAt, &s.UpdatedAt,
+			&createdBy, &updatedBy, &lastActivated, &s.CreatedAt, &s.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -202,13 +207,20 @@ FROM strategies
 
 func (r *TradingRepo) SetStatus(ctx context.Context, id string, status tradingDomain.Status, env tradingDomain.Environment) error {
 	isActive := status == tradingDomain.StatusActive
+	now := time.Now()
 	if env == "" {
-		const q = `UPDATE strategies SET status=$1, is_active=$2, updated_at=NOW() WHERE id=$3;`
-		_, err := r.db.ExecContext(ctx, q, string(status), isActive, id)
+		const q = `UPDATE strategies SET status=$1, is_active=$2, last_executed_at=$3, updated_at=NOW() WHERE id=$4;`
+		_, err := r.db.ExecContext(ctx, q, string(status), isActive, now, id)
 		return err
 	}
-	const q = `UPDATE strategies SET status=$1, env=$2, is_active=$3, updated_at=NOW() WHERE id=$4;`
-	_, err := r.db.ExecContext(ctx, q, string(status), string(env), isActive, id)
+	const q = `UPDATE strategies SET status=$1, env=$2, is_active=$3, last_executed_at=$4, updated_at=NOW() WHERE id=$5;`
+	_, err := r.db.ExecContext(ctx, q, string(status), string(env), isActive, now, id)
+	return err
+}
+
+func (r *TradingRepo) UpdateLastActivatedAt(ctx context.Context, id string, t time.Time) error {
+	const q = `UPDATE strategies SET last_executed_at=$1, updated_at=NOW() WHERE id=$2`
+	_, err := r.db.ExecContext(ctx, q, t, id)
 	return err
 }
 

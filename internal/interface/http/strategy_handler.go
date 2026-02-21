@@ -195,3 +195,38 @@ func (s *Server) handleStrategyExecute(c *gin.Context) {
 		"message": "Strategy check executed",
 	})
 }
+
+func (s *Server) handleGenerateReport(c *gin.Context, strategyID string) {
+	st, err := s.tradingSvc.GetStrategy(c.Request.Context(), strategyID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "strategy not found", "error_code": errCodeNotFound})
+		return
+	}
+
+	env := s.defaultEnv
+	if qenv := c.Query("env"); qenv != "" {
+		env = tradingDomain.Environment(qenv)
+	}
+
+	start, end, err := s.parseDateRange(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error(), "error_code": errCodeBadRequest})
+		return
+	}
+
+	// 如果沒有指定開始時間，預設從上次啟動時間開始
+	if c.Query("start_date") == "" && st.LastActivatedAt != nil {
+		start = *st.LastActivatedAt
+	}
+
+	rep, err := s.tradingSvc.GenerateReport(c.Request.Context(), strategyID, env, start, end)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error(), "error_code": errCodeInternal})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"report":  rep,
+	})
+}

@@ -10,6 +10,16 @@ const state = {
 };
 
 const el = (id) => document.getElementById(id);
+const val = (id, def = "") => el(id)?.value || def;
+const setVal = (id, v) => {
+  const element = el(id);
+  if (element) element.value = v;
+};
+const checked = (id) => !!el(id)?.checked;
+const setChecked = (id, v) => {
+  const element = el(id);
+  if (element) element.checked = !!v;
+};
 
 function debounce(fn, delay = 500) {
   return (...args) => {
@@ -71,10 +81,12 @@ async function api(path, { method = "GET", body, requireAuth = true } = {}) {
 
 function readForm() {
   const parse = (id, def = 0) => {
-    const v = parseFloat(el(id).value);
+    const element = el(id);
+    if (!element) return def;
+    const v = parseFloat(element.value);
     return isNaN(v) ? def : v;
   };
-  const horizons = el("btHorizons").value
+  const horizons = val("btHorizons", "3,5,10")
     .split(",")
     .map((s) => parseInt(s.trim(), 10))
     .filter((n) => !isNaN(n));
@@ -98,10 +110,10 @@ function readForm() {
       amp_min: 0
     },
     flags: {
-      use_change: el(prefix + "UseChange").checked,
-      use_volume: el(prefix + "UseVolume").checked,
-      use_ma: el(prefix + "UseMa").checked,
-      use_range: el(prefix + "UseRange").checked,
+      use_change: checked(prefix + "UseChange"),
+      use_volume: checked(prefix + "UseVolume"),
+      use_ma: checked(prefix + "UseMa"),
+      use_range: checked(prefix + "UseRange"),
       use_return: false,
       use_amp: false
     },
@@ -109,9 +121,9 @@ function readForm() {
   });
 
   return {
-    symbol: (el("btSymbol").value || "BTCUSDT").trim().toUpperCase(),
-    start_date: el("btStart").value,
-    end_date: el("btEnd").value,
+    symbol: (val("btSymbol") || "BTCUSDT").trim().toUpperCase(),
+    start_date: val("btStart"),
+    end_date: val("btEnd"),
     entry: buildSide("btEntry"),
     exit: buildSide("btExit"),
     horizons: horizons.length ? horizons : [3, 5, 10],
@@ -148,32 +160,32 @@ function updateMaxScore() {
 
 function fillForm(cfg) {
   if (!cfg) return;
-  if (cfg.symbol) el("btSymbol").value = cfg.symbol;
-  if (cfg.start_date) el("btStart").value = cfg.start_date;
-  if (cfg.end_date) el("btEnd").value = cfg.end_date;
+  if (cfg.symbol) setVal("btSymbol", cfg.symbol);
+  if (cfg.start_date) setVal("btStart", cfg.start_date);
+  if (cfg.end_date) setVal("btEnd", cfg.end_date);
 
   const mapSide = (prefix, sideCfg) => {
     if (!sideCfg) return;
     if (sideCfg.weights) {
-      if (sideCfg.weights.score !== undefined) el(prefix + "ScoreWeight").value = sideCfg.weights.score;
-      if (sideCfg.weights.change_bonus !== undefined) el(prefix + "ChangeBonus").value = sideCfg.weights.change_bonus;
-      if (sideCfg.weights.volume_bonus !== undefined) el(prefix + "VolumeBonus").value = sideCfg.weights.volume_bonus;
-      if (sideCfg.weights.ma_bonus !== undefined) el(prefix + "MaBonus").value = sideCfg.weights.ma_bonus;
-      if (sideCfg.weights.range_bonus !== undefined) el(prefix + "RangeBonus").value = sideCfg.weights.range_bonus;
+      if (sideCfg.weights.score !== undefined) setVal(prefix + "ScoreWeight", sideCfg.weights.score);
+      if (sideCfg.weights.change_bonus !== undefined) setVal(prefix + "ChangeBonus", sideCfg.weights.change_bonus);
+      if (sideCfg.weights.volume_bonus !== undefined) setVal(prefix + "VolumeBonus", sideCfg.weights.volume_bonus);
+      if (sideCfg.weights.ma_bonus !== undefined) setVal(prefix + "MaBonus", sideCfg.weights.ma_bonus);
+      if (sideCfg.weights.range_bonus !== undefined) setVal(prefix + "RangeBonus", sideCfg.weights.range_bonus);
     }
     if (sideCfg.thresholds) {
-      if (sideCfg.thresholds.change_min !== undefined) el(prefix + "ChangeMin").value = sideCfg.thresholds.change_min * 100;
-      if (sideCfg.thresholds.volume_ratio_min !== undefined) el(prefix + "VolMin").value = sideCfg.thresholds.volume_ratio_min;
-      if (sideCfg.thresholds.ma_gap_min !== undefined) el(prefix + "MaGapMin").value = sideCfg.thresholds.ma_gap_min * 100;
-      if (sideCfg.thresholds.range_min !== undefined) el(prefix + "RangeMin").value = sideCfg.thresholds.range_min;
+      if (sideCfg.thresholds.change_min !== undefined) setVal(prefix + "ChangeMin", sideCfg.thresholds.change_min * 100);
+      if (sideCfg.thresholds.volume_ratio_min !== undefined) setVal(prefix + "VolMin", sideCfg.thresholds.volume_ratio_min);
+      if (sideCfg.thresholds.ma_gap_min !== undefined) setVal(prefix + "MaGapMin", sideCfg.thresholds.ma_gap_min * 100);
+      if (sideCfg.thresholds.range_min !== undefined) setVal(prefix + "RangeMin", sideCfg.thresholds.range_min);
     }
     if (sideCfg.flags) {
-      if (sideCfg.flags.use_change !== undefined) el(prefix + "UseChange").checked = sideCfg.flags.use_change;
-      if (sideCfg.flags.use_volume !== undefined) el(prefix + "UseVolume").checked = sideCfg.flags.use_volume;
-      if (sideCfg.flags.use_ma !== undefined) el(prefix + "UseMa").checked = sideCfg.flags.use_ma;
-      if (sideCfg.flags.use_range !== undefined) el(prefix + "UseRange").checked = sideCfg.flags.use_range;
+      if (sideCfg.flags.use_change !== undefined) setChecked(prefix + "UseChange", sideCfg.flags.use_change);
+      if (sideCfg.flags.use_volume !== undefined) setChecked(prefix + "UseVolume", sideCfg.flags.use_volume);
+      if (sideCfg.flags.use_ma !== undefined) setChecked(prefix + "UseMa", sideCfg.flags.use_ma);
+      if (sideCfg.flags.use_range !== undefined) setChecked(prefix + "UseRange", sideCfg.flags.use_range);
     }
-    if (sideCfg.total_min !== undefined) el(prefix + "TotalMin").value = sideCfg.total_min;
+    if (sideCfg.total_min !== undefined) setVal(prefix + "TotalMin", sideCfg.total_min);
   };
 
   if (cfg.entry) mapSide("btEntry", cfg.entry);
@@ -182,11 +194,11 @@ function fillForm(cfg) {
   // Transition support for legacy presets
   if (cfg.weights && !cfg.entry) {
     // Basic mapping for score and common flags
-    el("btEntryScoreWeight").value = cfg.weights.score || 50;
-    el("btEntryTotalMin").value = cfg.thresholds?.total_min || 60;
+    setVal("btEntryScoreWeight", cfg.weights.score || 50);
+    setVal("btEntryTotalMin", cfg.thresholds?.total_min || 60);
   }
 
-  if (cfg.horizons) el("btHorizons").value = cfg.horizons.join(",");
+  if (cfg.horizons) setVal("btHorizons", cfg.horizons.join(","));
   updateVisibility();
 }
 
@@ -442,7 +454,14 @@ function setBusy(id, busy, labelWhenIdle) {
 }
 
 async function runBacktest(isAuto = false) {
-  const payload = readForm();
+  let payload;
+  try {
+    payload = readForm();
+  } catch (err) {
+    console.error("[Backtest] readForm failed:", err);
+    if (!isAuto) setAlert("參數讀取失敗：" + err.message, "error");
+    return;
+  }
   if (!payload.start_date || !payload.end_date) {
     if (!isAuto) setAlert("請選擇起始與結束日期", "error");
     return;
@@ -470,8 +489,8 @@ const debouncedRunBacktest = debounce(() => runBacktest(true), 400);
 
 
 async function confirmSaveScoringStrategy() {
-  const name = el("newStrategyName")?.value.trim();
-  const slug = el("newStrategySlug")?.value.trim();
+  const name = val("newStrategyName").trim();
+  const slug = val("newStrategySlug").trim();
   if (!name || !slug) {
     console.warn("[SaveStrategy] Name or Slug missing");
     return setAlert("請輸入名稱與代碼", "error");
@@ -481,76 +500,82 @@ async function confirmSaveScoringStrategy() {
   try {
     const rules = [];
 
+    // Helpers
+    const parse = (id, def = 0) => {
+      const v = parseFloat(val(id));
+      return isNaN(v) ? def : v;
+    };
+
     // 1. Entry Rules
     rules.push({
       condition_name: "進場 AI 核心評分",
       type: "BASE_SCORE",
       params: {},
-      weight: parseFloat(el("btEntryScoreWeight").value) || 0,
+      weight: parse("btEntryScoreWeight"),
       rule_type: "entry"
     });
 
-    if (el("btEntryUseChange").checked) {
+    if (checked("btEntryUseChange")) {
       rules.push({
-        condition_name: "進場漲幅要求",
+        condition_name: "進場價格漲幅",
         type: "PRICE_RETURN",
-        params: { days: 1, min: (parseFloat(el("btEntryChangeMin").value) || 0) / 100 },
-        weight: parseFloat(el("btEntryChangeBonus").value) || 0,
+        params: { days: 1, min: parse("btEntryChangeMin") / 100 },
+        weight: parse("btEntryChangeBonus"),
         rule_type: "entry"
       });
     }
-    if (el("btEntryUseVolume").checked) {
+    if (checked("btEntryUseVolume")) {
       rules.push({
-        condition_name: "進場量能激增",
+        condition_name: "進場成交量激增",
         type: "VOLUME_SURGE",
-        params: { min: parseFloat(el("btEntryVolMin").value) || 0 },
-        weight: parseFloat(el("btEntryVolumeBonus").value) || 0,
+        params: { min: parse("btEntryVolMin") },
+        weight: parse("btEntryVolumeBonus"),
         rule_type: "entry"
       });
     }
-    if (el("btEntryUseMa").checked) {
+    if (checked("btEntryUseMa")) {
       rules.push({
         condition_name: "進場均線偏離",
         type: "MA_DEVIATION",
-        params: { ma: 20, min: (parseFloat(el("btEntryMaGapMin").value) || 0) / 100 },
-        weight: parseFloat(el("btEntryMaBonus").value) || 0,
+        params: { ma: 20, min: parse("btEntryMaGapMin") / 100 },
+        weight: parse("btEntryMaBonus"),
         rule_type: "entry"
       });
     }
-    if (el("btEntryUseRange")?.checked) {
+    if (checked("btEntryUseRange")) {
       rules.push({
-        condition_name: "進場位階限制",
+        condition_name: "進場價格位階",
         type: "RANGE_POS",
-        params: { days: 20, min: (parseFloat(el("btEntryRangeMin").value) || 0) / 100 },
-        weight: parseFloat(el("btEntryRangeBonus").value) || 0,
+        params: { days: 20, min: parse("btEntryRangeMin") / 100 },
+        weight: parse("btEntryRangeBonus"),
         rule_type: "entry"
       });
     }
 
     // 2. Exit Rules
     rules.push({
-      condition_name: "出場 AI 核心評分",
+      condition_name: "維持/出場 AI 分數",
       type: "BASE_SCORE",
       params: {},
-      weight: parseFloat(el("btExitScoreWeight").value) || 0,
+      weight: parse("btExitScoreWeight"),
       rule_type: "exit"
     });
 
-    if (el("btExitUseChange").checked) {
+    if (checked("btExitUseChange")) {
       rules.push({
-        condition_name: "出場跌幅止損",
+        condition_name: "出場價格跌幅",
         type: "PRICE_RETURN",
-        params: { days: 1, min: (parseFloat(el("btExitChangeMin").value) || 0) / 100 },
-        weight: parseFloat(el("btExitChangeBonus").value) || 0,
+        params: { days: 1, min: parse("btExitChangeMin") / 100 },
+        weight: parse("btExitChangeBonus"),
         rule_type: "exit"
       });
     }
-    if (el("btExitUseMa").checked) {
+    if (checked("btExitUseMa")) {
       rules.push({
         condition_name: "出場均線支撐",
         type: "MA_DEVIATION",
-        params: { ma: 20, min: (parseFloat(el("btExitMaGapMin").value) || 0) / 100 },
-        weight: parseFloat(el("btExitMaBonus").value) || 0,
+        params: { ma: 20, min: parse("btExitMaGapMin") / 100 },
+        weight: parse("btExitMaBonus"),
         rule_type: "exit"
       });
     }
@@ -558,8 +583,10 @@ async function confirmSaveScoringStrategy() {
     const payload = {
       name: name,
       slug: slug,
-      threshold: parseFloat(el("btEntryTotalMin").value) || 0,
-      exit_threshold: parseFloat(el("btExitTotalMin").value) || 0,
+      base_symbol: (val("btSymbol") || "BTCUSDT").trim().toUpperCase(),
+      timeframe: "1d",
+      threshold: parse("btEntryTotalMin"),
+      exit_threshold: parse("btExitTotalMin"),
       rules: rules
     };
 
@@ -647,12 +674,10 @@ async function loadStrategyDetails(slug) {
       fillForm(cfg);
 
       // Pre-fill Save Form for Editing
-      if (el("newStrategyName")) el("newStrategyName").value = s.name;
-      if (el("newStrategySlug")) {
-        el("newStrategySlug").value = s.slug;
-        el("newStrategySlug").disabled = true; // Slug is the unique key, don't change while editing
-        el("newStrategySlug").classList.add("opacity-50", "cursor-not-allowed");
-      }
+      setVal("newStrategyName", s.name);
+      setVal("newStrategySlug", s.slug);
+      el("newStrategySlug").disabled = true; // Slug is the unique key, don't change while editing
+      el("newStrategySlug").classList.add("opacity-50", "cursor-not-allowed");
       if (el("saveFormTitle")) el("saveFormTitle").textContent = "更新現有策略 (Update Strategy)";
       if (el("confirmSaveStrategyBtn")) el("confirmSaveStrategyBtn").textContent = "確認並更新 (Update)";
 
@@ -757,15 +782,15 @@ function bootstrap() {
     setupAuth();
 
     // Set default dates if empty
-    if (!el("btStart").value) {
+    if (!val("btStart")) {
       const d = new Date();
       d.setMonth(d.getMonth() - 1);
-      el("btStart").value = d.toISOString().split('T')[0];
-      console.log("[Backtest] Set default StartDate:", el("btStart").value);
+      setVal("btStart", d.toISOString().split('T')[0]);
+      console.log("[Backtest] Set default StartDate:", val("btStart"));
     }
-    if (!el("btEnd").value) {
-      el("btEnd").value = new Date().toISOString().split('T')[0];
-      console.log("[Backtest] Set default EndDate:", el("btEnd").value);
+    if (!val("btEnd")) {
+      setVal("btEnd", new Date().toISOString().split('T')[0]);
+      console.log("[Backtest] Set default EndDate:", val("btEnd"));
     }
 
     const runBtn = el("runBacktestBtn");
@@ -800,7 +825,7 @@ function bootstrap() {
       const params = new URLSearchParams(window.location.search);
       const slug = params.get("slug");
       if (slug) {
-        el("btStrategySlug").value = slug;
+        setVal("btStrategySlug", slug);
         loadStrategyDetails(slug);
       }
     });
@@ -938,7 +963,7 @@ async function fetchBinanceInfo() {
 
 
 async function updateMonitoringUI() {
-  const slug = el("btStrategySlug").value;
+  const slug = val("btStrategySlug");
   const statusEl = el("monitoringStatus");
   const btn = el("checkExecuteBtn");
   const logEl = el("executionLog");
@@ -973,7 +998,7 @@ async function updateMonitoringUI() {
 }
 
 async function toggleMonitoring() {
-  const slug = el("btStrategySlug").value;
+  const slug = val("btStrategySlug");
   if (!slug) {
     alert("請先選取一個資料庫策略。");
     return;
@@ -986,7 +1011,7 @@ async function toggleMonitoring() {
   try {
     const data = await api(`/api/analysis/strategies/get?slug=${slug}`);
     const id = data.strategy.id;
-    const minBalance = parseFloat(el("autoStopLimit").value) || 0;
+    const minBalance = parseFloat(val("autoStopLimit")) || 0;
 
     if (!isRunning) {
       logEl.textContent = "Starting monitoring...";

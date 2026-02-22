@@ -541,6 +541,9 @@ func (f *fakeRepo) GetStrategy(context.Context, string) (tradingDomain.Strategy,
 func (f *fakeRepo) ListStrategies(context.Context, StrategyFilter) ([]tradingDomain.Strategy, error) {
 	return nil, nil
 }
+func (f *fakeRepo) GetStrategyBySlug(context.Context, string) (tradingDomain.Strategy, error) {
+	return f.lastStrategy, nil
+}
 func (f *fakeRepo) SetStatus(context.Context, string, tradingDomain.Status, tradingDomain.Environment) error {
 	return nil
 }

@@ -43,6 +43,33 @@ func (s *Server) handleCreateStrategy(c *gin.Context) {
 	})
 }
 
+func (s *Server) handleGetStrategyByQuery(c *gin.Context) {
+	id := c.Query("id")
+	slug := c.Query("slug")
+
+	var st tradingDomain.Strategy
+	var err error
+
+	if id != "" {
+		st, err = s.tradingSvc.GetStrategy(c.Request.Context(), id)
+	} else if slug != "" {
+		st, err = s.tradingSvc.GetStrategyBySlug(c.Request.Context(), slug)
+	} else {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "id or slug required", "error_code": errCodeBadRequest})
+		return
+	}
+
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "strategy not found", "error_code": errCodeNotFound})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":  true,
+		"strategy": st,
+	})
+}
+
 func (s *Server) handleStrategyGetOrUpdate(c *gin.Context, id string) {
 	switch c.Request.Method {
 	case http.MethodGet:

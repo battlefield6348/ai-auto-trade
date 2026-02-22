@@ -294,7 +294,7 @@ func (s *Server) registerRoutes() {
 		{
 			analysisQuery.GET("/daily", s.handleAnalysisQuery)
 			analysisQuery.GET("/strategies", s.handleListStrategies)
-			analysisQuery.GET("/strategies/get", func(c *gin.Context) { s.handleStrategyGetOrUpdate(c, c.Query("id")) })
+			analysisQuery.GET("/strategies/get", s.handleGetStrategyByQuery)
 			analysisQuery.POST("/strategies/save-scoring", s.handleCreateStrategy)
 			analysisQuery.GET("/history", s.handleAnalysisHistory)
 			analysisQuery.GET("/summary", s.handleAnalysisSummary)

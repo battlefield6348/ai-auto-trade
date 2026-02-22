@@ -70,6 +70,17 @@ func (r *TradingRepo) GetStrategy(_ context.Context, id string) (tradingDomain.S
 	return s, nil
 }
 
+func (r *TradingRepo) GetStrategyBySlug(_ context.Context, slug string) (tradingDomain.Strategy, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, s := range r.strategies {
+		if s.Slug == slug {
+			return s, nil
+		}
+	}
+	return tradingDomain.Strategy{}, fmt.Errorf("strategy not found")
+}
+
 func (r *TradingRepo) ListStrategies(_ context.Context, filter trading.StrategyFilter) ([]tradingDomain.Strategy, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

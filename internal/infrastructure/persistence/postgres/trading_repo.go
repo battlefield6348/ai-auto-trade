@@ -102,19 +102,26 @@ WHERE id=$12;
 	return err
 }
 
-// GetStrategy 取得策略。
 func (r *TradingRepo) GetStrategy(ctx context.Context, id string) (tradingDomain.Strategy, error) {
-	const q = `
+	return r.getStrategyByField(ctx, "id", id)
+}
+
+func (r *TradingRepo) GetStrategyBySlug(ctx context.Context, slug string) (tradingDomain.Strategy, error) {
+	return r.getStrategyByField(ctx, "slug", slug)
+}
+
+func (r *TradingRepo) getStrategyByField(ctx context.Context, field, value string) (tradingDomain.Strategy, error) {
+	q := fmt.Sprintf(`
 SELECT id, name, slug, description, base_symbol, timeframe, env, status, version, buy_conditions, sell_conditions, risk_settings, created_by, updated_by, last_executed_at, created_at, updated_at
-FROM strategies WHERE id=$1;
-`
+FROM strategies WHERE %s=$1;
+`, field)
 	var s tradingDomain.Strategy
 	var buyRaw, sellRaw, riskRaw []byte
 	var env, status string
 	var createdBy, updatedBy sql.NullString
 	var lastActivated sql.NullTime
 	var desc, slug sql.NullString
-	if err := r.db.QueryRowContext(ctx, q, id).Scan(
+	if err := r.db.QueryRowContext(ctx, q, value).Scan(
 		&s.ID, &s.Name, &slug, &desc, &s.BaseSymbol, &s.Timeframe,
 		&env, &status, &s.Version, &buyRaw, &sellRaw, &riskRaw,
 		&createdBy, &updatedBy, &lastActivated, &s.CreatedAt, &s.UpdatedAt,

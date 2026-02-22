@@ -21,6 +21,7 @@ type Repository interface {
 	CreateStrategy(ctx context.Context, s tradingDomain.Strategy) (string, error)
 	UpdateStrategy(ctx context.Context, s tradingDomain.Strategy) error
 	GetStrategy(ctx context.Context, id string) (tradingDomain.Strategy, error)
+	GetStrategyBySlug(ctx context.Context, slug string) (tradingDomain.Strategy, error)
 	ListStrategies(ctx context.Context, filter StrategyFilter) ([]tradingDomain.Strategy, error)
 	DeleteStrategy(ctx context.Context, id string) error
 	SetStatus(ctx context.Context, id string, status tradingDomain.Status, env tradingDomain.Environment) error
@@ -219,6 +220,10 @@ func (s *Service) DeleteStrategy(ctx context.Context, id string) error {
 // GetStrategy 取得單筆策略。
 func (s *Service) GetStrategy(ctx context.Context, id string) (tradingDomain.Strategy, error) {
 	return s.repo.GetStrategy(ctx, id)
+}
+
+func (s *Service) GetStrategyBySlug(ctx context.Context, slug string) (tradingDomain.Strategy, error) {
+	return s.repo.GetStrategyBySlug(ctx, slug)
 }
 
 // ListStrategies 查詢策略列表。

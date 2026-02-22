@@ -203,11 +203,26 @@ func (s *ScoringStrategy) ShouldExit(data analysis.DailyAnalysisResult, pos trad
 
 	if pos.EntryPrice > 0 {
 		change := (data.Close - pos.EntryPrice) / pos.EntryPrice
-		if change <= sl {
-			return true, fmt.Sprintf("止損 (%.1f%%)", sl*100)
+		
+		// 處理百分比與小數的相容性 (如果設為 2.0 代表 2%，需除以 100 變為 0.02)
+		slVal := sl
+		if slVal < -1.0 || slVal > 1.0 {
+			slVal = slVal / 100.0
 		}
-		if change >= tp {
-			return true, fmt.Sprintf("止盈 (%.1f%%)", tp*100)
+		if slVal > 0 {
+			slVal = -slVal
+		}
+
+		tpVal := tp
+		if tpVal > 1.0 {
+			tpVal = tpVal / 100.0
+		}
+
+		if change <= slVal {
+			return true, fmt.Sprintf("止損 (%.2f%%)", slVal*100)
+		}
+		if change >= tpVal {
+			return true, fmt.Sprintf("止盈 (%.2f%%)", tpVal*100)
 		}
 	}
 

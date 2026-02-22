@@ -120,16 +120,16 @@ FROM strategies WHERE %s=$1;
 	var env, status string
 	var createdBy, updatedBy sql.NullString
 	var lastActivated sql.NullTime
-	var desc, slug sql.NullString
+	var desc, slugNull sql.NullString
 	if err := r.db.QueryRowContext(ctx, q, value).Scan(
-		&s.ID, &s.Name, &slug, &desc, &s.BaseSymbol, &s.Timeframe,
+		&s.ID, &s.Name, &slugNull, &desc, &s.BaseSymbol, &s.Timeframe,
 		&env, &status, &s.Version, &buyRaw, &sellRaw, &riskRaw,
 		&createdBy, &updatedBy, &lastActivated, &s.CreatedAt, &s.UpdatedAt,
 	); err != nil {
 		return s, err
 	}
 	s.Description = desc.String
-	s.Slug = slug.String
+	s.Slug = slugNull.String
 	_ = json.Unmarshal(buyRaw, &s.Buy)
 	_ = json.Unmarshal(sellRaw, &s.Sell)
 	_ = json.Unmarshal(riskRaw, &s.Risk)

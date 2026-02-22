@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"database/sql"
+	"fmt"
 	"net/http"
 
 	"ai-auto-trade/internal/application/strategy"
@@ -60,7 +62,11 @@ func (s *Server) handleGetStrategyByQuery(c *gin.Context) {
 	}
 
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "strategy not found", "error_code": errCodeNotFound})
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": fmt.Sprintf("strategy not found (id: %s, slug: %s)", id, slug), "error_code": errCodeNotFound})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "database error: " + err.Error(), "error_code": errCodeInternal})
+		}
 		return
 	}
 

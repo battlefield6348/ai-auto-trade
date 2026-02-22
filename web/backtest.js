@@ -192,6 +192,11 @@ function fillForm(cfg) {
 
 
 function renderResult(res) {
+  console.log("[Backtest] Rendering result:", res);
+  // Unwrap if nested in data or result (backend inconsistency fix)
+  if (res && res.data && !res.summary) res = res.data;
+  else if (res && res.result && !res.summary) res = res.result;
+
   const box = el("btResult");
   const list = el("btEvents");
   const resetCharts = () => {
@@ -202,8 +207,8 @@ function renderResult(res) {
   };
   if (list) list.innerHTML = "";
   if (!box) return;
-  if (!res || res.error) {
-    box.textContent = res?.error || "尚未回測";
+  if (!res || res.error || (!res.summary && !res.events && !res.trades)) {
+    box.textContent = res?.error || "尚未執行回測或返回資料為空";
     resetCharts();
     return;
   }
@@ -442,14 +447,16 @@ async function runBacktest(isAuto = false) {
     if (!isAuto) setAlert("請選擇起始與結束日期", "error");
     return;
   }
-  console.log("[Backtest] Running...", payload.symbol, payload.start_date, "to", payload.end_date);
+  console.log("[Backtest] Request Payload:", payload);
   if (!isAuto) setBusy("runBacktestBtn", true, "執行中...");
   try {
     const res = await api("/api/analysis/backtest", { method: "POST", body: payload });
+    console.log("[Backtest] Successful Response:", res);
     renderResult(res);
     if (!isAuto) setAlert("回測完成", "success");
-    else setAlert(""); // Clear any old error alerts on success
+    else setAlert("");
   } catch (err) {
+    console.error("[Backtest] Request Failed:", err);
     if (!isAuto) setAlert(err.message, "error");
     renderResult({ error: err.message });
   } finally {
@@ -731,121 +738,135 @@ function setupAuth() {
 
 
 
+console.log("[Backtest] Script loaded at", new Date().toISOString());
+
 function bootstrap() {
-  updateExchangeLink();
-  initSidebar();
-  initBinanceConfigModal();
-  initGlobalEnvSelector((env) => {
-    console.log("[Backtest] Env switched to:", env);
-    // You can add logic here if backtest needs to react to env change
-  });
+  try {
+    console.log("[Backtest] Bootstrapping UI components...");
+    updateExchangeLink();
+    initSidebar();
+    initBinanceConfigModal();
+    initGlobalEnvSelector((env) => {
+      console.log("[Backtest] Env switched to:", env);
+    });
 
-  window.onBinanceConfigUpdate = () => {
-    // Refresh page or update data
-    window.location.reload();
-  };
+    window.onBinanceConfigUpdate = () => {
+      window.location.reload();
+    };
 
-  setupAuth();
+    setupAuth();
 
-  // Set default dates if empty
-  if (!el("btStart").value) {
-    const d = new Date();
-    d.setMonth(d.getMonth() - 1);
-    el("btStart").value = d.toISOString().split('T')[0];
-  }
-  if (!el("btEnd").value) {
-    el("btEnd").value = new Date().toISOString().split('T')[0];
-  }
-
-  el("runBacktestBtn").addEventListener("click", () => runBacktest());
-  el("saveAsStrategyBtn").addEventListener("click", () => {
-    const form = el("saveAsStrategyForm");
-    form.classList.remove("hidden");
-
-    // If we're not specifically in "editing mode" (slug in URL), ensure form is clean
-    const params = new URLSearchParams(window.location.search);
-    if (!params.get("slug")) {
-      el("newStrategySlug").disabled = false;
-      el("newStrategySlug").classList.remove("opacity-50", "cursor-not-allowed");
-      el("saveFormTitle").textContent = "儲存為全新策略 (Save New)";
-      el("confirmSaveStrategyBtn").textContent = "確認儲存 (Save)";
+    // Set default dates if empty
+    if (!el("btStart").value) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - 1);
+      el("btStart").value = d.toISOString().split('T')[0];
+      console.log("[Backtest] Set default StartDate:", el("btStart").value);
     }
-  });
-  el("cancelSaveStrategyBtn").addEventListener("click", () => el("saveAsStrategyForm").classList.add("hidden"));
-  el("confirmSaveStrategyBtn").addEventListener("click", confirmSaveScoringStrategy);
-  el("savePresetBtn").addEventListener("click", savePreset);
-  el("loadPresetBtn").addEventListener("click", loadPreset);
-
-  fetchStrategies().then(() => {
-    const params = new URLSearchParams(window.location.search);
-    const slug = params.get("slug");
-    if (slug) {
-      el("btStrategySlug").value = slug;
-      loadStrategyDetails(slug);
+    if (!el("btEnd").value) {
+      el("btEnd").value = new Date().toISOString().split('T')[0];
+      console.log("[Backtest] Set default EndDate:", el("btEnd").value);
     }
-  });
 
-  el("btStrategySlug").addEventListener("change", (e) => {
-    if (e.target.value) {
-      loadStrategyDetails(e.target.value);
-    }
-  });
-
-  // Checkboxes
-  const checkboxes = [
-    "btEntryUseChange", "btEntryUseVolume", "btEntryUseMa", "btEntryUseRange",
-    "btExitUseChange", "btExitUseMa", "btExitUseVolume"
-  ];
-  checkboxes.forEach((id) => {
-    const input = el(id);
-    if (input) {
-      input.addEventListener("change", () => {
-        updateVisibility();
-        debouncedRunBacktest();
+    const runBtn = el("runBacktestBtn");
+    if (runBtn) {
+      runBtn.addEventListener("click", () => {
+        console.log("[Backtest] Run button clicked");
+        runBacktest();
       });
+    } else {
+      console.error("[Backtest] runBacktestBtn not found in DOM");
     }
-  });
 
-  // Numeric and Text Inputs
-  const inputs = [
-    "btSymbol", "btStart", "btEnd", "btHorizons",
-    "btEntryTotalMin", "btEntryScoreWeight", "btEntryChangeMin", "btEntryChangeBonus",
-    "btEntryVolMin", "btEntryVolumeBonus", "btEntryMaGapMin", "btEntryMaBonus",
-    "btEntryRangeMin", "btEntryRangeBonus",
-    "btExitTotalMin", "btExitScoreWeight", "btExitChangeMin", "btExitChangeBonus",
-    "btExitMaGapMin", "btExitMaBonus", "btExitVolMin", "btExitVolumeBonus"
-  ];
-  inputs.forEach(id => {
-    const input = el(id);
-    if (!input) return;
-    const eventType = input.type === "date" ? "change" : "input";
-    input.addEventListener(eventType, debouncedRunBacktest);
-  });
+    el("saveAsStrategyBtn")?.addEventListener("click", () => {
+      const form = el("saveAsStrategyForm");
+      form.classList.remove("hidden");
 
-  updateVisibility();
+      const params = new URLSearchParams(window.location.search);
+      if (!params.get("slug")) {
+        el("newStrategySlug").disabled = false;
+        el("newStrategySlug").classList.remove("opacity-50", "cursor-not-allowed");
+        el("saveFormTitle").textContent = "儲存為全新策略 (Save New)";
+        el("confirmSaveStrategyBtn").textContent = "確認儲存 (Save)";
+      }
+    });
 
-  // Set default dates: 2024/1/1 to Today
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  if (!el("btStart").value) el("btStart").value = "2024-01-01";
-  if (!el("btEnd").value) el("btEnd").value = `${y}-${m}-${d}`;
+    el("cancelSaveStrategyBtn")?.addEventListener("click", () => el("saveAsStrategyForm")?.classList.add("hidden"));
+    el("confirmSaveStrategyBtn")?.addEventListener("click", confirmSaveScoringStrategy);
+    el("savePresetBtn")?.addEventListener("click", savePreset);
+    el("loadPresetBtn")?.addEventListener("click", loadPreset);
 
-  if (state.token) {
-    el("loginStatus").textContent = state.lastEmail ? `已登入：${state.lastEmail}` : "已登入";
+    fetchStrategies().then(() => {
+      const params = new URLSearchParams(window.location.search);
+      const slug = params.get("slug");
+      if (slug) {
+        el("btStrategySlug").value = slug;
+        loadStrategyDetails(slug);
+      }
+    });
+
+    el("btStrategySlug")?.addEventListener("change", (e) => {
+      if (e.target.value) {
+        loadStrategyDetails(e.target.value);
+      }
+    });
+
+    console.log("[Backtest] Bootstrap completed successfully");
+
+    // ─── Post-Bootstrap Event Handlers ───
+    // Checkboxes for auto-refresh
+    const checkboxes = [
+      "btEntryUseChange", "btEntryUseVolume", "btEntryUseMa", "btEntryUseRange",
+      "btExitUseChange", "btExitUseMa", "btExitUseVolume"
+    ];
+    checkboxes.forEach((id) => {
+      const input = el(id);
+      if (input) {
+        input.addEventListener("change", () => {
+          updateVisibility();
+          debouncedRunBacktest();
+        });
+      }
+    });
+
+    // Numeric and Text Inputs for auto-refresh
+    const inputs = [
+      "btSymbol", "btStart", "btEnd", "btHorizons",
+      "btEntryTotalMin", "btEntryScoreWeight", "btEntryChangeMin", "btEntryChangeBonus",
+      "btEntryVolMin", "btEntryVolumeBonus", "btEntryMaGapMin", "btEntryMaBonus",
+      "btEntryRangeMin", "btEntryRangeBonus",
+      "btExitTotalMin", "btExitScoreWeight", "btExitChangeMin", "btExitChangeBonus",
+      "btExitMaGapMin", "btExitMaBonus", "btExitVolMin", "btExitVolumeBonus"
+    ];
+    inputs.forEach(id => {
+      const input = el(id);
+      if (!input) return;
+      const eventType = input.type === "date" ? "change" : "input";
+      input.addEventListener(eventType, debouncedRunBacktest);
+    });
+
+    updateVisibility();
+
+    if (state.token) {
+      el("loginStatus").textContent = state.lastEmail ? `已登入：${state.lastEmail}` : "已登入";
+    }
+
+    // Initial run
+    setTimeout(() => runBacktest(true), 800);
+
+    // Binance Live monitoring
+    el("refreshBinanceBtn")?.addEventListener("click", fetchBinanceInfo);
+    el("btStrategySlug")?.addEventListener("change", updateMonitoringUI);
+    el("checkExecuteBtn")?.addEventListener("click", toggleMonitoring);
+
+    fetchBinanceInfo();
+    setInterval(updateMonitoringUI, 10000);
+    setInterval(fetchBinanceInfo, 30000);
+
+  } catch (err) {
+    console.error("[Backtest] Bootstrap failed:", err);
+    setAlert("系統初始化失敗：" + err.message, "error");
   }
-
-  // Initial run
-  setTimeout(() => runBacktest(true), 800);
-
-  // Binance Live
-  el("refreshBinanceBtn")?.addEventListener("click", fetchBinanceInfo);
-  el("btStrategySlug").addEventListener("change", updateMonitoringUI);
-  el("checkExecuteBtn").addEventListener("click", toggleMonitoring);
-  fetchBinanceInfo();
-  setInterval(updateMonitoringUI, 10000);
-  setInterval(fetchBinanceInfo, 30000);
 }
 
 

@@ -69,7 +69,7 @@ func NewBacktestUseCase(db strategyDomain.DBQueryer, dataProv DataProvider) *Bac
 	return &BacktestUseCase{db: db, dataProv: dataProv}
 }
 
-func (u *BacktestUseCase) Execute(ctx context.Context, slug string, symbol string, start, end time.Time) (*BacktestResult, error) {
+func (u *BacktestUseCase) Execute(ctx context.Context, slug string, symbol string, start, end time.Time, horizons []int) (*BacktestResult, error) {
 	if u.db == nil {
 		return nil, fmt.Errorf("database not available")
 	}
@@ -83,10 +83,10 @@ func (u *BacktestUseCase) Execute(ctx context.Context, slug string, symbol strin
 		return nil, fmt.Errorf("load strategy failed: %w", err)
 	}
 
-	return u.ExecuteWithStrategy(ctx, s, symbol, start, end)
+	return u.ExecuteWithStrategy(ctx, s, symbol, start, end, horizons)
 }
 
-func (u *BacktestUseCase) ExecuteWithStrategy(ctx context.Context, s *strategyDomain.ScoringStrategy, symbol string, start, end time.Time) (*BacktestResult, error) {
+func (u *BacktestUseCase) ExecuteWithStrategy(ctx context.Context, s *strategyDomain.ScoringStrategy, symbol string, start, end time.Time, horizons []int) (*BacktestResult, error) {
 	// 2. Load History
 	history, err := u.dataProv.FindHistory(ctx, symbol, s.Timeframe, &start, &end, 5000, true)
 	if err != nil {
@@ -96,7 +96,9 @@ func (u *BacktestUseCase) ExecuteWithStrategy(ctx context.Context, s *strategyDo
 		return history[i].TradeDate.Before(history[j].TradeDate)
 	})
 
-	horizons := []int{3, 5, 10}
+	if len(horizons) == 0 {
+		horizons = []int{3, 5, 10}
+	}
 	var events []BacktestEvent
 	retStats := make(map[int][]float64)
 

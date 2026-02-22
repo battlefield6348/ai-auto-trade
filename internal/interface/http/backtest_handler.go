@@ -9,6 +9,7 @@ import (
 	"ai-auto-trade/internal/application/strategy"
 	"ai-auto-trade/internal/application/trading"
 	strategyDomain "ai-auto-trade/internal/domain/strategy"
+	tradingDomain "ai-auto-trade/internal/domain/trading"
 
 	"github.com/gin-gonic/gin"
 )
@@ -37,11 +38,11 @@ func (s *Server) handleAnalysisBacktest(c *gin.Context) {
 	slug := c.Query("slug")
 	var res *strategy.BacktestResult
 	if slug != "" {
-		res, err = s.scoringBtUC.Execute(c.Request.Context(), slug, body.Symbol, start, end)
+		res, err = s.scoringBtUC.Execute(c.Request.Context(), slug, body.Symbol, start, end, body.Horizons)
 	} else {
 		// Build dynamic strategy from inline params
 		strat := buildDynamicStrategy(body)
-		res, err = s.scoringBtUC.ExecuteWithStrategy(c.Request.Context(), strat, body.Symbol, start, end)
+		res, err = s.scoringBtUC.ExecuteWithStrategy(c.Request.Context(), strat, body.Symbol, start, end, body.Horizons)
 	}
 
 	if err != nil {
@@ -61,6 +62,7 @@ func (s *Server) handleSlugBacktest(c *gin.Context) {
 		Symbol    string `json:"symbol"`
 		StartDate string `json:"start_date"`
 		EndDate   string `json:"end_date"`
+		Horizons  []int  `json:"horizons"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid body", "error_code": errCodeBadRequest})
@@ -70,7 +72,7 @@ func (s *Server) handleSlugBacktest(c *gin.Context) {
 	start, _ := time.Parse("2006-01-02", body.StartDate)
 	end, _ := time.Parse("2006-01-02", body.EndDate)
 
-	res, err := s.scoringBtUC.Execute(c.Request.Context(), body.Slug, body.Symbol, start, end)
+	res, err := s.scoringBtUC.Execute(c.Request.Context(), body.Slug, body.Symbol, start, end, body.Horizons)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error(), "error_code": errCodeInternal})
 		return
@@ -124,8 +126,16 @@ func buildDynamicStrategy(req analysisBacktestRequest) *strategyDomain.ScoringSt
 	s.EntryRules = buildRules(req.Entry, "entry")
 	s.ExitRules = buildRules(req.Exit, "exit")
 
+	// Apply basic risk settings if needed for simulator
+	s.Risk = tradingDomain.RiskSettings{
+		StopLossPct:   floatPtr(0.02), // Default 2%
+		TakeProfitPct: floatPtr(0.05), // Default 5%
+	}
+
 	return s
 }
+
+func floatPtr(v float64) *float64 { return &v }
 
 func buildRules(params backtestSideParams, ruleType string) []strategyDomain.StrategyRule {
 	var rules []strategyDomain.StrategyRule
@@ -182,7 +192,8 @@ func buildRules(params backtestSideParams, ruleType string) []strategyDomain.Str
 
 	// 5. Range Pos
 	if params.Flags.UseRange {
-		p, _ := json.Marshal(map[string]interface{}{"days": 20, "min": params.Thresholds.RangeMin})
+		// Divide RangeMin by 100 because UI sends 80 for 0.8
+		p, _ := json.Marshal(map[string]interface{}{"days": 20, "min": params.Thresholds.RangeMin / 100.0})
 		rules = append(rules, strategyDomain.StrategyRule{
 			Weight:   params.Weights.RangeBonus,
 			RuleType: ruleType,

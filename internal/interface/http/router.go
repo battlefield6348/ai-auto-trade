@@ -59,6 +59,7 @@ type Server struct {
 	presetStore   backtestPresetStore
 	scoringBtUC   *appStrategy.BacktestUseCase
 	saveScoringBtUC *appStrategy.SaveScoringStrategyUseCase
+	analyzeUC     *analysis.AnalyzeUseCase
 	binanceClient   *binance.Client
 	defaultEnv      tradingDomain.Environment
 
@@ -158,6 +159,7 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 	if db != nil {
 		s.scoringBtUC = appStrategy.NewBacktestUseCase(db, dataRepo)
 		s.saveScoringBtUC = appStrategy.NewSaveScoringStrategyUseCase(db)
+		s.analyzeUC = analysis.NewAnalyzeUseCase(nil, nil, nil) // Placeholder? No, I need components.
 	}
 	s.binanceClient = binanceClient
 	s.defaultEnv = tradingDomain.EnvTest

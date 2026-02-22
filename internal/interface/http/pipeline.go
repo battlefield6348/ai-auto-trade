@@ -184,9 +184,12 @@ func (s *Server) generateSyntheticBTC(ctx context.Context, tradeDate time.Time) 
 
 func (s *Server) calculateAnalysis(ctx context.Context, p dataDomain.DailyPrice) analysisDomain.DailyAnalysisResult {
 	history, _ := s.dataRepo.PricesByPair(ctx, p.Symbol, p.Timeframe)
-	var return5 *float64
+	var ret5, ret20, ret60 *float64
 	var volumeRatio *float64
 	var changeRate float64
+	var ma20, rangePos, h20, l20 *float64
+	var deviation20 *float64
+
 	idx := -1
 	for i := len(history) - 1; i >= 0; i-- {
 		if history[i].TradeDate.Equal(p.TradeDate) {
@@ -194,33 +197,73 @@ func (s *Server) calculateAnalysis(ctx context.Context, p dataDomain.DailyPrice)
 			break
 		}
 	}
+
 	if idx > 0 {
 		prev := history[idx-1]
 		if prev.Close > 0 {
 			changeRate = (p.Close - prev.Close) / prev.Close
 		}
 	}
-	if idx >= 5 {
-		earlier := history[idx-5]
-		if earlier.Close > 0 {
-			val := (p.Close / earlier.Close) - 1
-			return5 = &val
-		}
+
+	// Helper for pct return
+	pctRet := func(days int) *float64 {
+		if idx < days { return nil }
+		earlier := history[idx-days]
+		if earlier.Close <= 0 { return nil }
+		val := (p.Close / earlier.Close) - 1
+		return &val
 	}
-	if idx >= 5 {
+	ret5 = pctRet(5)
+	ret20 = pctRet(20)
+	ret60 = pctRet(60)
+
+	// Volume Ratio (20d avg)
+	if idx >= 19 {
 		var sumVol float64
-		for i := idx - 4; i <= idx; i++ {
+		for i := idx - 19; i <= idx; i++ {
 			sumVol += float64(history[i].Volume)
 		}
-		avg := sumVol / 5
+		avg := sumVol / 20
 		if avg > 0 {
 			vr := float64(p.Volume) / avg
 			volumeRatio = &vr
 		}
 	}
-	score := simpleScore(return5, changeRate, volumeRatio)
 
-	return analysisDomain.DailyAnalysisResult{
+	// MA20 and Deviation
+	if idx >= 19 {
+		var sum float64
+		for i := idx - 19; i <= idx; i++ {
+			sum += history[i].Close
+		}
+		avg := sum / 20
+		ma20 = &avg
+		if avg > 0 {
+			dev := (p.Close - avg) / avg
+			deviation20 = &dev
+		}
+	}
+
+	// High/Low Range 20d
+	if idx >= 0 {
+		start := idx - 19
+		if start < 0 { start = 0 }
+		high, low := history[idx].High, history[idx].Low
+		for i := start; i <= idx; i++ {
+			if history[i].High > high { high = history[i].High }
+			if history[i].Low < low { low = history[i].Low }
+		}
+		h20, l20 = &high, &low
+		if high != low {
+			val := (p.Close - low) / (high - low)
+			rangePos = &val
+		} else {
+			zero := 0.0
+			rangePos = &zero
+		}
+	}
+
+	res := analysisDomain.DailyAnalysisResult{
 		Symbol:         p.Symbol,
 		Market:         p.Market,
 		Timeframe:      p.Timeframe,
@@ -229,30 +272,47 @@ func (s *Server) calculateAnalysis(ctx context.Context, p dataDomain.DailyPrice)
 		Version:        "v1-mvp",
 		Close:          p.Close,
 		ChangeRate:     changeRate,
-		Return5:        return5,
+		Return5:        ret5,
+		Return20:       ret20,
+		Return60:       ret60,
 		Volume:         p.Volume,
 		VolumeMultiple: volumeRatio,
-		Score:          score,
+		MA20:           ma20,
+		Deviation20:    deviation20,
+		High20:         h20,
+		Low20:          l20,
+		RangePos20:     rangePos,
 		Success:        true,
 	}
+	res.Score = simpleScore(res)
+	return res
 }
 
-func simpleScore(ret5 *float64, changeRate float64, volumeRatio *float64) float64 {
+func simpleScore(res analysisDomain.DailyAnalysisResult) float64 {
 	score := 50.0
-	if ret5 != nil {
-		score += *ret5 * 100
+
+	if res.Return5 != nil {
+		score += clamp(*res.Return5*100, -20, 20) * 0.5
 	}
-	score += changeRate * 100
-	if volumeRatio != nil {
-		score += (*volumeRatio - 1) * 10
+	if res.Return20 != nil {
+		score += clamp(*res.Return20*100, -40, 40) * 0.4
 	}
-	if score < 0 {
-		return 0
+	if res.VolumeMultiple != nil {
+		score += clamp((*res.VolumeMultiple-1)*10, -10, 15)
 	}
-	if score > 100 {
-		return 100
+	if res.RangePos20 != nil {
+		score += (*res.RangePos20 - 0.5) * 10
 	}
+
+	if score < 0 { score = 0 }
+	if score > 100 { score = 100 }
 	return score
+}
+
+func clamp(v, min, max float64) float64 {
+	if v < min { return min }
+	if v > max { return max }
+	return v
 }
 
 // fetchBTCSeries 從 Binance 抓取 BTCUSDT 1d K 線，包含指定日期與前 5 日。

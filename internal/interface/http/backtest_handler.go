@@ -1,11 +1,14 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
 
+	"ai-auto-trade/internal/application/strategy"
 	"ai-auto-trade/internal/application/trading"
+	strategyDomain "ai-auto-trade/internal/domain/strategy"
 
 	"github.com/gin-gonic/gin"
 )
@@ -32,12 +35,15 @@ func (s *Server) handleAnalysisBacktest(c *gin.Context) {
 	// But it expects a 'slug'. If we want arbitrary rules, we might need a different execute method.
 	// For MVP, we assume we want to backtest an existing strategy by slug.
 	slug := c.Query("slug")
-	if slug == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "slug query param required", "error_code": errCodeBadRequest})
-		return
+	var res *strategy.BacktestResult
+	if slug != "" {
+		res, err = s.scoringBtUC.Execute(c.Request.Context(), slug, body.Symbol, start, end)
+	} else {
+		// Build dynamic strategy from inline params
+		strat := buildDynamicStrategy(body)
+		res, err = s.scoringBtUC.ExecuteWithStrategy(c.Request.Context(), strat, body.Symbol, start, end)
 	}
 
-	res, err := s.scoringBtUC.Execute(c.Request.Context(), slug, body.Symbol, start, end)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error(), "error_code": errCodeInternal})
 		return
@@ -101,4 +107,91 @@ func normalizeBacktestRequest(req analysisBacktestRequest) (trading.BacktestInpu
 		StartDate: start,
 		EndDate:   end,
 	}, nil
+}
+
+func buildDynamicStrategy(req analysisBacktestRequest) *strategyDomain.ScoringStrategy {
+	s := &strategyDomain.ScoringStrategy{
+		Name:          "Inline Test",
+		Timeframe:     req.Timeframe,
+		BaseSymbol:    req.Symbol,
+		Threshold:     req.Entry.TotalMin,
+		ExitThreshold: req.Exit.TotalMin,
+	}
+	if s.Timeframe == "" {
+		s.Timeframe = "1d"
+	}
+
+	s.EntryRules = buildRules(req.Entry, "entry")
+	s.ExitRules = buildRules(req.Exit, "exit")
+
+	return s
+}
+
+func buildRules(params backtestSideParams, ruleType string) []strategyDomain.StrategyRule {
+	var rules []strategyDomain.StrategyRule
+
+	// 1. Base Score
+	if params.Weights.Score > 0 {
+		rules = append(rules, strategyDomain.StrategyRule{
+			Weight:   params.Weights.Score,
+			RuleType: ruleType,
+			Condition: strategyDomain.Condition{
+				Type: "BASE_SCORE",
+			},
+		})
+	}
+
+	// 2. Price Return
+	if params.Flags.UseChange {
+		p, _ := json.Marshal(map[string]interface{}{"days": 1, "min": params.Thresholds.ChangeMin})
+		rules = append(rules, strategyDomain.StrategyRule{
+			Weight:   params.Weights.ChangeBonus,
+			RuleType: ruleType,
+			Condition: strategyDomain.Condition{
+				Type:      "PRICE_RETURN",
+				ParamsRaw: p,
+			},
+		})
+	}
+
+	// 3. Volume Surge
+	if params.Flags.UseVolume {
+		p, _ := json.Marshal(map[string]interface{}{"min": params.Thresholds.VolumeRatioMin})
+		rules = append(rules, strategyDomain.StrategyRule{
+			Weight:   params.Weights.VolumeBonus,
+			RuleType: ruleType,
+			Condition: strategyDomain.Condition{
+				Type:      "VOLUME_SURGE",
+				ParamsRaw: p,
+			},
+		})
+	}
+
+	// 4. MA Deviation
+	if params.Flags.UseMa {
+		p, _ := json.Marshal(map[string]interface{}{"ma": 20, "min": params.Thresholds.MaGapMin})
+		rules = append(rules, strategyDomain.StrategyRule{
+			Weight:   params.Weights.MaBonus,
+			RuleType: ruleType,
+			Condition: strategyDomain.Condition{
+				Type:      "MA_DEVIATION",
+				ParamsRaw: p,
+			},
+		})
+	}
+
+	// 5. Range Pos
+	if params.Flags.UseRange {
+		p, _ := json.Marshal(map[string]interface{}{"days": 20, "min": params.Thresholds.RangeMin})
+		rules = append(rules, strategyDomain.StrategyRule{
+			Weight:   params.Weights.RangeBonus,
+			RuleType: ruleType,
+			Condition: strategyDomain.Condition{
+				Type:      "RANGE_POS",
+				ParamsRaw: p,
+			},
+		})
+	}
+
+	return rules
 }

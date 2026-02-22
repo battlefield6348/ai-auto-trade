@@ -83,6 +83,10 @@ func (u *BacktestUseCase) Execute(ctx context.Context, slug string, symbol strin
 		return nil, fmt.Errorf("load strategy failed: %w", err)
 	}
 
+	return u.ExecuteWithStrategy(ctx, s, symbol, start, end)
+}
+
+func (u *BacktestUseCase) ExecuteWithStrategy(ctx context.Context, s *strategyDomain.ScoringStrategy, symbol string, start, end time.Time) (*BacktestResult, error) {
 	// 2. Load History
 	history, err := u.dataProv.FindHistory(ctx, symbol, s.Timeframe, &start, &end, 5000, true)
 	if err != nil {

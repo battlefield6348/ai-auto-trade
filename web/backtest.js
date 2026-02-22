@@ -438,8 +438,11 @@ function setBusy(id, busy, labelWhenIdle) {
 
 async function runBacktest(isAuto = false) {
   const payload = readForm();
-  if (!payload.start_date || !payload.end_date) return;
-  console.log("[Backtest] Running...", isAuto ? "(auto)" : "");
+  if (!payload.start_date || !payload.end_date) {
+    if (!isAuto) setAlert("請選擇起始與結束日期", "error");
+    return;
+  }
+  console.log("[Backtest] Running...", payload.symbol, payload.start_date, "to", payload.end_date);
   if (!isAuto) setBusy("runBacktestBtn", true, "執行中...");
   try {
     const res = await api("/api/analysis/backtest", { method: "POST", body: payload });
@@ -744,6 +747,16 @@ function bootstrap() {
 
   setupAuth();
 
+  // Set default dates if empty
+  if (!el("btStart").value) {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    el("btStart").value = d.toISOString().split('T')[0];
+  }
+  if (!el("btEnd").value) {
+    el("btEnd").value = new Date().toISOString().split('T')[0];
+  }
+
   el("runBacktestBtn").addEventListener("click", () => runBacktest());
   el("saveAsStrategyBtn").addEventListener("click", () => {
     const form = el("saveAsStrategyForm");
@@ -979,3 +992,6 @@ async function toggleMonitoring() {
 }
 
 bootstrap();
+
+window.runBacktest = runBacktest;
+window.api = api;

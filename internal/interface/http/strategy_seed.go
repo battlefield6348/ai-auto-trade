@@ -136,7 +136,7 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 	}
 
 	// 額外清理：刪除表現不佳或舊的策略，僅保留最新最強版本
-	_, err = db.ExecContext(ctx, "DELETE FROM strategies WHERE slug NOT IN ('nexus-apex-high-profit', 'nexus-quantum-v2')")
+	_, err = db.ExecContext(ctx, "DELETE FROM strategies WHERE slug NOT IN ('nexus-apex-high-profit', 'nexus-quantum-v2', 'ai-optimized')")
 	if err != nil {
 		log.Printf("[Seed] Cleanup old strategies failed: %v", err)
 	}

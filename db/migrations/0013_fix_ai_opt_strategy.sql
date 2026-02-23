@@ -1,4 +1,41 @@
 -- Fix AI Opt Strategy to include bonuses and AI score
+-- 0. Ensure the strategy exists (using idempotent logic)
+DO $$
+DECLARE
+    admin_id UUID;
+BEGIN
+    -- Try to find an admin or valid user to own this strategy
+    SELECT id INTO admin_id FROM users WHERE email = 'admin@example.com' LIMIT 1;
+    IF admin_id IS NULL THEN
+        SELECT id INTO admin_id FROM users LIMIT 1;
+    END IF;
+
+    IF admin_id IS NOT NULL THEN
+        INSERT INTO strategies (
+            id, user_id, name, slug, timeframe, base_symbol, 
+            threshold, exit_threshold, status, env, 
+            buy_conditions, sell_conditions, risk_settings, 
+            is_active, updated_at
+        )
+        VALUES (
+            '5b8bd338-8e51-4223-8696-79bd8736a223', 
+            admin_id, 
+            'AI Optimized Strategy', 
+            'ai-optimized', 
+            '1d', 
+            'BTCUSDT', 
+            80, 
+            10, 
+            'active', 
+            'both', 
+            '[]', '[]', '{}', 
+            true, 
+            NOW()
+        )
+        ON CONFLICT (id) DO NOTHING;
+    END IF;
+END $$;
+
 -- 1. Ensure conditions exist (using idempotent logic)
 INSERT INTO conditions (name, type, params)
 SELECT 'Base AI Score', 'BASE_SCORE', '{}'

@@ -167,23 +167,23 @@ function fillForm(cfg) {
   const mapSide = (prefix, sideCfg) => {
     if (!sideCfg) return;
     if (sideCfg.weights) {
-      if (sideCfg.weights.score !== undefined) setVal(prefix + "ScoreWeight", sideCfg.weights.score);
-      if (sideCfg.weights.change_bonus !== undefined) setVal(prefix + "ChangeBonus", sideCfg.weights.change_bonus);
-      if (sideCfg.weights.volume_bonus !== undefined) setVal(prefix + "VolumeBonus", sideCfg.weights.volume_bonus);
-      if (sideCfg.weights.ma_bonus !== undefined) setVal(prefix + "MaBonus", sideCfg.weights.ma_bonus);
-      if (sideCfg.weights.range_bonus !== undefined) setVal(prefix + "RangeBonus", sideCfg.weights.range_bonus);
+      setVal(prefix + "ScoreWeight", sideCfg.weights.score ?? 0);
+      setVal(prefix + "ChangeBonus", sideCfg.weights.change_bonus ?? 0);
+      setVal(prefix + "VolumeBonus", sideCfg.weights.volume_bonus ?? 0);
+      setVal(prefix + "MaBonus", sideCfg.weights.ma_bonus ?? 0);
+      setVal(prefix + "RangeBonus", sideCfg.weights.range_bonus ?? 0);
     }
     if (sideCfg.thresholds) {
-      if (sideCfg.thresholds.change_min !== undefined) setVal(prefix + "ChangeMin", sideCfg.thresholds.change_min * 100);
-      if (sideCfg.thresholds.volume_ratio_min !== undefined) setVal(prefix + "VolMin", sideCfg.thresholds.volume_ratio_min);
-      if (sideCfg.thresholds.ma_gap_min !== undefined) setVal(prefix + "MaGapMin", sideCfg.thresholds.ma_gap_min * 100);
-      if (sideCfg.thresholds.range_min !== undefined) setVal(prefix + "RangeMin", sideCfg.thresholds.range_min);
+      setVal(prefix + "ChangeMin", (sideCfg.thresholds.change_min ?? 0) * 100);
+      setVal(prefix + "VolMin", sideCfg.thresholds.volume_ratio_min ?? 1.0);
+      setVal(prefix + "MaGapMin", (sideCfg.thresholds.ma_gap_min ?? 0) * 100);
+      setVal(prefix + "RangeMin", (sideCfg.thresholds.range_min ?? 0) * 100);
     }
     if (sideCfg.flags) {
-      if (sideCfg.flags.use_change !== undefined) setChecked(prefix + "UseChange", sideCfg.flags.use_change);
-      if (sideCfg.flags.use_volume !== undefined) setChecked(prefix + "UseVolume", sideCfg.flags.use_volume);
-      if (sideCfg.flags.use_ma !== undefined) setChecked(prefix + "UseMa", sideCfg.flags.use_ma);
-      if (sideCfg.flags.use_range !== undefined) setChecked(prefix + "UseRange", sideCfg.flags.use_range);
+      setChecked(prefix + "UseChange", !!sideCfg.flags.use_change);
+      setChecked(prefix + "UseVolume", !!sideCfg.flags.use_volume);
+      setChecked(prefix + "UseMa", !!sideCfg.flags.use_ma);
+      setChecked(prefix + "UseRange", !!sideCfg.flags.use_range);
     }
     if (sideCfg.total_min !== undefined) setVal(prefix + "TotalMin", sideCfg.total_min);
   };
@@ -488,15 +488,27 @@ const debouncedRunBacktest = debounce(() => runBacktest(true), 400);
 // runDbStrategy removed, now unified into runBacktest
 
 
-async function confirmSaveScoringStrategy() {
-  const name = val("newStrategyName").trim();
-  const slug = val("newStrategySlug").trim();
+async function confirmSaveScoringStrategy(sourceBtnId = "confirmSaveStrategyBtn") {
+  const isUpdate = (sourceBtnId === "updateStrategyBtn");
+
+  // Source of truth for identity
+  let name, slug;
+  if (isUpdate) {
+    slug = val("btStrategySlug");
+    const select = el("btStrategySlug");
+    name = select.options[select.selectedIndex].text.split(" (")[0]; // Extract name from "Name (slug)"
+  } else {
+    name = val("newStrategyName").trim();
+    slug = val("newStrategySlug").trim();
+  }
+
   if (!name || !slug) {
     console.warn("[SaveStrategy] Name or Slug missing");
     return setAlert("請輸入名稱與代碼", "error");
   }
 
-  setBusy("confirmSaveStrategyBtn", true, "儲存中");
+  const originalText = el(sourceBtnId).textContent;
+  setBusy(sourceBtnId, true, "同步中...");
   try {
     const rules = [];
 
@@ -586,35 +598,46 @@ async function confirmSaveScoringStrategy() {
       base_symbol: (val("btSymbol") || "BTCUSDT").trim().toUpperCase(),
       timeframe: "1d",
       threshold: parse("btEntryTotalMin"),
-      exit_threshold: parse("btExitTotalMin"),
+      exit_threshold: parse("btExitTotalMin"), // Always use the visible field
       rules: rules
     };
 
     console.log("[SaveStrategy] Sending payload:", payload);
     await api("/api/analysis/strategies/save-scoring", { method: "POST", body: payload });
 
-    const isUpdate = el("newStrategySlug").disabled;
-    setAlert(`策略 [${name}] 已${isUpdate ? '更新' : '成功存入資料庫'}`, "success");
+    const isUpdateAction = sourceBtnId === "updateStrategyBtn";
+    setAlert(`策略 [${name}] 已${isUpdateAction ? '更新同步' : '成功存入資料庫'}`, "success");
     el("saveAsStrategyForm").classList.add("hidden");
 
-    // Refresh strategy list
-    const select = el("btStrategySlug");
-    if (select) {
-      while (select.options.length > 1) select.remove(1);
+    if (!isUpdateAction) {
+      const select = el("btStrategySlug");
+      if (select) {
+        while (select.options.length > 1) select.remove(1);
+      }
+      await fetchStrategies();
+      setVal("btStrategySlug", slug);
+      el("updateStrategyBtn").classList.remove("hidden");
+    } else {
+      await fetchStrategies();
+      setTimeout(() => runBacktest(true), 300);
     }
-    await fetchStrategies();
-  } catch (err) {
-    console.error("[SaveStrategy] Failed:", err);
-    setAlert(err.message, "error");
   } finally {
-    setBusy("confirmSaveStrategyBtn", false, "確認儲存");
+    setBusy(sourceBtnId, false, originalText);
   }
 }
 
 async function fetchStrategies() {
   try {
+    const currentSlug = val("btStrategySlug");
     const res = await api("/api/analysis/strategies");
     const select = el("btStrategySlug");
+    if (!select) return;
+
+    // Clear existing options (except first empty one)
+    while (select.options.length > 1) {
+      select.remove(1);
+    }
+
     if (res.strategies) {
       res.strategies.forEach(s => {
         const opt = document.createElement("option");
@@ -622,6 +645,10 @@ async function fetchStrategies() {
         opt.textContent = `${s.name} (${s.slug})`;
         select.appendChild(opt);
       });
+    }
+
+    if (currentSlug) {
+      setVal("btStrategySlug", currentSlug);
     }
   } catch (err) {
     console.error("Failed to fetch strategies:", err);
@@ -637,8 +664,18 @@ async function loadStrategyDetails(slug) {
       const s = res.strategy;
       const cfg = {
         symbol: s.base_symbol,
-        entry: { weights: { score: 0 }, thresholds: {}, flags: {}, total_min: s.threshold },
-        exit: { weights: { score: 0 }, thresholds: {}, flags: {}, total_min: s.exit_threshold || 45 }
+        entry: {
+          weights: { score: 0, change_bonus: 0, volume_bonus: 0, ma_bonus: 0, range_bonus: 0 },
+          thresholds: { change_min: 0, volume_ratio_min: 1.0, ma_gap_min: 0, range_min: 0 },
+          flags: { use_change: false, use_volume: false, use_ma: false, use_range: false },
+          total_min: s.threshold
+        },
+        exit: {
+          weights: { score: 0, change_bonus: 0, volume_bonus: 0, ma_bonus: 0, range_bonus: 0 },
+          thresholds: { change_min: 0, volume_ratio_min: 1.0, ma_gap_min: 0, range_min: 0 },
+          flags: { use_change: false, use_volume: false, use_ma: false, use_range: false },
+          total_min: s.exit_threshold ?? 45
+        }
       };
 
       (s.rules || []).forEach(r => {
@@ -649,7 +686,7 @@ async function loadStrategyDetails(slug) {
 
         if (type === "PRICE_RETURN" && params.days === 1) {
           target.weights.change_bonus = r.weight;
-          target.thresholds.change_min = params.min * 100;
+          target.thresholds.change_min = params.min;
           target.flags.use_change = true;
         } else if (type === "VOLUME_SURGE") {
           target.weights.volume_bonus = r.weight;
@@ -657,31 +694,29 @@ async function loadStrategyDetails(slug) {
           target.flags.use_volume = true;
         } else if (type === "MA_DEVIATION") {
           target.weights.ma_bonus = r.weight;
-          target.thresholds.ma_gap_min = params.min * 100;
+          target.thresholds.ma_gap_min = params.min;
           target.flags.use_ma = true;
         } else if (type === "BASE_SCORE") {
           target.weights.score = r.weight;
         } else if (type === "RANGE_POS") {
           target.weights.range_bonus = r.weight;
-          target.thresholds.range_min = params.min * 100;
+          target.thresholds.range_min = params.min;
           target.flags.use_range = true;
         } else {
-          // Fallback for unknown types (like rsi_oversold) - add to score to keep Max Score accurate
-          console.log("Adding unknown rule weight to score for visualization:", type, r.weight);
+          // Fallback for unknown types
           target.weights.score += r.weight;
         }
       });
       fillForm(cfg);
 
-      // Pre-fill Save Form for Editing
+      // Show Update button when a strategy is loaded
+      el("updateStrategyBtn").classList.remove("hidden");
+
+      // Pre-fill Save Form for Editing (but don't show it yet)
       setVal("newStrategyName", s.name);
       setVal("newStrategySlug", s.slug);
-      el("newStrategySlug").disabled = true; // Slug is the unique key, don't change while editing
-      el("newStrategySlug").classList.add("opacity-50", "cursor-not-allowed");
-      if (el("saveFormTitle")) el("saveFormTitle").textContent = "更新現有策略 (Update Strategy)";
-      if (el("confirmSaveStrategyBtn")) el("confirmSaveStrategyBtn").textContent = "確認並更新 (Update)";
+      setVal("newStrategyExitThreshold", s.exit_threshold ?? 10);
 
-      fillForm(cfg);
       setAlert(`已載入策略: ${s.name}，上方的回測條件已更新`, "success");
       // Trigger a run with new parameters
       setTimeout(() => runBacktest(true), 200);
@@ -803,18 +838,33 @@ function bootstrap() {
       console.error("[Backtest] runBacktestBtn not found in DOM");
     }
 
-    el("saveAsStrategyBtn")?.addEventListener("click", () => {
-      const form = el("saveAsStrategyForm");
-      form.classList.remove("hidden");
+    const saveBtn = el("saveAsStrategyBtn");
+    if (saveBtn) {
+      saveBtn.addEventListener("click", () => {
+        el("saveAsStrategyForm").classList.toggle("hidden");
+        // For 'Save as New', always ensure slug is enabled and cleared/copy-prefixed
+        if (!el("saveAsStrategyForm").classList.contains("hidden")) {
+          el("newStrategySlug").disabled = false;
+          el("newStrategySlug").classList.remove("opacity-50", "cursor-not-allowed");
+          el("saveFormTitle").textContent = "另存為新策略 (Save as New)";
+          el("confirmSaveStrategyBtn").textContent = "確認儲存 (Save)";
 
-      const params = new URLSearchParams(window.location.search);
-      if (!params.get("slug")) {
-        el("newStrategySlug").disabled = false;
-        el("newStrategySlug").classList.remove("opacity-50", "cursor-not-allowed");
-        el("saveFormTitle").textContent = "儲存為全新策略 (Save New)";
-        el("confirmSaveStrategyBtn").textContent = "確認儲存 (Save)";
-      }
-    });
+          const currentName = val("newStrategyName");
+          if (currentName && !currentName.includes("(Copy)")) {
+            setVal("newStrategyName", currentName + " (Copy)");
+            setVal("newStrategySlug", val("newStrategySlug") + "-copy");
+          }
+        }
+      });
+    }
+
+    const updateBtn = el("updateStrategyBtn");
+    if (updateBtn) {
+      updateBtn.addEventListener("click", () => {
+        // One-click update: directly call save function with the update button as source
+        confirmSaveScoringStrategy("updateStrategyBtn");
+      });
+    }
 
     el("cancelSaveStrategyBtn")?.addEventListener("click", () => el("saveAsStrategyForm")?.classList.add("hidden"));
     el("confirmSaveStrategyBtn")?.addEventListener("click", confirmSaveScoringStrategy);
@@ -831,9 +881,12 @@ function bootstrap() {
     });
 
     el("btStrategySlug")?.addEventListener("change", (e) => {
-      if (e.target.value) {
-        loadStrategyDetails(e.target.value);
+      const s = e.target.value;
+      if (!s) {
+        el("updateStrategyBtn").classList.add("hidden");
+        return;
       }
+      loadStrategyDetails(s);
     });
 
     console.log("[Backtest] Bootstrap completed successfully");

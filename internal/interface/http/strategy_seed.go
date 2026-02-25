@@ -91,7 +91,7 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 		err = db.QueryRowContext(ctx, `
 			INSERT INTO strategies (user_id, name, slug, timeframe, base_symbol, threshold, exit_threshold, is_active, env, updated_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'both', NOW())
-			ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, threshold = EXCLUDED.threshold, exit_threshold = EXCLUDED.exit_threshold, timeframe = EXCLUDED.timeframe, base_symbol = EXCLUDED.base_symbol, updated_at = NOW()
+			ON CONFLICT (slug) DO NOTHING
 			RETURNING id
 		`, adminID, s.Name, s.Slug, s.Timeframe, s.BaseSymbol, s.Threshold, s.ExitThreshold, s.IsActive).Scan(&sid)
 

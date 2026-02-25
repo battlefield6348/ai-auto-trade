@@ -13,6 +13,8 @@ type SaveScoringStrategyInput struct {
 	UserID    string             `json:"user_id"`
 	Name      string             `json:"name"`
 	Slug      string             `json:"slug"`
+	BaseSymbol string            `json:"base_symbol"`
+	Timeframe string             `json:"timeframe"`
 	Threshold     float64            `json:"threshold"`
 	ExitThreshold float64            `json:"exit_threshold"`
 	Rules         []SaveRuleInput    `json:"rules"`
@@ -62,40 +64,58 @@ func (u *SaveScoringStrategyUseCase) Execute(ctx context.Context, input SaveScor
 		return fmt.Errorf("策略必須包含至少一個出場規則 (exit)")
 	}
 
-	// 1. Insert or Update Strategy
+	// 1. Start Transaction if possible
+	var tx *sql.Tx
+	db, ok := u.db.(*sql.DB)
+	if ok {
+		var err error
+		tx, err = db.BeginTx(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("failed to start transaction: %w", err)
+		}
+		defer tx.Rollback()
+	}
+
+	queryer := u.db
+	if tx != nil {
+		queryer = tx
+	}
+
+	// 2. Insert or Update Strategy
 	var strategyID string
-	err := u.db.QueryRowContext(ctx, `
-		INSERT INTO strategies (user_id, name, slug, threshold, exit_threshold, base_symbol, env, is_active, updated_at)
-		VALUES ($1, $2, $3, $4, $5, 'BTCUSDT', 'both', true, NOW())
+	err := queryer.QueryRowContext(ctx, `
+		INSERT INTO strategies (user_id, name, slug, threshold, exit_threshold, base_symbol, timeframe, env, is_active, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, 'both', true, NOW())
 		ON CONFLICT (slug) DO UPDATE SET 
 			name = EXCLUDED.name, 
 			threshold = EXCLUDED.threshold, 
 			exit_threshold = EXCLUDED.exit_threshold,
+			base_symbol = EXCLUDED.base_symbol,
+			timeframe = EXCLUDED.timeframe,
 			updated_at = NOW()
 		RETURNING id
-	`, input.UserID, input.Name, input.Slug, input.Threshold, input.ExitThreshold).Scan(&strategyID)
+	`, input.UserID, input.Name, input.Slug, input.Threshold, input.ExitThreshold, input.BaseSymbol, input.Timeframe).Scan(&strategyID)
 	if err != nil {
-		return fmt.Errorf("儲存策略失敗 (Upsert failed): %w", err)
+		return fmt.Errorf("儲存策略主檔失敗: %w", err)
 	}
 
-	// 2. Clear old rules for this strategy
-	_, err = u.db.ExecContext(ctx, "DELETE FROM strategy_rules WHERE strategy_id = $1", strategyID)
+	// 3. Clear old rules
+	_, err = queryer.ExecContext(ctx, "DELETE FROM strategy_rules WHERE strategy_id = $1", strategyID)
 	if err != nil {
-		return fmt.Errorf("清除舊規則失敗 (Clear rules failed): %w", err)
+		return fmt.Errorf("清除舊規則失敗: %w", err)
 	}
 
-	// 3. Process Rules and Conditions
+	// 4. Process Rules
 	for _, r := range input.Rules {
 		paramsJSON, _ := json.Marshal(r.Params)
 		
 		var conditionID string
-		// Try to find existing condition first to avoid duplicates
-		err = u.db.QueryRowContext(ctx, `
+		err = queryer.QueryRowContext(ctx, `
 			SELECT id FROM conditions WHERE type = $1 AND params::jsonb = $2::jsonb
 		`, r.Type, paramsJSON).Scan(&conditionID)
 		
 		if err == sql.ErrNoRows {
-			err = u.db.QueryRowContext(ctx, `
+			err = queryer.QueryRowContext(ctx, `
 				INSERT INTO conditions (name, type, params)
 				VALUES ($1, $2, $3)
 				RETURNING id
@@ -103,22 +123,28 @@ func (u *SaveScoringStrategyUseCase) Execute(ctx context.Context, input SaveScor
 		}
 		
 		if err != nil {
-			return fmt.Errorf("建立條件失敗 (Condition failed): %w", err)
+			return fmt.Errorf("處理條件 [%s] 失敗: %w", r.Type, err)
 		}
 
-		// 4. Link Rule
 		ruleType := r.RuleType
 		if ruleType == "" {
 			ruleType = "entry"
 		}
-		_, err = u.db.ExecContext(ctx, `
+		_, err = queryer.ExecContext(ctx, `
 			INSERT INTO strategy_rules (strategy_id, condition_id, weight, rule_type)
 			VALUES ($1, $2, $3, $4)
 		`, strategyID, conditionID, r.Weight, ruleType)
 		if err != nil {
-			return fmt.Errorf("連結規則失敗 (Link rule failed): %w", err)
+			return fmt.Errorf("建立規則連結失敗: %w", err)
 		}
 	}
 
+	if tx != nil {
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("failed to commit transaction: %w", err)
+		}
+	}
+
+	fmt.Printf("[SaveStrategy] Successfully upserted strategy %s (ID: %s)\n", input.Slug, strategyID)
 	return nil
 }

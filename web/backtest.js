@@ -489,14 +489,18 @@ const debouncedRunBacktest = debounce(() => runBacktest(true), 400);
 
 
 async function confirmSaveScoringStrategy(sourceBtnId = "confirmSaveStrategyBtn") {
-  const isUpdate = (sourceBtnId === "updateStrategyBtn");
+  const isUpdateAction = (sourceBtnId === "updateStrategyBtn");
 
   // Source of truth for identity
   let name, slug;
-  if (isUpdate) {
+  if (isUpdateAction) {
     slug = val("btStrategySlug");
     const select = el("btStrategySlug");
-    name = select.options[select.selectedIndex].text.split(" (")[0]; // Extract name from "Name (slug)"
+    if (select && select.selectedIndex >= 0) {
+      name = select.options[select.selectedIndex].text.split(" (")[0];
+    } else {
+      name = val("newStrategyName").trim();
+    }
   } else {
     name = val("newStrategyName").trim();
     slug = val("newStrategySlug").trim();

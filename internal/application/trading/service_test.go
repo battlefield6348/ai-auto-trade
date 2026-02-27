@@ -560,16 +560,79 @@ func TestUpdateStrategy_VersionBump(t *testing.T) {
 	}
 }
 
+func TestExecuteScoringAutoTrade_TriggerBuy(t *testing.T) {
+	day1 := time.Now().Add(-24 * time.Hour)
+	history := []analysisDomain.DailyAnalysisResult{
+		{TradeDate: day1, Close: 50000, Score: 75}, // Triggered (75 > 60)
+	}
+	repo := &fakeRepo{}
+	ex := &mockExchange{}
+	svc := NewService(repo, stubDataProvider{history: history}, ex, nil)
+	svc.now = func() time.Time { return time.Now() }
+
+	err := svc.ExecuteScoringAutoTrade(context.Background(), "alpha", tradingDomain.EnvPaper, "u1")
+	if err != nil {
+		t.Fatalf("ExecuteScoringAutoTrade failed: %v", err)
+	}
+
+	if repo.upsertPositionCalled == 0 {
+		t.Errorf("expected position to be upserted")
+	}
+}
+
+func TestExecuteScoringAutoTrade_NoTrigger(t *testing.T) {
+	day1 := time.Now().Add(-24 * time.Hour)
+	history := []analysisDomain.DailyAnalysisResult{
+		{TradeDate: day1, Close: 50000, Score: 40}, // Not Triggered (40 < 60)
+	}
+	repo := &fakeRepo{}
+	ex := &mockExchange{}
+	svc := NewService(repo, stubDataProvider{history: history}, ex, nil)
+	svc.now = func() time.Time { return time.Now() }
+
+	err := svc.ExecuteScoringAutoTrade(context.Background(), "alpha", tradingDomain.EnvPaper, "u1")
+	if err != nil {
+		t.Fatalf("ExecuteScoringAutoTrade failed: %v", err)
+	}
+
+	if repo.upsertPositionCalled != 0 {
+		t.Errorf("expected no position to be upserted")
+	}
+}
+
+func TestClosePositionManually(t *testing.T) {
+	repo := &fakeRepo{}
+	svc := NewService(repo, nil, &mockExchange{}, nil)
+	err := svc.ClosePositionManually(context.Background(), "p1")
+	if err != nil {
+		t.Fatalf("ClosePositionManually failed: %v", err)
+	}
+}
+
+func TestExecuteManualBuy(t *testing.T) {
+	repo := &fakeRepo{}
+	svc := NewService(repo, nil, &mockExchange{}, nil)
+	err := svc.ExecuteManualBuy(context.Background(), "BTCUSDT", 1000, tradingDomain.EnvPaper, "u1")
+	if err != nil {
+		t.Fatalf("ExecuteManualBuy failed: %v", err)
+	}
+	if repo.upsertPositionCalled == 0 {
+		t.Errorf("expected position to be upserted")
+	}
+}
+
 type fakeRepo struct {
 	createCalled       int
 	updateCalled       int
 	deleteCalled       int
 	saveBacktestCalled int
+	upsertPositionCalled int
 	lastStrategy       tradingDomain.Strategy
 	lastBacktest       tradingDomain.BacktestRecord
 	id                 string
 	getErr             error
 	trades             []tradingDomain.TradeRecord
+	activeStrats       []*strategyDomain.ScoringStrategy
 }
 
 func (f *fakeRepo) CreateStrategy(_ context.Context, s tradingDomain.Strategy) (string, error) {
@@ -602,6 +665,27 @@ func (f *fakeRepo) ListStrategies(context.Context, StrategyFilter) ([]tradingDom
 func (f *fakeRepo) GetStrategyBySlug(context.Context, string) (tradingDomain.Strategy, error) {
 	return f.lastStrategy, nil
 }
+func (f *fakeRepo) ListActiveScoringStrategies(ctx context.Context) ([]*strategyDomain.ScoringStrategy, error) {
+	return f.activeStrats, nil
+}
+func (f *fakeRepo) LoadScoringStrategyBySlug(ctx context.Context, slug string) (*strategyDomain.ScoringStrategy, error) {
+	return &strategyDomain.ScoringStrategy{
+		ID:         "strat-1",
+		Name:       "Alpha",
+		BaseSymbol: "BTCUSDT",
+		Threshold:  60,
+		Risk:       tradingDomain.RiskSettings{OrderSizeValue: 1000},
+		EntryRules: []strategyDomain.StrategyRule{
+			{
+				Weight: 1.0,
+				RuleType: "entry",
+				Condition: strategyDomain.Condition{
+					Type: "BASE_SCORE",
+				},
+			},
+		},
+	}, nil
+}
 func (f *fakeRepo) SetStatus(context.Context, string, tradingDomain.Status, tradingDomain.Environment) error {
 	return nil
 }
@@ -626,13 +710,16 @@ func (f *fakeRepo) ListTrades(context.Context, tradingDomain.TradeFilter) ([]tra
 func (f *fakeRepo) GetOpenPosition(context.Context, string, tradingDomain.Environment) (*tradingDomain.Position, error) {
 	return nil, nil
 }
-func (f *fakeRepo) GetPosition(context.Context, string) (*tradingDomain.Position, error) {
-	return nil, nil
+func (f *fakeRepo) GetPosition(ctx context.Context, id string) (*tradingDomain.Position, error) {
+	return &tradingDomain.Position{ID: "p1", Status: "open", Symbol: "BTCUSDT", Env: tradingDomain.EnvPaper, Size: 0.1}, nil
 }
 func (f *fakeRepo) ListOpenPositions(context.Context) ([]tradingDomain.Position, error) {
 	return nil, nil
 }
-func (f *fakeRepo) UpsertPosition(context.Context, tradingDomain.Position) error    { return nil }
+func (f *fakeRepo) UpsertPosition(context.Context, tradingDomain.Position) error {
+	f.upsertPositionCalled++
+	return nil
+}
 func (f *fakeRepo) ClosePosition(context.Context, string, time.Time, float64) error { return nil }
 func (f *fakeRepo) SaveLog(context.Context, tradingDomain.LogEntry) error           { return nil }
 func (f *fakeRepo) ListLogs(context.Context, tradingDomain.LogFilter) ([]tradingDomain.LogEntry, error) {
@@ -642,13 +729,7 @@ func (f *fakeRepo) SaveReport(context.Context, tradingDomain.Report) (string, er
 func (f *fakeRepo) ListReports(context.Context, string) ([]tradingDomain.Report, error) {
 	return nil, nil
 }
-func (f *fakeRepo) LoadScoringStrategyBySlug(ctx context.Context, slug string) (*strategyDomain.ScoringStrategy, error) {
-	return nil, nil
-}
 func (f *fakeRepo) LoadScoringStrategyByID(ctx context.Context, id string) (*strategyDomain.ScoringStrategy, error) {
-	return nil, nil
-}
-func (f *fakeRepo) ListActiveScoringStrategies(ctx context.Context) ([]*strategyDomain.ScoringStrategy, error) {
 	return nil, nil
 }
 
@@ -684,7 +765,7 @@ func (m *mockExchange) GetOrder(ctx context.Context, symbol, orderID string) (Or
 	return OrderResponse{}, nil
 }
 func (m *mockExchange) GetPrice(ctx context.Context, symbol string) (float64, error) {
-	return 0, nil
+	return 50000, nil
 }
 func (m *mockExchange) PlaceMarketOrder(ctx context.Context, symbol, side string, qty float64) (float64, float64, error) {
 	return 0, 0, nil

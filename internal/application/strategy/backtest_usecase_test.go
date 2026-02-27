@@ -8,6 +8,8 @@ import (
 	"ai-auto-trade/internal/domain/analysis"
 	"ai-auto-trade/internal/domain/strategy"
 	tradingDomain "ai-auto-trade/internal/domain/trading"
+
+	"github.com/DATA-DOG/go-sqlmock"
 )
 
 type mockDataProvider struct {
@@ -106,5 +108,42 @@ func TestBacktestUseCase_TPSL(t *testing.T) {
 
 	if res.Trades[0].ExitPrice != 97 {
 		t.Errorf("Expected exit at 97, got %f", res.Trades[0].ExitPrice)
+	}
+}
+func TestBacktestUseCase_Execute(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("failed to open sqlmock: %s", err)
+	}
+	defer db.Close()
+
+	// Mock LoadScoringStrategyBySlug
+	// 1. Fetch the base Strategy
+	rows := sqlmock.NewRows([]string{"id", "user_id", "name", "slug", "description", "timeframe", "base_symbol", "threshold", "exit_threshold", "is_active", "env", "risk_settings", "created_at", "updated_at"}).
+		AddRow("s-1", "u-1", "Alpha", "alpha", "desc", "1d", "BTCUSDT", 60.0, 30.0, true, "paper", []byte("{}"), time.Now(), time.Now())
+
+	mock.ExpectQuery("SELECT (.+) FROM strategies WHERE slug = \\$1").
+		WithArgs("alpha").
+		WillReturnRows(rows)
+
+	// 2. Fetch Rules and Conditions
+	mock.ExpectQuery("SELECT (.+) FROM strategy_rules (.+) WHERE sr.strategy_id = \\$1").
+		WithArgs("s-1").
+		WillReturnRows(sqlmock.NewRows([]string{"strategy_id", "weight", "rule_type", "id", "name", "type", "params"}).
+			AddRow("s-1", 1.0, "entry", "c-1", "Base Score", "BASE_SCORE", []byte("{}")))
+
+	h := []analysis.DailyAnalysisResult{
+		{TradeDate: time.Now().Add(-24 * time.Hour), Close: 50000, Score: 70},
+	}
+	dataProv := &mockDataProvider{history: h}
+	usecase := NewBacktestUseCase(db, dataProv)
+
+	res, err := usecase.Execute(context.Background(), "alpha", "BTCUSDT", time.Now().Add(-48*time.Hour), time.Now(), nil)
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	if res.Symbol != "BTCUSDT" {
+		t.Errorf("Expected BTCUSDT, got %s", res.Symbol)
 	}
 }

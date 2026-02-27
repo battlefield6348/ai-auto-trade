@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"ai-auto-trade/internal/application/analysis"
 	analysisDomain "ai-auto-trade/internal/domain/analysis"
 	dataDomain "ai-auto-trade/internal/domain/dataingestion"
 
@@ -201,5 +202,61 @@ func TestRepo_HasAnalysisForDate(t *testing.T) {
 	}
 	if !ok {
 		t.Error("expected true")
+	}
+}
+func TestRepo_FindByDate(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("failed to open sqlmock: %s", err)
+	}
+	defer db.Close()
+
+	repo := NewRepo(db)
+	ctx := context.Background()
+	now := time.Now()
+
+	rows := sqlmock.NewRows([]string{"trading_pair", "market_type", "industry", "timeframe", "trade_date", "analysis_version", "close_price", "change", "change_percent", "return_5d", "return_20d", "return_60d", "volume", "volume_ratio", "score", "ma_20", "price_position_20d", "high_20d", "low_20d", "status", "error_reason"}).
+		AddRow("BTCUSDT", "crypto", "Finance", "1d", now, "v1", 50000.0, 1000.0, 0.02, 0.05, 0.1, 0.2, 1000, 1.5, 80.0, 48000.0, 0.8, 51000.0, 45000.0, "success", nil)
+
+	mock.ExpectQuery("SELECT (.+) FROM analysis_results (.+) WHERE ar.trade_date = \\$1").
+		WithArgs(now, true, 100, 0).
+		WillReturnRows(rows)
+
+	mock.ExpectQuery("SELECT count(.+) FROM analysis_results").
+		WithArgs(now, true).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+
+	results, total, err := repo.FindByDate(ctx, now, analysis.QueryFilter{OnlySuccess: true}, analysis.SortOption{}, analysis.Pagination{Limit: 100, Offset: 0})
+	if err != nil {
+		t.Fatalf("FindByDate failed: %v", err)
+	}
+	if total != 1 || len(results) != 1 {
+		t.Errorf("expected 1 result, got %d (total %d)", len(results), total)
+	}
+}
+
+func TestRepo_FindHistory(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("failed to open sqlmock: %s", err)
+	}
+	defer db.Close()
+
+	repo := NewRepo(db)
+	ctx := context.Background()
+
+	rows := sqlmock.NewRows([]string{"trading_pair", "market_type", "timeframe", "trade_date", "analysis_version", "close_price", "change", "change_percent", "return_5d", "return_20d", "return_60d", "volume", "volume_ratio", "score", "ma_20", "price_position_20d", "high_20d", "low_20d", "status", "error_reason"}).
+		AddRow("BTCUSDT", "crypto", "1d", time.Now(), "v1", 50000.0, 1000.0, 0.02, 0.05, 0.1, 0.2, 1000, 1.5, 80.0, 48000.0, 0.8, 51000.0, 45000.0, "success", nil)
+
+	mock.ExpectQuery("SELECT (.+) FROM analysis_results (.+) WHERE s.trading_pair = \\$1").
+		WithArgs("BTCUSDT", "1d", 10).
+		WillReturnRows(rows)
+
+	results, err := repo.FindHistory(ctx, "BTCUSDT", "1d", nil, nil, 10, false)
+	if err != nil {
+		t.Fatalf("FindHistory failed: %v", err)
+	}
+	if len(results) != 1 {
+		t.Errorf("expected 1 result, got %d", len(results))
 	}
 }

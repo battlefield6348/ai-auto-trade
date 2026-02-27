@@ -630,6 +630,9 @@ func (s *Service) ClosePositionManually(ctx context.Context, positionID string) 
 	if err != nil {
 		return err
 	}
+	if pos == nil {
+		return fmt.Errorf("position not found")
+	}
 	if pos.Status != "open" {
 		return fmt.Errorf("position already closed")
 	}

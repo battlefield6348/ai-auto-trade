@@ -156,11 +156,9 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 		presetStore:   presetStore,
 	}
 
-	if db != nil {
-		s.scoringBtUC = appStrategy.NewBacktestUseCase(db, dataRepo)
-		s.saveScoringBtUC = appStrategy.NewSaveScoringStrategyUseCase(db)
-		s.analyzeUC = analysis.NewAnalyzeUseCase(nil, nil, nil) // Placeholder? No, I need components.
-	}
+	s.scoringBtUC = appStrategy.NewBacktestUseCase(db, dataRepo)
+	s.saveScoringBtUC = appStrategy.NewSaveScoringStrategyUseCase(db)
+	s.analyzeUC = analysis.NewAnalyzeUseCase(nil, nil, nil) // Placeholder
 	s.binanceClient = binanceClient
 	s.defaultEnv = tradingDomain.EnvTest
 	if !cfg.Binance.UseTestnet {

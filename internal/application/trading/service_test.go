@@ -439,6 +439,63 @@ func TestBacktest_GetStrategyError(t *testing.T) {
 	}
 }
 
+func TestSetStatus(t *testing.T) {
+	fake := &fakeRepo{}
+	svc := NewService(fake, nil, nil, nil)
+	ctx := context.Background()
+
+	err := svc.SetStatus(ctx, "s-1", tradingDomain.StatusActive, tradingDomain.EnvPaper)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDeleteStrategy(t *testing.T) {
+	fake := &fakeRepo{}
+	svc := NewService(fake, nil, nil, nil)
+	ctx := context.Background()
+
+	err := svc.DeleteStrategy(ctx, "s-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGetStrategy(t *testing.T) {
+	fake := &fakeRepo{}
+	svc := NewService(fake, nil, nil, nil)
+	ctx := context.Background()
+
+	_, err := svc.GetStrategy(ctx, "s-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGenerateReport(t *testing.T) {
+	fake := &fakeRepo{
+		trades: []tradingDomain.TradeRecord{
+			{PNL: floatPtr(100), PNLPct: floatPtr(0.1), HoldDays: intPtr(5)},
+			{PNL: floatPtr(-50), PNLPct: floatPtr(-0.05), HoldDays: intPtr(2)},
+		},
+	}
+	svc := NewService(fake, nil, nil, nil)
+	ctx := context.Background()
+
+	rep, err := svc.GenerateReport(ctx, "s-1", tradingDomain.EnvPaper, time.Now(), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	summary := rep.Summary.(tradingDomain.ReportSummary)
+	if summary.TotalTrades != 2 {
+		t.Errorf("expected 2 trades, got %d", summary.TotalTrades)
+	}
+}
+
+func floatPtr(v float64) *float64 { return &v }
+func intPtr(v int) *int { return &v }
+
 func TestUpdateStrategy_VersionBump(t *testing.T) {
 	repo := &fakeRepo{
 		lastStrategy: tradingDomain.Strategy{
@@ -512,6 +569,7 @@ type fakeRepo struct {
 	lastBacktest       tradingDomain.BacktestRecord
 	id                 string
 	getErr             error
+	trades             []tradingDomain.TradeRecord
 }
 
 func (f *fakeRepo) CreateStrategy(_ context.Context, s tradingDomain.Strategy) (string, error) {
@@ -563,7 +621,7 @@ func (f *fakeRepo) ListBacktests(context.Context, string) ([]tradingDomain.Backt
 }
 func (f *fakeRepo) SaveTrade(context.Context, tradingDomain.TradeRecord) error { return nil }
 func (f *fakeRepo) ListTrades(context.Context, tradingDomain.TradeFilter) ([]tradingDomain.TradeRecord, error) {
-	return nil, nil
+	return f.trades, nil
 }
 func (f *fakeRepo) GetOpenPosition(context.Context, string, tradingDomain.Environment) (*tradingDomain.Position, error) {
 	return nil, nil

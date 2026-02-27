@@ -128,6 +128,29 @@ func TestLogoutRevokesRefresh(t *testing.T) {
 	}
 }
 
+func TestRolePermissionsAsStrings(t *testing.T) {
+	allPerms := RolePermissionsAsStrings()
+	adminPerms := allPerms[domain.RoleAdmin]
+	found := false
+	for _, p := range adminPerms {
+		if p == string(PermUserManage) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("admin should have user_manage permission in string list")
+	}
+}
+
+func TestLogoutRevokesRefresh_Error(t *testing.T) {
+	tokens := &fakeTokens{err: errors.New("revoke failed")}
+	uc := NewLogoutUseCase(tokens)
+	if err := uc.Execute(context.Background(), "token"); err == nil {
+		t.Error("expected logout error")
+	}
+}
+
 func TestAuthorizeRolePermission(t *testing.T) {
 	authz := NewAuthorizer(fakeUserRepo{user: domain.User{ID: "u1", Role: domain.RoleAdmin, Status: domain.StatusActive}}, nil)
 	if !authz.HasPermission(domain.RoleAdmin, PermUserManage) {

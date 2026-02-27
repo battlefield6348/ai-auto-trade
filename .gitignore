@@ -14,3 +14,5 @@
 
 # Config (Secrets remain in file for user convenience but usually ignored)
 config.yaml
+coverage.out
+/main

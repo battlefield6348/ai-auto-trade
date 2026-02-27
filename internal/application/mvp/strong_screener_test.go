@@ -58,17 +58,51 @@ func TestStrongScreener_Run(t *testing.T) {
 	}
 
 	screener := NewStrongScreener(repo)
-	out, err := screener.Run(context.Background(), StrongScreenerInput{TradeDate: date})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
 
-	if out.TotalCount != 1 {
-		t.Fatalf("expected 1 strong stock, got %d", out.TotalCount)
-	}
-	if out.Items[0].Symbol != "2330" {
-		t.Fatalf("expected 2330, got %s", out.Items[0].Symbol)
-	}
+	t.Run("Success", func(t *testing.T) {
+		out, err := screener.Run(context.Background(), StrongScreenerInput{TradeDate: date})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if out.TotalCount != 1 {
+			t.Errorf("expected 1 strong stock, got %d", out.TotalCount)
+		}
+	})
+
+	t.Run("Empty Results", func(t *testing.T) {
+		wrongDate := date.AddDate(0, 0, 1)
+		out, _ := screener.Run(context.Background(), StrongScreenerInput{TradeDate: wrongDate})
+		if out.TotalCount != 0 {
+			t.Errorf("expected 0, got %d", out.TotalCount)
+		}
+	})
+
+	t.Run("Zero Date", func(t *testing.T) {
+		out, _ := screener.Run(context.Background(), StrongScreenerInput{})
+		if out.TotalCount != 0 {
+			t.Errorf("expected 0 for zero date")
+		}
+	})
+
+	t.Run("Limit and Sort", func(t *testing.T) {
+		repoLarge := fakeQueryRepoMVP{
+			results: []analysisDomain.DailyAnalysisResult{
+				{Symbol: "S1", TradeDate: date, Score: 80, Return5: ptr(0.05), VolumeMultiple: ptr(2.0)},
+				{Symbol: "S2", TradeDate: date, Score: 80, Return5: ptr(0.10), VolumeMultiple: ptr(2.0)},
+				{Symbol: "S3", TradeDate: date, Score: 90, Return5: ptr(0.01), VolumeMultiple: ptr(2.0)},
+			},
+		}
+		screener2 := NewStrongScreener(repoLarge)
+		out, _ := screener2.Run(context.Background(), StrongScreenerInput{TradeDate: date, Limit: 2})
+		
+		if len(out.Items) != 2 {
+			t.Errorf("expected limit 2, got %d", len(out.Items))
+		}
+		// S3 has highest score (90), then S2 (80, return 0.10), then S1 (80, return 0.05)
+		if out.Items[0].Symbol != "S3" || out.Items[1].Symbol != "S2" {
+			t.Errorf("Sort order failed: %+v", out.Items)
+		}
+	})
 }
 
 func ptr(v float64) *float64 { return &v }

@@ -52,6 +52,7 @@ type Server struct {
 	autoInterval  time.Duration
 	backfillStart string
 	tradingSvc    *trading.Service
+	tradingRepo   trading.Repository
 	jobMu         sync.Mutex
 	jobHistory    []jobRun
 	lastAutoRun   time.Time
@@ -152,6 +153,7 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 		autoInterval:  cfg.Ingestion.AutoInterval,
 		backfillStart: cfg.Ingestion.BackfillStartDate,
 		tradingSvc:    tradingSvc,
+		tradingRepo:   tradingRepo,
 		dataSource:    source,
 		presetStore:   presetStore,
 	}

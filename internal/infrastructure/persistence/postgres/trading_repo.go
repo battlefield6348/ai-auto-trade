@@ -526,8 +526,8 @@ WHERE id=$7;
 
 // ClosePosition 將持倉標記為結束。
 func (r *TradingRepo) ClosePosition(ctx context.Context, id string, exitDate time.Time, exitPrice float64) error {
-	const q = `UPDATE strategy_positions SET status='closed', updated_at=NOW() WHERE id=$1;`
-	_, err := r.db.ExecContext(ctx, q, id)
+	const q = `UPDATE strategy_positions SET status='closed', exit_date=$1, exit_price=$2, updated_at=NOW() WHERE id=$3;`
+	_, err := r.db.ExecContext(ctx, q, exitDate, exitPrice, id)
 	return err
 }
 

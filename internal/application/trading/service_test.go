@@ -609,6 +609,82 @@ func TestClosePositionManually(t *testing.T) {
 	}
 }
 
+func TestExecuteScoringAutoTrade_TriggerSell(t *testing.T) {
+	day1 := time.Now().Add(-24 * time.Hour)
+	history := []analysisDomain.DailyAnalysisResult{
+		{TradeDate: day1, Close: 60000, Score: 75}, // Close 60k is 20% gain from 50k
+	}
+	// Fixed take profit 10%
+	tp := 0.1
+	repo := &fakeRepo{
+		openPos: &tradingDomain.Position{
+			ID:         "p1",
+			StrategyID: "strat-1",
+			Env:        tradingDomain.EnvPaper,
+			Symbol:     "BTCUSDT",
+			EntryPrice: 50000,
+			Size:       0.1,
+			Status:     "open",
+		},
+		tp: &tp,
+	}
+	ex := &mockExchange{}
+	svc := NewService(repo, stubDataProvider{history: history}, ex, nil)
+	svc.now = func() time.Time { return time.Now() }
+
+	err := svc.ExecuteScoringAutoTrade(context.Background(), "alpha", tradingDomain.EnvPaper, "u1")
+	if err != nil {
+		t.Fatalf("ExecuteScoringAutoTrade failed: %v", err)
+	}
+
+	if repo.closePositionCalled == 0 {
+		t.Errorf("expected position to be closed")
+	}
+}
+
+func TestListMethods(t *testing.T) {
+	repo := &fakeRepo{}
+	svc := NewService(repo, nil, nil, nil)
+	ctx := context.Background()
+
+	svc.ListTrades(ctx, tradingDomain.TradeFilter{})
+	svc.ListPositions(ctx)
+	svc.ListReports(ctx, "s1")
+	svc.ListLogs(ctx, tradingDomain.LogFilter{})
+}
+
+func TestSaveReport(t *testing.T) {
+	repo := &fakeRepo{}
+	svc := NewService(repo, nil, nil, nil)
+	svc.SaveReport(context.Background(), tradingDomain.Report{})
+}
+
+func TestExecuteManualBacktestBuy(t *testing.T) {
+	repo := &fakeRepo{}
+	svc := NewService(repo, nil, &mockExchange{}, nil)
+	svc.ExecuteManualBacktestBuy(context.Background(), "BTCUSDT", 1000)
+}
+
+func TestListOtherMethods(t *testing.T) {
+	repo := &fakeRepo{}
+	noty := &mockNotifier{}
+	svc := NewService(repo, stubDataProvider{
+		history: []analysisDomain.DailyAnalysisResult{{TradeDate: time.Now().Add(-24 * time.Hour), Close: 50000}},
+		prices:  []dataDomain.DailyPrice{{TradeDate: time.Now().Add(-24 * time.Hour), Open: 50000, Close: 52000}},
+	}, &mockExchange{}, noty)
+	svc.now = func() time.Time { return time.Now() }
+	svc.ListStrategies(context.Background(), StrategyFilter{})
+	svc.ListBacktests(context.Background(), "s1")
+	svc.GetExchangePrice(context.Background(), "BTCUSDT")
+	svc.RunOnce(context.Background(), "s1", tradingDomain.EnvPaper, "u1")
+	svc.GetStrategyBySlug(context.Background(), "alpha")
+	svc.UpdateRiskSettings(context.Background(), "s1", tradingDomain.RiskSettings{})
+	ToJSON(tradingDomain.Strategy{})
+	svc.envTag(tradingDomain.EnvReal)
+	svc.envTag(tradingDomain.EnvTest)
+	svc.envTag("custom")
+}
+
 func TestExecuteManualBuy(t *testing.T) {
 	repo := &fakeRepo{}
 	svc := NewService(repo, nil, &mockExchange{}, nil)
@@ -621,18 +697,31 @@ func TestExecuteManualBuy(t *testing.T) {
 	}
 }
 
+func TestWorker_StartStop(t *testing.T) {
+	repo := &fakeRepo{}
+	svc := NewService(repo, nil, nil, nil)
+	worker := NewBackgroundWorker(svc, time.Second)
+	// Start with small interval to trigger runOnce
+	go worker.Start()
+	time.Sleep(100 * time.Millisecond)
+	worker.Stop()
+}
+
 type fakeRepo struct {
-	createCalled       int
-	updateCalled       int
-	deleteCalled       int
-	saveBacktestCalled int
+	createCalled         int
+	updateCalled         int
+	deleteCalled         int
+	saveBacktestCalled   int
 	upsertPositionCalled int
-	lastStrategy       tradingDomain.Strategy
-	lastBacktest       tradingDomain.BacktestRecord
-	id                 string
-	getErr             error
-	trades             []tradingDomain.TradeRecord
-	activeStrats       []*strategyDomain.ScoringStrategy
+	closePositionCalled  int
+	lastStrategy         tradingDomain.Strategy
+	lastBacktest         tradingDomain.BacktestRecord
+	id                   string
+	getErr               error
+	trades               []tradingDomain.TradeRecord
+	activeStrats         []*strategyDomain.ScoringStrategy
+	openPos              *tradingDomain.Position
+	tp                   *float64
 }
 
 func (f *fakeRepo) CreateStrategy(_ context.Context, s tradingDomain.Strategy) (string, error) {
@@ -674,10 +763,10 @@ func (f *fakeRepo) LoadScoringStrategyBySlug(ctx context.Context, slug string) (
 		Name:       "Alpha",
 		BaseSymbol: "BTCUSDT",
 		Threshold:  60,
-		Risk:       tradingDomain.RiskSettings{OrderSizeValue: 1000},
+		Risk:       tradingDomain.RiskSettings{OrderSizeValue: 1000, TakeProfitPct: f.tp},
 		EntryRules: []strategyDomain.StrategyRule{
 			{
-				Weight: 1.0,
+				Weight:   1.0,
 				RuleType: "entry",
 				Condition: strategyDomain.Condition{
 					Type: "BASE_SCORE",
@@ -708,7 +797,7 @@ func (f *fakeRepo) ListTrades(context.Context, tradingDomain.TradeFilter) ([]tra
 	return f.trades, nil
 }
 func (f *fakeRepo) GetOpenPosition(context.Context, string, tradingDomain.Environment) (*tradingDomain.Position, error) {
-	return nil, nil
+	return f.openPos, nil
 }
 func (f *fakeRepo) GetPosition(ctx context.Context, id string) (*tradingDomain.Position, error) {
 	return &tradingDomain.Position{ID: "p1", Status: "open", Symbol: "BTCUSDT", Env: tradingDomain.EnvPaper, Size: 0.1}, nil
@@ -720,7 +809,10 @@ func (f *fakeRepo) UpsertPosition(context.Context, tradingDomain.Position) error
 	f.upsertPositionCalled++
 	return nil
 }
-func (f *fakeRepo) ClosePosition(context.Context, string, time.Time, float64) error { return nil }
+func (f *fakeRepo) ClosePosition(context.Context, string, time.Time, float64) error {
+	f.closePositionCalled++
+	return nil
+}
 func (f *fakeRepo) SaveLog(context.Context, tradingDomain.LogEntry) error           { return nil }
 func (f *fakeRepo) ListLogs(context.Context, tradingDomain.LogFilter) ([]tradingDomain.LogEntry, error) {
 	return nil, nil
@@ -773,3 +865,7 @@ func (m *mockExchange) PlaceMarketOrder(ctx context.Context, symbol, side string
 func (m *mockExchange) PlaceMarketOrderQuote(ctx context.Context, symbol, side string, quoteAmount float64) (float64, float64, error) {
 	return 0, 0, nil
 }
+
+type mockNotifier struct{}
+
+func (m *mockNotifier) Notify(msg string) error { return nil }

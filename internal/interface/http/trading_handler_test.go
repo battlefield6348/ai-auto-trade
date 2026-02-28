@@ -72,29 +72,25 @@ func TestTradingHandlers_Memory(t *testing.T) {
 		}
 	})
 
-	t.Run("PositionClose", func(t *testing.T) {
+	t.Run("ListTrades_Filter", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("POST", "/api/admin/positions/p1/close", nil)
-		req.Header.Set("Authorization", "Bearer "+token)
-		server.Handler().ServeHTTP(w, req)
-
-		// Expect 404 or 500 since position p1 doesn't exist in memory store easily without setup
-		// But we check that it hits the handler
-		if w.Code == http.StatusNotFound || w.Code == http.StatusInternalServerError || w.Code == http.StatusOK {
-			// fine
-		} else {
-			t.Errorf("unexpected status %d", w.Code)
-		}
-	})
-
-	t.Run("ListReports", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("GET", "/api/admin/strategies/s1/reports", nil)
+		req, _ := http.NewRequest("GET", "/api/admin/trades?env=paper&strategy_id=s1", nil)
 		req.Header.Set("Authorization", "Bearer "+token)
 		server.Handler().ServeHTTP(w, req)
 
 		if w.Code != http.StatusOK {
 			t.Errorf("expected 200, got %d", w.Code)
+		}
+	})
+
+	t.Run("PositionClose_NotFound", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("POST", "/api/admin/positions/none/close", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		server.Handler().ServeHTTP(w, req)
+
+		if w.Code != http.StatusNotFound && w.Code != http.StatusInternalServerError {
+			t.Errorf("expected 404 or 500, got %d", w.Code)
 		}
 	})
 }

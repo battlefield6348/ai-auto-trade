@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
 	"testing"
@@ -460,6 +461,354 @@ func TestListLogs(t *testing.T) {
 	}
 	if len(list) != 1 {
 		t.Errorf("expected 1 log, got %d", len(list))
+	}
+}
+
+func TestListBacktests(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("new sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	repo := NewTradingRepo(db)
+	rows := sqlmock.NewRows([]string{"id", "strategy_id", "strategy_version", "start_date", "end_date", "params", "result", "equity_curve", "trades", "created_by", "created_at"}).
+		AddRow("b-1", "s-1", 1, time.Now(), time.Now(), []byte("{}"), []byte("{}"), []byte("[]"), []byte("[]"), "u-1", time.Now())
+
+	mock.ExpectQuery("SELECT (.+) FROM strategy_backtests WHERE strategy_id=\\$1 ORDER BY created_at DESC LIMIT 50;").
+		WithArgs("s-1").
+		WillReturnRows(rows)
+
+	list, err := repo.ListBacktests(context.Background(), "s-1")
+	if err != nil {
+		t.Fatalf("list backtests: %v", err)
+	}
+	if len(list) != 1 {
+		t.Errorf("expected 1 backtest, got %d", len(list))
+	}
+}
+
+func TestListReports(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("new sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	repo := NewTradingRepo(db)
+	rows := sqlmock.NewRows([]string{"id", "strategy_id", "strategy_version", "env", "period_start", "period_end", "summary", "trades", "equity_curve", "created_at"}).
+		AddRow("r-1", "s-1", 1, "paper", time.Now(), time.Now(), []byte("{}"), []byte("[]"), []byte("[]"), time.Now())
+
+	mock.ExpectQuery("SELECT (.+) FROM strategy_reports WHERE strategy_id=\\$1 ORDER BY created_at DESC LIMIT 100;").
+		WithArgs("s-1").
+		WillReturnRows(rows)
+
+	list, err := repo.ListReports(context.Background(), "s-1")
+	if err != nil {
+		t.Fatalf("list reports: %v", err)
+	}
+	if len(list) != 1 {
+		t.Errorf("expected 1 report, got %d", len(list))
+	}
+}
+
+func TestListOpenPositions(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("new sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	repo := NewTradingRepo(db)
+	rows := sqlmock.NewRows([]string{"id", "strategy_id", "env", "symbol", "entry_date", "entry_price", "size", "stop_loss", "take_profit", "status", "updated_at"}).
+		AddRow("p-1", "s-1", "paper", "BTCUSDT", time.Now(), 50000, 0.1, nil, nil, "open", time.Now())
+
+	mock.ExpectQuery("SELECT (.+) FROM strategy_positions WHERE status='open'").
+		WillReturnRows(rows)
+
+	list, err := repo.ListOpenPositions(context.Background())
+	if err != nil {
+		t.Fatalf("list open positions: %v", err)
+	}
+	if len(list) != 1 {
+		t.Errorf("expected 1 position, got %d", len(list))
+	}
+}
+
+func TestGetPosition(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("new sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	repo := NewTradingRepo(db)
+	rows := sqlmock.NewRows([]string{"id", "strategy_id", "env", "symbol", "entry_date", "entry_price", "size", "stop_loss", "take_profit", "status", "updated_at"}).
+		AddRow("p-1", "s-1", "paper", "BTCUSDT", time.Now(), 50000, 0.1, nil, nil, "open", time.Now())
+
+	mock.ExpectQuery("SELECT (.+) FROM strategy_positions WHERE id = \\$1").
+		WithArgs("p-1").
+		WillReturnRows(rows)
+
+	p, err := repo.GetPosition(context.Background(), "p-1")
+	if err != nil {
+		t.Fatalf("get position: %v", err)
+	}
+	if p.ID != "p-1" {
+		t.Errorf("expected p-1, got %s", p.ID)
+	}
+}
+
+func TestClosePosition(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("new sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	repo := NewTradingRepo(db)
+	mock.ExpectExec("UPDATE strategy_positions SET status='closed', exit_date=\\$1, exit_price=\\$2, updated_at=NOW\\(\\) WHERE id=\\$3;").
+		WithArgs(sqlmock.AnyArg(), 60000.0, "p-1").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	err = repo.ClosePosition(context.Background(), "p-1", time.Now(), 60000.0)
+	if err != nil {
+		t.Fatalf("close position: %v", err)
+	}
+}
+
+func TestUpdateLastActivatedAt(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("new sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	repo := NewTradingRepo(db)
+	mock.ExpectExec("UPDATE strategies SET last_executed_at=\\$1, updated_at=NOW\\(\\) WHERE id=\\$2").
+		WithArgs(sqlmock.AnyArg(), "s-1").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	err = repo.UpdateLastActivatedAt(context.Background(), "s-1", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUpdateRiskSettings(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("new sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	repo := NewTradingRepo(db)
+	risk := tradingDomain.RiskSettings{OrderSizeValue: 1234}
+	mock.ExpectExec("UPDATE strategies SET risk_settings=\\$1, updated_at=NOW\\(\\) WHERE id=\\$2").
+		WithArgs(sqlmock.AnyArg(), "s-1").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	err = repo.UpdateRiskSettings(context.Background(), "s-1", risk)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSetStatus_NoEnv(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("new sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	repo := NewTradingRepo(db)
+	mock.ExpectExec("UPDATE strategies SET status=\\$1, is_active=\\$2, last_executed_at=\\$3, updated_at=NOW\\(\\) WHERE id=\\$4;").
+		WithArgs("active", true, sqlmock.AnyArg(), "s-1").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	err = repo.SetStatus(context.Background(), "s-1", tradingDomain.StatusActive, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGetPosition_NotFound(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("new sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	repo := NewTradingRepo(db)
+	mock.ExpectQuery("SELECT (.+) FROM strategy_positions WHERE id = \\$1").
+		WillReturnError(sql.ErrNoRows)
+
+	_, err = repo.GetPosition(context.Background(), "none")
+	if err == nil {
+		t.Error("expected error for not found position")
+	}
+}
+
+func TestGetStrategyBySlug(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("new sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	repo := NewTradingRepo(db)
+	rows := sqlmock.NewRows([]string{"id", "name", "slug", "description", "base_symbol", "timeframe", "env", "status", "version", "buy_conditions", "sell_conditions", "risk_settings", "created_by", "updated_by", "last_executed_at", "created_at", "updated_at"}).
+		AddRow("s-1", "策略A", "slug-a", "desc", "BTCUSDT", "1d", "both", "active", 1, []byte("{}"), []byte("{}"), []byte("{}"), "u-1", "u-1", time.Now(), time.Now(), time.Now())
+
+	mock.ExpectQuery("SELECT (.+) FROM strategies WHERE slug=\\$1").
+		WithArgs("slug-a").
+		WillReturnRows(rows)
+
+	s, err := repo.GetStrategyBySlug(context.Background(), "slug-a")
+	if err != nil {
+		t.Fatalf("get strategy by slug: %v", err)
+	}
+	if s.Slug != "slug-a" {
+		t.Errorf("expected slug-a, got %s", s.Slug)
+	}
+}
+
+func TestUpsertPosition_Insert(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("new sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	repo := NewTradingRepo(db)
+	p := tradingDomain.Position{
+		StrategyID: "s-1",
+		Env:        "paper",
+		Symbol:     "BTCUSDT",
+		EntryDate:  time.Now(),
+		EntryPrice: 50000,
+		Size:       0.1,
+		Status:     "open",
+	}
+
+	mock.ExpectExec("INSERT INTO strategy_positions").
+		WithArgs("s-1", "paper", "BTCUSDT", p.EntryDate, p.EntryPrice, p.Size, p.StopLoss, p.TakeProfit, p.Status).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	err = repo.UpsertPosition(context.Background(), p)
+	if err != nil {
+		t.Fatalf("upsert position insert: %v", err)
+	}
+}
+
+func TestScoringStrategyMethods(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("new sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	repo := NewTradingRepo(db)
+
+	t.Run("LoadScoringStrategyBySlug", func(t *testing.T) {
+		mock.ExpectQuery("SELECT (.+) FROM strategies WHERE slug = \\$1").
+			WithArgs("slug-1").
+			WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "name", "slug", "description", "timeframe", "base_symbol", "threshold", "exit_threshold", "is_active", "env", "risk_settings", "created_at", "updated_at"}).
+				AddRow("xyz", "u1", "Name", "slug-1", "", "1d", "BTCUSDT", 60.0, 40.0, true, "paper", []byte("{}"), time.Now(), time.Now()))
+		
+		mock.ExpectQuery("SELECT (.+) FROM strategy_rules sr JOIN conditions c").
+			WithArgs("xyz").
+			WillReturnRows(sqlmock.NewRows([]string{"strategy_id", "weight", "rule_type", "id", "name", "type", "params"}).
+				AddRow("xyz", 1.0, "entry", "c1", "Cond1", "numeric", []byte("{}")))
+
+		_, _ = repo.LoadScoringStrategyBySlug(context.Background(), "slug-1")
+	})
+
+	t.Run("LoadScoringStrategyByID", func(t *testing.T) {
+		mock.ExpectQuery("SELECT (.+) FROM strategies WHERE id = \\$1").
+			WithArgs("id-1").
+			WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "name", "slug", "description", "timeframe", "base_symbol", "threshold", "exit_threshold", "is_active", "env", "risk_settings", "created_at", "updated_at"}).
+				AddRow("id-1", "u1", "Name", "slug-1", "", "1d", "BTCUSDT", 60.0, 40.0, true, "paper", []byte("{}"), time.Now(), time.Now()))
+		
+		mock.ExpectQuery("SELECT (.+) FROM strategy_rules sr JOIN conditions c").
+			WithArgs("id-1").
+			WillReturnRows(sqlmock.NewRows([]string{"strategy_id", "weight", "rule_type", "id", "name", "type", "params"}).
+				AddRow("id-1", 1.0, "entry", "c1", "Cond1", "numeric", []byte("{}")))
+
+		_, _ = repo.LoadScoringStrategyByID(context.Background(), "id-1")
+	})
+
+	t.Run("ListActiveScoringStrategies", func(t *testing.T) {
+		mock.ExpectQuery("SELECT slug FROM strategies WHERE is_active = true").
+			WillReturnRows(sqlmock.NewRows([]string{"slug"}).AddRow("slug-1"))
+		
+		mock.ExpectQuery("SELECT (.+) FROM strategies WHERE slug = \\$1").
+			WithArgs("slug-1").
+			WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "name", "slug", "description", "timeframe", "base_symbol", "threshold", "exit_threshold", "is_active", "env", "risk_settings", "created_at", "updated_at"}).
+				AddRow("xyz", "u1", "Name", "slug-1", "", "1d", "BTCUSDT", 60.0, 40.0, true, "paper", []byte("{}"), time.Now(), time.Now()))
+		
+		mock.ExpectQuery("SELECT (.+) FROM strategy_rules sr JOIN conditions c").
+			WithArgs("xyz").
+			WillReturnRows(sqlmock.NewRows([]string{"strategy_id", "weight", "rule_type", "id", "name", "type", "params"}).
+				AddRow("xyz", 1.0, "entry", "c1", "Cond1", "numeric", []byte("{}")))
+
+		list, err := repo.ListActiveScoringStrategies(context.Background())
+		if err != nil {
+			t.Fatalf("ListActiveScoringStrategies failed: %v", err)
+		}
+		if len(list) != 1 {
+			t.Errorf("expected 1 strategy, got %d", len(list))
+		}
+	})
+}
+func TestListTrades_EmptyFilter(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("new sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	repo := NewTradingRepo(db)
+	mock.ExpectQuery("SELECT (.+) FROM strategy_trades ORDER BY entry_date DESC LIMIT 200").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+
+	_, err = repo.ListTrades(context.Background(), tradingDomain.TradeFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGetOpenPosition_NotFound(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("new sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	repo := NewTradingRepo(db)
+	mock.ExpectQuery("SELECT (.+) FROM strategy_positions").
+		WillReturnError(sql.ErrNoRows)
+
+	p, err := repo.GetOpenPosition(context.Background(), "s1", "paper")
+	if err != nil || p != nil {
+		t.Error("expected nil, nil for not found")
+	}
+}
+
+func TestListOpenPositions_Empty(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("new sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	repo := NewTradingRepo(db)
+	mock.ExpectQuery("SELECT (.+) FROM strategy_positions WHERE status='open'").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+
+	list, err := repo.ListOpenPositions(context.Background())
+	if err != nil || len(list) != 0 {
+		t.Error("expected empty list")
 	}
 }
 

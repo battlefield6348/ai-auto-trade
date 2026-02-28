@@ -151,3 +151,77 @@ func TestAuthRepo_IsPermissionGranted(t *testing.T) {
 		t.Error("expected true")
 	}
 }
+func TestAuthRepo_FindByID(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("failed to open sqlmock: %s", err)
+	}
+	defer db.Close()
+	repo := NewAuthRepo(db)
+
+	rows := sqlmock.NewRows([]string{"id", "email", "display_name", "password_hash", "status", "role_name"}).
+		AddRow("u-1", "test@example.com", "Test User", "hash", "active", "admin")
+
+	mock.ExpectQuery("SELECT (.+) FROM users u LEFT JOIN user_roles ur").
+		WithArgs("u-1").
+		WillReturnRows(rows)
+
+	u, err := repo.FindByID(context.Background(), "u-1")
+	if err != nil {
+		t.Fatalf("FindByID failed: %v", err)
+	}
+	if u.ID != "u-1" {
+		t.Errorf("expected u-1, got %s", u.ID)
+	}
+}
+
+func TestAuthRepo_SeedDefaults(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("failed to open sqlmock: %s", err)
+	}
+	defer db.Close()
+	repo := NewAuthRepo(db)
+
+	mock.ExpectBegin()
+	// roles
+	mock.ExpectQuery("INSERT INTO roles").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("r1")) // admin
+	mock.ExpectQuery("INSERT INTO roles").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("r2")) // analyst
+	mock.ExpectQuery("INSERT INTO roles").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("r3")) // user
+	mock.ExpectQuery("INSERT INTO roles").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("r4")) // service
+
+	// 3 users
+	for i := 0; i < 3; i++ {
+		mock.ExpectQuery("INSERT INTO users").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("u"))
+		mock.ExpectExec("INSERT INTO user_roles").WillReturnResult(sqlmock.NewResult(1, 1))
+	}
+	mock.ExpectCommit()
+
+	err = repo.SeedDefaults(context.Background())
+	if err != nil {
+		t.Fatalf("SeedDefaults failed: %v", err)
+	}
+}
+
+func TestAuthRepo_SeedPermissions(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("failed to open sqlmock: %s", err)
+	}
+	defer db.Close()
+	repo := NewAuthRepo(db)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("INSERT INTO permissions").WithArgs("p1", "auto seeded perm p1").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("pid1"))
+	mock.ExpectQuery("SELECT id, name FROM roles").WillReturnRows(sqlmock.NewRows([]string{"id", "name"}).AddRow("rid1", "admin"))
+	mock.ExpectExec("INSERT INTO role_permissions").WithArgs("rid1", "pid1").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	rolePerms := map[authDomain.Role][]string{
+		authDomain.RoleAdmin: {"p1"},
+	}
+	err = repo.SeedPermissions(context.Background(), []string{"p1"}, rolePerms)
+	if err != nil {
+		t.Fatalf("SeedPermissions failed: %v", err)
+	}
+}

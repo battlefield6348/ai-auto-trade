@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	appAnalysis "ai-auto-trade/internal/application/analysis"
+	"ai-auto-trade/internal/domain/analysis"
 	"ai-auto-trade/internal/infrastructure/config"
 
 	"github.com/gin-gonic/gin"
@@ -98,10 +100,31 @@ func TestMemoryRepoAdapter(t *testing.T) {
 	repo := server.dataRepo
 	ctx := context.Background()
 
-	t.Run("LatestAnalysisDate_Empty", func(t *testing.T) {
+	t.Run("DataOps", func(t *testing.T) {
+		now := time.Now()
+		
+		repo.InsertAnalysisResult(ctx, "BTCUSDT", analysis.DailyAnalysisResult{
+			Symbol: "BTCUSDT", TradeDate: now, Close: 50000,
+		})
+		
+		has, _ := repo.HasAnalysisForDate(ctx, now)
+		if !has {
+			t.Error("HasAnalysisForDate failed")
+		}
+		
 		_, err := repo.LatestAnalysisDate(ctx)
-		if err == nil {
-			t.Error("expected error for empty store")
+		if err != nil {
+			t.Error("LatestAnalysisDate failed")
+		}
+		
+		res, err := repo.Get(ctx, "BTCUSDT", now, "1d")
+		if err != nil || res.Close != 50000 {
+			t.Error("Get failed")
+		}
+		
+		results, total, _ := repo.FindByDate(ctx, now, appAnalysis.QueryFilter{}, appAnalysis.SortOption{}, appAnalysis.Pagination{Limit: 10})
+		if total != 1 || len(results) != 1 {
+			t.Error("FindByDate failed")
 		}
 	})
 }

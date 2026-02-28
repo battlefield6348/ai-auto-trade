@@ -15,14 +15,16 @@ type TelegramClient struct {
 	token      string
 	chatID     int64
 	prefix     string
+	baseURL    string
 	httpClient *http.Client
 }
 
 func NewTelegramClient(token string, chatID int64, prefix string) *TelegramClient {
 	return &TelegramClient{
-		token:  token,
-		chatID: chatID,
-		prefix: prefix,
+		token:   token,
+		chatID:  chatID,
+		prefix:  prefix,
+		baseURL: "https://api.telegram.org",
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
@@ -49,13 +51,7 @@ func (c *TelegramClient) SendMessage(ctx context.Context, text string) error {
 	}
 	body, _ := json.Marshal(payload)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", c.token), bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.httpClient.Post(fmt.Sprintf("%s/bot%s/sendMessage", c.baseURL, c.token), "application/json", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}

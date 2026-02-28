@@ -38,11 +38,12 @@ func (r *TradingRepo) CreateStrategy(ctx context.Context, s tradingDomain.Strate
 		return "", err
 	}
 	const q = `
-INSERT INTO strategies (name, description, base_symbol, timeframe, env, status, version, buy_conditions, sell_conditions, risk_settings, user_id, created_by, updated_by)
+INSERT INTO strategies (name, description, base_symbol, timeframe, env, status, version, buy_conditions, sell_conditions, risk_settings, user_id, created_by, updated_by, threshold, exit_threshold)
 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
         COALESCE($11::uuid, $12::uuid, $13::uuid),
         COALESCE($12::uuid, $11::uuid),
-        COALESCE($13::uuid, $11::uuid))
+        COALESCE($13::uuid, $11::uuid),
+        $14, $15)
 RETURNING id;
 `
 	var id string
@@ -68,7 +69,7 @@ RETURNING id;
 	}
 	if err := r.db.QueryRowContext(ctx, q,
 		s.Name, s.Description, s.BaseSymbol, s.Timeframe, string(s.Env), string(s.Status), s.Version,
-		buyJSON, sellJSON, riskJSON, userID, createdBy, updatedBy,
+		buyJSON, sellJSON, riskJSON, userID, createdBy, updatedBy, s.Threshold, s.ExitThreshold,
 	).Scan(&id); err != nil {
 		return "", err
 	}
@@ -92,12 +93,12 @@ func (r *TradingRepo) UpdateStrategy(ctx context.Context, s tradingDomain.Strate
 	const q = `
 UPDATE strategies
 SET name=$1, description=$2, base_symbol=$3, timeframe=$4, env=$5, status=$6, version=$7,
-    buy_conditions=$8, sell_conditions=$9, risk_settings=$10, updated_by=$11, updated_at=NOW()
-WHERE id=$12;
+    buy_conditions=$8, sell_conditions=$9, risk_settings=$10, updated_by=$11, threshold=$12, exit_threshold=$13, updated_at=NOW()
+WHERE id=$14;
 `
 	_, err = r.db.ExecContext(ctx, q,
 		s.Name, s.Description, s.BaseSymbol, s.Timeframe, string(s.Env), string(s.Status), s.Version,
-		buyJSON, sellJSON, riskJSON, nullableUUID(s.UpdatedBy), s.ID,
+		buyJSON, sellJSON, riskJSON, nullableUUID(s.UpdatedBy), s.Threshold, s.ExitThreshold, s.ID,
 	)
 	return err
 }
@@ -112,7 +113,7 @@ func (r *TradingRepo) GetStrategyBySlug(ctx context.Context, slug string) (tradi
 
 func (r *TradingRepo) getStrategyByField(ctx context.Context, field, value string) (tradingDomain.Strategy, error) {
 	q := fmt.Sprintf(`
-SELECT id, name, slug, description, base_symbol, timeframe, env, status, version, buy_conditions, sell_conditions, risk_settings, created_by, updated_by, last_executed_at, created_at, updated_at
+SELECT id, name, slug, description, base_symbol, timeframe, env, status, version, buy_conditions, sell_conditions, risk_settings, created_by, updated_by, last_executed_at, created_at, updated_at, threshold, exit_threshold
 FROM strategies WHERE %s=$1;
 `, field)
 	var s tradingDomain.Strategy
@@ -125,6 +126,7 @@ FROM strategies WHERE %s=$1;
 		&s.ID, &s.Name, &slugNull, &desc, &s.BaseSymbol, &s.Timeframe,
 		&env, &status, &s.Version, &buyRaw, &sellRaw, &riskRaw,
 		&createdBy, &updatedBy, &lastActivated, &s.CreatedAt, &s.UpdatedAt,
+		&s.Threshold, &s.ExitThreshold,
 	); err != nil {
 		return s, err
 	}
@@ -157,7 +159,7 @@ func (r *TradingRepo) DeleteStrategy(ctx context.Context, id string) error {
 // ListStrategies 列出策略。
 func (r *TradingRepo) ListStrategies(ctx context.Context, filter trading.StrategyFilter) ([]tradingDomain.Strategy, error) {
 	q := `
-SELECT id, name, slug, description, base_symbol, timeframe, env, status, version, buy_conditions, sell_conditions, risk_settings, created_by, updated_by, last_executed_at, created_at, updated_at
+SELECT id, name, slug, description, base_symbol, timeframe, env, status, version, buy_conditions, sell_conditions, risk_settings, created_by, updated_by, last_executed_at, created_at, updated_at, threshold, exit_threshold
 FROM strategies
 `
 	conds := []string{}
@@ -197,6 +199,7 @@ FROM strategies
 			&s.ID, &s.Name, &slug, &desc, &s.BaseSymbol, &s.Timeframe,
 			&env, &status, &s.Version, &buyRaw, &sellRaw, &riskRaw,
 			&createdBy, &updatedBy, &lastActivated, &s.CreatedAt, &s.UpdatedAt,
+			&s.Threshold, &s.ExitThreshold,
 		); err != nil {
 			return nil, err
 		}

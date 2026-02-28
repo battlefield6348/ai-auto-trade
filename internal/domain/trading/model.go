@@ -82,7 +82,10 @@ type Strategy struct {
 	Sell ConditionSet `json:"sell_conditions"`
 	Risk RiskSettings `json:"risk_settings"`
 
-	CreatedBy string    `json:"created_by"`
+	Threshold     float64 `json:"threshold"`
+	ExitThreshold float64 `json:"exit_threshold"`
+
+	CreatedBy string `json:"created_by"`
 	UpdatedBy string    `json:"updated_by"`
 	LastActivatedAt *time.Time `json:"last_activated_at,omitempty"`
 	CreatedAt       time.Time  `json:"created_at"`

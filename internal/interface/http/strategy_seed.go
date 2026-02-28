@@ -88,10 +88,16 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 
 	for _, s := range strategies {
 		var sid string
+		// Check if exists first to avoid clearing rules for existing strategies
+		err = db.QueryRowContext(ctx, "SELECT id FROM strategies WHERE slug = $1", s.Slug).Scan(&sid)
+		if err == nil {
+			log.Printf("[Seed] Strategy %s already exists, skipping re-seed.", s.Slug)
+			continue
+		}
+
 		err = db.QueryRowContext(ctx, `
 			INSERT INTO strategies (user_id, name, slug, timeframe, base_symbol, threshold, exit_threshold, is_active, env, updated_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'both', NOW())
-			ON CONFLICT (slug) DO NOTHING
 			RETURNING id
 		`, adminID, s.Name, s.Slug, s.Timeframe, s.BaseSymbol, s.Threshold, s.ExitThreshold, s.IsActive).Scan(&sid)
 
@@ -99,9 +105,6 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 			log.Printf("[Seed] Strategy %s insert failed: %v", s.Slug, err)
 			continue
 		}
-
-		// 清除舊規則以便重新載入
-		_, _ = db.ExecContext(ctx, "DELETE FROM strategy_rules WHERE strategy_id = $1", sid)
 
 		for _, r := range s.Rules {
 			paramsBytes, _ := json.Marshal(r.Params)
@@ -135,12 +138,6 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 		}
 	}
 
-	// 額外清理：刪除表現不佳或舊的策略，僅保留最新最強版本
-	_, err = db.ExecContext(ctx, "DELETE FROM strategies WHERE slug NOT IN ('nexus-apex-high-profit', 'nexus-quantum-v2', 'ai-optimized')")
-	if err != nil {
-		log.Printf("[Seed] Cleanup old strategies failed: %v", err)
-	}
-
-	log.Printf("[Seed] Default scoring strategies UPDATED with high-profit focus (Nexus Apex)")
+	log.Printf("[Seed] Default scoring strategies checked.")
 	return nil
 }

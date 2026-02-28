@@ -539,6 +539,8 @@ func TestUpdateStrategy_VersionBump(t *testing.T) {
 			},
 		},
 		Risk:      tradingDomain.RiskSettings{OrderSizeValue: 2000},
+		Threshold: 75.5,
+		ExitThreshold: 25.5,
 		UpdatedBy: "u1",
 	}
 
@@ -554,6 +556,9 @@ func TestUpdateStrategy_VersionBump(t *testing.T) {
 	}
 	if repo.lastStrategy.Risk.OrderSizeValue != 2000 {
 		t.Fatalf("risk update not applied: %+v", repo.lastStrategy.Risk)
+	}
+	if repo.lastStrategy.Threshold != 75.5 || repo.lastStrategy.ExitThreshold != 25.5 {
+		t.Fatalf("threshold not updated: %f, %f", repo.lastStrategy.Threshold, repo.lastStrategy.ExitThreshold)
 	}
 	if repo.lastStrategy.Name != "new" || repo.lastStrategy.Status != tradingDomain.StatusActive {
 		t.Fatalf("fields not updated")

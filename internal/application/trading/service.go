@@ -187,6 +187,8 @@ func (s *Service) UpdateStrategy(ctx context.Context, id string, input tradingDo
 	current.Buy = input.Buy
 	current.Sell = input.Sell
 	current.Risk = applyRiskDefaults(input.Risk)
+	current.Threshold = input.Threshold
+	current.ExitThreshold = input.ExitThreshold
 	current.Version++
 	current.UpdatedBy = input.UpdatedBy
 	current.UpdatedAt = s.now()
@@ -229,6 +231,14 @@ func (s *Service) GetStrategyBySlug(ctx context.Context, slug string) (tradingDo
 // ListStrategies 查詢策略列表。
 func (s *Service) ListStrategies(ctx context.Context, filter StrategyFilter) ([]tradingDomain.Strategy, error) {
 	return s.repo.ListStrategies(ctx, filter)
+}
+
+func (s *Service) LoadScoringStrategyBySlug(ctx context.Context, slug string) (*strategyDomain.ScoringStrategy, error) {
+	return s.repo.LoadScoringStrategyBySlug(ctx, slug)
+}
+
+func (s *Service) LoadScoringStrategyByID(ctx context.Context, id string) (*strategyDomain.ScoringStrategy, error) {
+	return s.repo.LoadScoringStrategyByID(ctx, id)
 }
 
 // BacktestInput 定義回測請求。

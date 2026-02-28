@@ -2,11 +2,11 @@ package httpapi
 
 import (
 	"database/sql"
-	"fmt"
 	"net/http"
 
 	"ai-auto-trade/internal/application/strategy"
 	"ai-auto-trade/internal/application/trading"
+	strategyDomain "ai-auto-trade/internal/domain/strategy"
 	tradingDomain "ai-auto-trade/internal/domain/trading"
 
 	"github.com/gin-gonic/gin"
@@ -49,21 +49,39 @@ func (s *Server) handleGetStrategyByQuery(c *gin.Context) {
 	id := c.Query("id")
 	slug := c.Query("slug")
 
-	var st tradingDomain.Strategy
-	var err error
-
-	if id != "" {
-		st, err = s.tradingSvc.GetStrategy(c.Request.Context(), id)
-	} else if slug != "" {
-		st, err = s.tradingSvc.GetStrategyBySlug(c.Request.Context(), slug)
-	} else {
+	if id == "" && slug == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "id or slug required", "error_code": errCodeBadRequest})
 		return
 	}
 
+	// Try loading as a ScoringStrategy first, as it contains the weights/rules needed by the backtest UI
+	var scoring *strategyDomain.ScoringStrategy
+	var err error
+	if slug != "" {
+		scoring, err = s.tradingSvc.LoadScoringStrategyBySlug(c.Request.Context(), slug)
+	} else if id != "" {
+		scoring, err = s.tradingSvc.LoadScoringStrategyByID(c.Request.Context(), id)
+	}
+
+	if err == nil && scoring != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success":  true,
+			"strategy": scoring,
+		})
+		return
+	}
+
+	// Fallback to legacy Strategy format if scoring logic fails or is not found
+	var st tradingDomain.Strategy
+	if id != "" {
+		st, err = s.tradingSvc.GetStrategy(c.Request.Context(), id)
+	} else {
+		st, err = s.tradingSvc.GetStrategyBySlug(c.Request.Context(), slug)
+	}
+
 	if err != nil {
 		if err == sql.ErrNoRows {
-			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": fmt.Sprintf("strategy not found (id: %s, slug: %s)", id, slug), "error_code": errCodeNotFound})
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "strategy not found", "error_code": errCodeNotFound})
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "database error: " + err.Error(), "error_code": errCodeInternal})
 		}
@@ -79,6 +97,13 @@ func (s *Server) handleGetStrategyByQuery(c *gin.Context) {
 func (s *Server) handleStrategyGetOrUpdate(c *gin.Context, id string) {
 	switch c.Request.Method {
 	case http.MethodGet:
+		// Try scoring strategy first
+		scoring, err := s.tradingSvc.LoadScoringStrategyByID(c.Request.Context(), id)
+		if err == nil && scoring != nil {
+			c.JSON(http.StatusOK, gin.H{"success": true, "strategy": scoring})
+			return
+		}
+
 		st, err := s.tradingSvc.GetStrategy(c.Request.Context(), id)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "strategy not found", "error_code": errCodeNotFound})

@@ -33,6 +33,7 @@ func TestCreateStrategy_UseCreatedBy(t *testing.T) {
 			sqlmock.AnyArg(), // user_id (from created_by)
 			sqlmock.AnyArg(), // created_by
 			sqlmock.AnyArg(), // updated_by
+			0.0, 0.0,         // threshold, exit_threshold
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("s-1"))
 
@@ -89,6 +90,7 @@ func TestCreateStrategy_FallbackUser(t *testing.T) {
 			driver.Value("admin-id"), // user_id (fallback)
 			driver.Value("admin-id"), // created_by fallback
 			driver.Value("admin-id"), // updated_by fallback
+			0.0, 0.0,                 // threshold, exit_threshold
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("s-2"))
 
@@ -144,7 +146,7 @@ func TestUpdateStrategy(t *testing.T) {
 		WithArgs(
 			s.Name, s.Description, s.BaseSymbol, s.Timeframe, string(s.Env), string(s.Status), s.Version,
 			sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(),
-			"user-2", "s-1",
+			"user-2", 0.0, 0.0, "s-1",
 		).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -163,8 +165,8 @@ func TestGetStrategy(t *testing.T) {
 
 	repo := NewTradingRepo(db)
 
-	rows := sqlmock.NewRows([]string{"id", "name", "slug", "description", "base_symbol", "timeframe", "env", "status", "version", "buy_conditions", "sell_conditions", "risk_settings", "created_by", "updated_by", "last_executed_at", "created_at", "updated_at"}).
-		AddRow("s-1", "策略A", "slug-a", "desc", "BTCUSDT", "1d", "both", "active", 1, []byte("{}"), []byte("{}"), []byte("{}"), "u-1", "u-1", time.Now(), time.Now(), time.Now())
+	rows := sqlmock.NewRows([]string{"id", "name", "slug", "description", "base_symbol", "timeframe", "env", "status", "version", "buy_conditions", "sell_conditions", "risk_settings", "created_by", "updated_by", "last_executed_at", "created_at", "updated_at", "threshold", "exit_threshold"}).
+		AddRow("s-1", "策略A", "slug-a", "desc", "BTCUSDT", "1d", "both", "active", 1, []byte("{}"), []byte("{}"), []byte("{}"), "u-1", "u-1", time.Now(), time.Now(), time.Now(), 0.0, 0.0)
 
 	mock.ExpectQuery("SELECT (.+) FROM strategies WHERE id=\\$1").
 		WithArgs("s-1").
@@ -207,8 +209,8 @@ func TestListStrategies(t *testing.T) {
 
 	repo := NewTradingRepo(db)
 
-	rows := sqlmock.NewRows([]string{"id", "name", "slug", "description", "base_symbol", "timeframe", "env", "status", "version", "buy_conditions", "sell_conditions", "risk_settings", "created_by", "updated_by", "last_executed_at", "created_at", "updated_at"}).
-		AddRow("s-1", "策略A", "slug-a", "desc", "BTCUSDT", "1d", "both", "active", 1, []byte("{}"), []byte("{}"), []byte("{}"), "u-1", "u-1", time.Now(), time.Now(), time.Now())
+	rows := sqlmock.NewRows([]string{"id", "name", "slug", "description", "base_symbol", "timeframe", "env", "status", "version", "buy_conditions", "sell_conditions", "risk_settings", "created_by", "updated_by", "last_executed_at", "created_at", "updated_at", "threshold", "exit_threshold"}).
+		AddRow("s-1", "策略A", "slug-a", "desc", "BTCUSDT", "1d", "both", "active", 1, []byte("{}"), []byte("{}"), []byte("{}"), "u-1", "u-1", time.Now(), time.Now(), time.Now(), 0.0, 0.0)
 
 	mock.ExpectQuery("SELECT (.+) FROM strategies WHERE status = \\$1 AND env = \\$2 AND name ILIKE \\$3").
 		WithArgs("active", "both", "%策略%").
@@ -657,8 +659,8 @@ func TestGetStrategyBySlug(t *testing.T) {
 	defer db.Close()
 
 	repo := NewTradingRepo(db)
-	rows := sqlmock.NewRows([]string{"id", "name", "slug", "description", "base_symbol", "timeframe", "env", "status", "version", "buy_conditions", "sell_conditions", "risk_settings", "created_by", "updated_by", "last_executed_at", "created_at", "updated_at"}).
-		AddRow("s-1", "策略A", "slug-a", "desc", "BTCUSDT", "1d", "both", "active", 1, []byte("{}"), []byte("{}"), []byte("{}"), "u-1", "u-1", time.Now(), time.Now(), time.Now())
+	rows := sqlmock.NewRows([]string{"id", "name", "slug", "description", "base_symbol", "timeframe", "env", "status", "version", "buy_conditions", "sell_conditions", "risk_settings", "created_by", "updated_by", "last_executed_at", "created_at", "updated_at", "threshold", "exit_threshold"}).
+		AddRow("s-1", "策略A", "slug-a", "desc", "BTCUSDT", "1d", "both", "active", 1, []byte("{}"), []byte("{}"), []byte("{}"), "u-1", "u-1", time.Now(), time.Now(), time.Now(), 0.0, 0.0)
 
 	mock.ExpectQuery("SELECT (.+) FROM strategies WHERE slug=\\$1").
 		WithArgs("slug-a").

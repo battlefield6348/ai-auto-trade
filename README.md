@@ -56,3 +56,12 @@ go run ./cmd/api/main.go
 ## 🔒 預設帳號
 *   **Email**: `admin@example.com`
 *   **Password**: `password123`
+
+---
+
+## 🤖 AI 共同開發指引
+本專案與 AI 協同開發，為提升開發效率並降低 Token 消耗，請參考以下資源：
+*   **Workflows**: `/.agent/workflows/` (SOP 指引)
+*   **Skills**: `/.agent/skills/` (架構深鑽)
+*   **核心 SOP**: 為策略模型新增欄位，請閱讀 `/.agent/workflows/update_strategy_fields.md`。
+*   **架構知識**: 策略轉換與持久化邏輯，請閱讀 `/.agent/skills/strategy_management/SKILL.md`。

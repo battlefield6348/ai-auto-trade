@@ -20,8 +20,13 @@ func (s *Server) handleHealth(c *gin.Context) {
 	// Basic health check (DB connectivity, etc.)
 	dbStatus := "ok"
 	if s.db != nil {
-		if err := s.db.PingContext(c.Request.Context()); err != nil {
-			dbStatus = "error: " + err.Error()
+		sqlDB, _ := s.db.DB()
+		if sqlDB != nil {
+			if err := sqlDB.PingContext(c.Request.Context()); err != nil {
+				dbStatus = "error: " + err.Error()
+			}
+		} else {
+			dbStatus = "error: gorm_no_sql_db"
 		}
 	} else {
 		dbStatus = "using_memory"

@@ -22,13 +22,16 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	log.Printf("testing database connection...")
-	pool, err := db.Connect(ctx, cfg.DB)
+	pool, err := db.ConnectGORM(ctx, cfg.DB)
 	if err != nil {
 		log.Fatalf("CRITICAL: database connection failed: %v", err)
 	} else if pool == nil {
 		log.Printf("no DB_DSN provided; running with in-memory store only")
 	} else {
-		defer pool.Close()
+		sqlDB, _ := pool.DB()
+		if sqlDB != nil {
+			defer sqlDB.Close()
+		}
 		log.Printf("database connected successfully")
 	}
 

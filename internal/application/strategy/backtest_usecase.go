@@ -10,6 +10,8 @@ import (
 	analysisDomain "ai-auto-trade/internal/domain/analysis"
 	strategyDomain "ai-auto-trade/internal/domain/strategy"
 	tradingDomain "ai-auto-trade/internal/domain/trading"
+
+	"gorm.io/gorm"
 )
 
 type BacktestResult struct {
@@ -61,11 +63,11 @@ type DataProvider interface {
 }
 
 type BacktestUseCase struct {
-	db       strategyDomain.DBQueryer
+	db       *gorm.DB
 	dataProv DataProvider
 }
 
-func NewBacktestUseCase(db strategyDomain.DBQueryer, dataProv DataProvider) *BacktestUseCase {
+func NewBacktestUseCase(db *gorm.DB, dataProv DataProvider) *BacktestUseCase {
 	return &BacktestUseCase{db: db, dataProv: dataProv}
 }
 
@@ -78,7 +80,7 @@ func (u *BacktestUseCase) Execute(ctx context.Context, slug string, symbol strin
 		return nil, fmt.Errorf("database storage not initialized")
 	}
 	// 1. Load Strategy
-	s, err := strategyDomain.LoadScoringStrategyBySlug(ctx, u.db, slug)
+	s, err := strategyDomain.LoadScoringStrategyBySlugGORM(ctx, u.db, slug)
 	if err != nil {
 		return nil, fmt.Errorf("load strategy failed: %w", err)
 	}
@@ -141,8 +143,6 @@ func (u *BacktestUseCase) ExecuteWithStrategy(ctx context.Context, s *strategyDo
 		// Simulation Logic (Sequential)
 		if currentPosition == nil {
 			if triggered {
-				// Open position at next day open (approximated by current close for simplicity, or we could use next day open if available)
-				// For simplicity in this backtester, we use current close as entry price.
 				currentPosition = &BacktestTrade{
 					EntryDate:  res.TradeDate.Format("2006-01-02"),
 					EntryPrice: res.Close,
@@ -150,17 +150,13 @@ func (u *BacktestUseCase) ExecuteWithStrategy(ctx context.Context, s *strategyDo
 			}
 		} else {
 			// Check Exit
-			// Check Exit using unified domain logic
 			dummyPos := tradingDomain.Position{
 				EntryPrice: currentPosition.EntryPrice,
-				EntryDate:  start, // Not strictly used for TP/SL but good for completeness
+				EntryDate:  start, 
 			}
 			exitTriggered, reason := s.ShouldExit(res, dummyPos)
 			if exitTriggered {
 				currentPosition.Reason = reason
-			}
-
-			if exitTriggered {
 				currentPosition.ExitDate = res.TradeDate.Format("2006-01-02")
 				currentPosition.ExitPrice = res.Close
 				
@@ -177,7 +173,6 @@ func (u *BacktestUseCase) ExecuteWithStrategy(ctx context.Context, s *strategyDo
 		}
 	}
 	
-	// Force close last position if still open at end of data
 	if currentPosition != nil && len(history) > 0 {
 		last := history[len(history)-1]
 		currentPosition.ExitDate = last.TradeDate.Format("2006-01-02")
@@ -191,7 +186,6 @@ func (u *BacktestUseCase) ExecuteWithStrategy(ctx context.Context, s *strategyDo
 		currentPosition = nil
 	}
 
-	// 3. Summarize Stats
 	stats := make(map[string]BacktestStats)
 	for h, vals := range retStats {
 		if len(vals) == 0 {
@@ -213,7 +207,7 @@ func (u *BacktestUseCase) ExecuteWithStrategy(ctx context.Context, s *strategyDo
 
 	summary := SimulationSummary{
 		TotalTrades: len(trades),
-		TotalReturn: (totalReturn - 1.0) * 100, // as percentage
+		TotalReturn: (totalReturn - 1.0) * 100, 
 	}
 	if len(trades) > 0 {
 		wins := 0

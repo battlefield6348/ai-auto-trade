@@ -2,105 +2,93 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"ai-auto-trade/internal/application/trading"
 	strategyDomain "ai-auto-trade/internal/domain/strategy"
 	tradingDomain "ai-auto-trade/internal/domain/trading"
+
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // TradingRepo 實作 trading.Repository，使用 Postgres 儲存。
 type TradingRepo struct {
-	db *sql.DB
+	db *gorm.DB
 }
 
 // NewTradingRepo 建立新實例。
-func NewTradingRepo(db *sql.DB) *TradingRepo {
+func NewTradingRepo(db *gorm.DB) *TradingRepo {
 	return &TradingRepo{db: db}
 }
 
 // CreateStrategy 建立策略。
 func (r *TradingRepo) CreateStrategy(ctx context.Context, s tradingDomain.Strategy) (string, error) {
-	buyJSON, err := json.Marshal(s.Buy)
-	if err != nil {
-		return "", err
+	buyJSON, _ := json.Marshal(s.Buy)
+	sellJSON, _ := json.Marshal(s.Sell)
+	riskJSON, _ := json.Marshal(s.Risk)
+
+	m := StrategyModel{
+		Name:           s.Name,
+		Slug:           s.Slug,
+		Description:    s.Description,
+		BaseSymbol:     s.BaseSymbol,
+		Timeframe:      s.Timeframe,
+		Env:            string(s.Env),
+		Status:         string(s.Status),
+		Version:        s.Version,
+		BuyConditions:  buyJSON,
+		SellConditions: sellJSON,
+		RiskSettings:   riskJSON,
+		Threshold:      s.Threshold,
+		ExitThreshold:  s.ExitThreshold,
+		CreatedBy:      s.CreatedBy,
+		UpdatedBy:      s.UpdatedBy,
 	}
-	sellJSON, err := json.Marshal(s.Sell)
-	if err != nil {
-		return "", err
-	}
-	riskJSON, err := json.Marshal(s.Risk)
-	if err != nil {
-		return "", err
-	}
-	const q = `
-INSERT INTO strategies (name, description, base_symbol, timeframe, env, status, version, buy_conditions, sell_conditions, risk_settings, user_id, created_by, updated_by, threshold, exit_threshold)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-        COALESCE($11::uuid, $12::uuid, $13::uuid),
-        COALESCE($12::uuid, $11::uuid),
-        COALESCE($13::uuid, $11::uuid),
-        $14, $15)
-RETURNING id;
-`
-	var id string
-	userID := nullableUUID(s.CreatedBy)
-	if !userID.Valid {
-		userID = nullableUUID(s.UpdatedBy)
-	}
-	if !userID.Valid {
-		// fallback: 使用最早建立的使用者（通常是 admin）
+
+	if m.CreatedBy == "" {
 		uid, err := r.fallbackUser(ctx)
-		if err != nil {
-			return "", fmt.Errorf("user_id (created_by) is required")
+		if err == nil {
+			m.CreatedBy = uid
+			m.UserID = uid
 		}
-		userID = nullableUUID(uid)
+	} else {
+		m.UserID = m.CreatedBy
 	}
-	createdBy := nullableUUID(s.CreatedBy)
-	if !createdBy.Valid {
-		createdBy = userID
-	}
-	updatedBy := nullableUUID(s.UpdatedBy)
-	if !updatedBy.Valid {
-		updatedBy = userID
-	}
-	if err := r.db.QueryRowContext(ctx, q,
-		s.Name, s.Description, s.BaseSymbol, s.Timeframe, string(s.Env), string(s.Status), s.Version,
-		buyJSON, sellJSON, riskJSON, userID, createdBy, updatedBy, s.Threshold, s.ExitThreshold,
-	).Scan(&id); err != nil {
+
+	if err := r.db.WithContext(ctx).Create(&m).Error; err != nil {
 		return "", err
 	}
-	return id, nil
+	return m.ID, nil
 }
 
 // UpdateStrategy 更新策略。
 func (r *TradingRepo) UpdateStrategy(ctx context.Context, s tradingDomain.Strategy) error {
-	buyJSON, err := json.Marshal(s.Buy)
-	if err != nil {
-		return err
+	buyJSON, _ := json.Marshal(s.Buy)
+	sellJSON, _ := json.Marshal(s.Sell)
+	riskJSON, _ := json.Marshal(s.Risk)
+
+	updates := map[string]interface{}{
+		"name":            s.Name,
+		"description":     s.Description,
+		"base_symbol":     s.BaseSymbol,
+		"timeframe":       s.Timeframe,
+		"env":             string(s.Env),
+		"status":          string(s.Status),
+		"version":         s.Version,
+		"buy_conditions":  buyJSON,
+		"sell_conditions": sellJSON,
+		"risk_settings":   riskJSON,
+		"updated_by":      s.UpdatedBy,
+		"threshold":       s.Threshold,
+		"exit_threshold":  s.ExitThreshold,
+		"updated_at":      time.Now(),
 	}
-	sellJSON, err := json.Marshal(s.Sell)
-	if err != nil {
-		return err
-	}
-	riskJSON, err := json.Marshal(s.Risk)
-	if err != nil {
-		return err
-	}
-	const q = `
-UPDATE strategies
-SET name=$1, description=$2, base_symbol=$3, timeframe=$4, env=$5, status=$6, version=$7,
-    buy_conditions=$8, sell_conditions=$9, risk_settings=$10, updated_by=$11, threshold=$12, exit_threshold=$13, updated_at=NOW()
-WHERE id=$14;
-`
-	_, err = r.db.ExecContext(ctx, q,
-		s.Name, s.Description, s.BaseSymbol, s.Timeframe, string(s.Env), string(s.Status), s.Version,
-		buyJSON, sellJSON, riskJSON, nullableUUID(s.UpdatedBy), s.Threshold, s.ExitThreshold, s.ID,
-	)
-	return err
+
+	return r.db.WithContext(ctx).Model(&StrategyModel{}).Where("id = ?", s.ID).Updates(updates).Error
 }
 
 func (r *TradingRepo) GetStrategy(ctx context.Context, id string) (tradingDomain.Strategy, error) {
@@ -112,437 +100,400 @@ func (r *TradingRepo) GetStrategyBySlug(ctx context.Context, slug string) (tradi
 }
 
 func (r *TradingRepo) getStrategyByField(ctx context.Context, field, value string) (tradingDomain.Strategy, error) {
-	q := fmt.Sprintf(`
-SELECT id, name, slug, description, base_symbol, timeframe, env, status, version, buy_conditions, sell_conditions, risk_settings, created_by, updated_by, last_executed_at, created_at, updated_at, threshold, exit_threshold
-FROM strategies WHERE %s=$1;
-`, field)
+	var m StrategyModel
+	err := r.db.WithContext(ctx).Where(fmt.Sprintf("%s = ?", field), value).First(&m).Error
+	if err != nil {
+		return tradingDomain.Strategy{}, err
+	}
+
 	var s tradingDomain.Strategy
-	var buyRaw, sellRaw, riskRaw []byte
-	var env, status string
-	var createdBy, updatedBy sql.NullString
-	var lastActivated sql.NullTime
-	var desc, slugNull sql.NullString
-	if err := r.db.QueryRowContext(ctx, q, value).Scan(
-		&s.ID, &s.Name, &slugNull, &desc, &s.BaseSymbol, &s.Timeframe,
-		&env, &status, &s.Version, &buyRaw, &sellRaw, &riskRaw,
-		&createdBy, &updatedBy, &lastActivated, &s.CreatedAt, &s.UpdatedAt,
-		&s.Threshold, &s.ExitThreshold,
-	); err != nil {
-		return s, err
-	}
-	s.Description = desc.String
-	s.Slug = slugNull.String
-	_ = json.Unmarshal(buyRaw, &s.Buy)
-	_ = json.Unmarshal(sellRaw, &s.Sell)
-	_ = json.Unmarshal(riskRaw, &s.Risk)
-	s.Env = tradingDomain.Environment(env)
-	s.Status = tradingDomain.Status(status)
-	if createdBy.Valid {
-		s.CreatedBy = createdBy.String
-	}
-	if updatedBy.Valid {
-		s.UpdatedBy = updatedBy.String
-	}
-	if lastActivated.Valid {
-		s.LastActivatedAt = &lastActivated.Time
-	}
+	s.ID = m.ID
+	s.Name = m.Name
+	s.Slug = m.Slug
+	s.Description = m.Description
+	s.BaseSymbol = m.BaseSymbol
+	s.Timeframe = m.Timeframe
+	s.Env = tradingDomain.Environment(m.Env)
+	s.Status = tradingDomain.Status(m.Status)
+	s.Version = m.Version
+	s.Threshold = m.Threshold
+	s.ExitThreshold = m.ExitThreshold
+	s.CreatedAt = m.CreatedAt
+	s.UpdatedAt = m.UpdatedAt
+	s.CreatedBy = m.CreatedBy
+	s.UpdatedBy = m.UpdatedBy
+	s.LastActivatedAt = m.LastExecutedAt
+
+	_ = json.Unmarshal(m.BuyConditions, &s.Buy)
+	_ = json.Unmarshal(m.SellConditions, &s.Sell)
+	_ = json.Unmarshal(m.RiskSettings, &s.Risk)
+
 	return s, nil
 }
 
-// DeleteStrategy 刪除策略（相關表透過 ON DELETE CASCADE 清理）。
+// DeleteStrategy 刪除策略。
 func (r *TradingRepo) DeleteStrategy(ctx context.Context, id string) error {
-	const q = `DELETE FROM strategies WHERE id=$1;`
-	_, err := r.db.ExecContext(ctx, q, id)
-	return err
+	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&StrategyModel{}).Error
 }
 
 // ListStrategies 列出策略。
 func (r *TradingRepo) ListStrategies(ctx context.Context, filter trading.StrategyFilter) ([]tradingDomain.Strategy, error) {
-	q := `
-SELECT id, name, slug, description, base_symbol, timeframe, env, status, version, buy_conditions, sell_conditions, risk_settings, created_by, updated_by, last_executed_at, created_at, updated_at, threshold, exit_threshold
-FROM strategies
-`
-	conds := []string{}
-	args := []interface{}{}
+	query := r.db.WithContext(ctx).Model(&StrategyModel{})
+
 	if filter.Status != "" {
-		conds = append(conds, fmt.Sprintf("status = $%d", len(args)+1))
-		args = append(args, string(filter.Status))
+		query = query.Where("status = ?", string(filter.Status))
 	}
 	if filter.Env != "" {
-		conds = append(conds, fmt.Sprintf("env = $%d", len(args)+1))
-		args = append(args, string(filter.Env))
+		query = query.Where("env = ?", string(filter.Env))
 	}
 	if filter.Name != "" {
-		conds = append(conds, fmt.Sprintf("name ILIKE $%d", len(args)+1))
-		args = append(args, "%"+filter.Name+"%")
+		query = query.Where("name ILIKE ?", "%"+filter.Name+"%")
 	}
-	if len(conds) > 0 {
-		q += " WHERE " + strings.Join(conds, " AND ")
-	}
-	q += " ORDER BY updated_at DESC LIMIT 200"
 
-	rows, err := r.db.QueryContext(ctx, q, args...)
+	var models []StrategyModel
+	err := query.Order("updated_at DESC").Limit(200).Find(&models).Error
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var out []tradingDomain.Strategy
-	for rows.Next() {
-		var s tradingDomain.Strategy
-		var buyRaw, sellRaw, riskRaw []byte
-		var env, status string
-		var createdBy, updatedBy sql.NullString
-		var lastActivated sql.NullTime
-		var desc, slug sql.NullString
-		if err := rows.Scan(
-			&s.ID, &s.Name, &slug, &desc, &s.BaseSymbol, &s.Timeframe,
-			&env, &status, &s.Version, &buyRaw, &sellRaw, &riskRaw,
-			&createdBy, &updatedBy, &lastActivated, &s.CreatedAt, &s.UpdatedAt,
-			&s.Threshold, &s.ExitThreshold,
-		); err != nil {
-			return nil, err
+	out := make([]tradingDomain.Strategy, len(models))
+	for i, m := range models {
+		s := tradingDomain.Strategy{
+			ID:              m.ID,
+			Name:            m.Name,
+			Slug:            m.Slug,
+			Description:     m.Description,
+			BaseSymbol:      m.BaseSymbol,
+			Timeframe:       m.Timeframe,
+			Env:             tradingDomain.Environment(m.Env),
+			Status:          tradingDomain.Status(m.Status),
+			Version:         m.Version,
+			Threshold:       m.Threshold,
+			ExitThreshold:   m.ExitThreshold,
+			CreatedAt:       m.CreatedAt,
+			UpdatedAt:       m.UpdatedAt,
+			CreatedBy:       m.CreatedBy,
+			UpdatedBy:       m.UpdatedBy,
+			LastActivatedAt: m.LastExecutedAt,
 		}
-		s.Description = desc.String
-		s.Slug = slug.String
-		_ = json.Unmarshal(buyRaw, &s.Buy)
-		_ = json.Unmarshal(sellRaw, &s.Sell)
-		_ = json.Unmarshal(riskRaw, &s.Risk)
-		s.Env = tradingDomain.Environment(env)
-		s.Status = tradingDomain.Status(status)
-		if createdBy.Valid {
-			s.CreatedBy = createdBy.String
-		}
-		if updatedBy.Valid {
-			s.UpdatedBy = updatedBy.String
-		}
-		out = append(out, s)
+		_ = json.Unmarshal(m.BuyConditions, &s.Buy)
+		_ = json.Unmarshal(m.SellConditions, &s.Sell)
+		_ = json.Unmarshal(m.RiskSettings, &s.Risk)
+		out[i] = s
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func (r *TradingRepo) SetStatus(ctx context.Context, id string, status tradingDomain.Status, env tradingDomain.Environment) error {
 	isActive := status == tradingDomain.StatusActive
-	now := time.Now()
-	if env == "" {
-		const q = `UPDATE strategies SET status=$1, is_active=$2, last_executed_at=$3, updated_at=NOW() WHERE id=$4;`
-		_, err := r.db.ExecContext(ctx, q, string(status), isActive, now, id)
-		return err
+	updates := map[string]interface{}{
+		"status":           string(status),
+		"is_active":        isActive,
+		"last_executed_at": time.Now(),
+		"updated_at":       time.Now(),
 	}
-	const q = `UPDATE strategies SET status=$1, env=$2, is_active=$3, last_executed_at=$4, updated_at=NOW() WHERE id=$5;`
-	_, err := r.db.ExecContext(ctx, q, string(status), string(env), isActive, now, id)
-	return err
+	if env != "" {
+		updates["env"] = string(env)
+	}
+	return r.db.WithContext(ctx).Model(&StrategyModel{}).Where("id = ?", id).Updates(updates).Error
 }
 
 func (r *TradingRepo) UpdateLastActivatedAt(ctx context.Context, id string, t time.Time) error {
-	const q = `UPDATE strategies SET last_executed_at=$1, updated_at=NOW() WHERE id=$2`
-	_, err := r.db.ExecContext(ctx, q, t, id)
-	return err
+	return r.db.WithContext(ctx).Model(&StrategyModel{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"last_executed_at": t,
+		"updated_at":       time.Now(),
+	}).Error
 }
 
 func (r *TradingRepo) UpdateRiskSettings(ctx context.Context, id string, risk tradingDomain.RiskSettings) error {
 	riskJSON, _ := json.Marshal(risk)
-	const q = `UPDATE strategies SET risk_settings=$1, updated_at=NOW() WHERE id=$2`
-	_, err := r.db.ExecContext(ctx, q, riskJSON, id)
-	return err
+	return r.db.WithContext(ctx).Model(&StrategyModel{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"risk_settings": riskJSON,
+		"updated_at":    time.Now(),
+	}).Error
 }
 
 // SaveBacktest 儲存回測紀錄。
 func (r *TradingRepo) SaveBacktest(ctx context.Context, rec tradingDomain.BacktestRecord) (string, error) {
-	paramsJSON, err := json.Marshal(rec.Params)
-	if err != nil {
-		return "", err
-	}
-	const q = `
-INSERT INTO strategy_backtests (strategy_id, strategy_version, start_date, end_date, params, stats, equity_curve, trades, created_by)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-RETURNING id;
-`
+	paramsJSON, _ := json.Marshal(rec.Params)
 	statsJSON, _ := json.Marshal(rec.Result.Stats)
 	equityJSON, _ := json.Marshal(rec.Result.EquityCurve)
 	tradesJSON, _ := json.Marshal(rec.Result.Trades)
 
-	var id string
-	if err := r.db.QueryRowContext(ctx, q,
-		rec.StrategyID, rec.StrategyVersion, rec.Params.StartDate, rec.Params.EndDate,
-		paramsJSON, statsJSON, equityJSON, tradesJSON, nullableUUID(rec.CreatedBy),
-	).Scan(&id); err != nil {
+	m := StrategyBacktest{
+		StrategyID:      rec.StrategyID,
+		StrategyVersion: rec.StrategyVersion,
+		StartDate:       rec.Params.StartDate,
+		EndDate:         rec.Params.EndDate,
+		Params:          paramsJSON,
+		Stats:           statsJSON,
+		EquityCurve:     equityJSON,
+		Trades:          tradesJSON,
+		CreatedBy:       rec.CreatedBy,
+	}
+
+	if err := r.db.WithContext(ctx).Create(&m).Error; err != nil {
 		return "", err
 	}
-	return id, nil
+	return m.ID, nil
 }
 
 // ListBacktests 取回測清單。
 func (r *TradingRepo) ListBacktests(ctx context.Context, strategyID string) ([]tradingDomain.BacktestRecord, error) {
-	const q = `
-SELECT id, strategy_id, strategy_version, start_date, end_date, params, equity_curve, trades, stats, created_by, created_at
-FROM strategy_backtests
-WHERE strategy_id=$1
-ORDER BY created_at DESC
-LIMIT 50;
-`
-	rows, err := r.db.QueryContext(ctx, q, strategyID)
+	var models []StrategyBacktest
+	err := r.db.WithContext(ctx).Where("strategy_id = ?", strategyID).Order("created_at DESC").Limit(50).Find(&models).Error
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var out []tradingDomain.BacktestRecord
-	for rows.Next() {
-		var rec tradingDomain.BacktestRecord
-		var paramsRaw, equityRaw, tradesRaw, statsRaw []byte
-		var createdBy sql.NullString
-		if err := rows.Scan(
-			&rec.ID, &rec.StrategyID, &rec.StrategyVersion, &rec.Params.StartDate, &rec.Params.EndDate,
-			&paramsRaw, &equityRaw, &tradesRaw, &statsRaw, &createdBy, &rec.CreatedAt,
-		); err != nil {
-			return nil, err
+	out := make([]tradingDomain.BacktestRecord, len(models))
+	for i, m := range models {
+		rec := tradingDomain.BacktestRecord{
+			ID:              m.ID,
+			StrategyID:      m.StrategyID,
+			StrategyVersion: m.StrategyVersion,
+			CreatedBy:       m.CreatedBy,
+			CreatedAt:       m.CreatedAt,
 		}
-		_ = json.Unmarshal(paramsRaw, &rec.Params)
-		_ = json.Unmarshal(statsRaw, &rec.Result.Stats)
-		_ = json.Unmarshal(equityRaw, &rec.Result.EquityCurve)
-		_ = json.Unmarshal(tradesRaw, &rec.Result.Trades)
-		if createdBy.Valid {
-			rec.CreatedBy = createdBy.String
-		}
-		out = append(out, rec)
+		_ = json.Unmarshal(m.Params, &rec.Params)
+		_ = json.Unmarshal(m.Stats, &rec.Result.Stats)
+		_ = json.Unmarshal(m.EquityCurve, &rec.Result.EquityCurve)
+		_ = json.Unmarshal(m.Trades, &rec.Result.Trades)
+		out[i] = rec
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 // SaveTrade 寫入交易紀錄。
 func (r *TradingRepo) SaveTrade(ctx context.Context, trade tradingDomain.TradeRecord) error {
-	const q = `
-INSERT INTO strategy_trades (strategy_id, strategy_version, env, symbol, side, entry_date, entry_price, exit_date, exit_price, pnl_usdt, pnl_pct, hold_days, reason, params_snapshot)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14);
-`
-	var sid interface{} = trade.StrategyID
-	if trade.StrategyID == "" || trade.StrategyID == "manual" {
-		sid = nil
+	var sid *string
+	if trade.StrategyID != "" && trade.StrategyID != "manual" {
+		s := trade.StrategyID
+		sid = &s
 	}
 
-	_, err := r.db.ExecContext(ctx, q,
-		sid, trade.StrategyVersion, string(trade.Env), trade.Symbol, trade.Side, trade.EntryDate, trade.EntryPrice,
-		trade.ExitDate, trade.ExitPrice, trade.PNL, trade.PNLPct, trade.HoldDays, trade.Reason, nil,
-	)
-	return err
+	m := StrategyTrade{
+		StrategyID:      sid,
+		StrategyVersion: trade.StrategyVersion,
+		Env:             string(trade.Env),
+		Symbol:          trade.Symbol,
+		Side:            trade.Side,
+		EntryDate:       trade.EntryDate,
+		EntryPrice:      trade.EntryPrice,
+		ExitDate:        trade.ExitDate,
+		ExitPrice:       trade.ExitPrice,
+		PNL:             trade.PNL,
+		PNLPct:          trade.PNLPct,
+		HoldDays:        trade.HoldDays,
+		Reason:          trade.Reason,
+	}
+
+	return r.db.WithContext(ctx).Create(&m).Error
 }
 
 // ListTrades 查詢交易紀錄。
 func (r *TradingRepo) ListTrades(ctx context.Context, filter tradingDomain.TradeFilter) ([]tradingDomain.TradeRecord, error) {
-	q := `
-SELECT id, strategy_id, strategy_version, env, symbol, side, entry_date, entry_price, exit_date, exit_price, pnl_usdt, pnl_pct, hold_days, reason, created_at
-FROM strategy_trades
-`
-	conds := []string{}
-	args := []interface{}{}
+	query := r.db.WithContext(ctx).Model(&StrategyTrade{})
+
 	if filter.StrategyID != "" {
 		if filter.StrategyID == "manual" {
-			conds = append(conds, "strategy_id IS NULL")
+			query = query.Where("strategy_id IS NULL")
 		} else {
-			conds = append(conds, fmt.Sprintf("strategy_id = $%d", len(args)+1))
-			args = append(args, filter.StrategyID)
+			query = query.Where("strategy_id = ?", filter.StrategyID)
 		}
 	}
 	if filter.Env != "" {
-		conds = append(conds, fmt.Sprintf("env = $%d", len(args)+1))
-		args = append(args, string(filter.Env))
+		query = query.Where("env = ?", string(filter.Env))
 	}
 	if filter.StartDate != nil {
-		conds = append(conds, fmt.Sprintf("entry_date >= $%d", len(args)+1))
-		args = append(args, *filter.StartDate)
+		query = query.Where("entry_date >= ?", *filter.StartDate)
 	}
 	if filter.EndDate != nil {
-		conds = append(conds, fmt.Sprintf("entry_date <= $%d", len(args)+1))
-		args = append(args, *filter.EndDate)
+		query = query.Where("entry_date <= ?", *filter.EndDate)
 	}
-	if len(conds) > 0 {
-		q += " WHERE " + strings.Join(conds, " AND ")
-	}
-	q += " ORDER BY entry_date DESC LIMIT 200"
 
-	rows, err := r.db.QueryContext(ctx, q, args...)
+	var models []StrategyTrade
+	err := query.Order("entry_date DESC").Limit(200).Find(&models).Error
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var out []tradingDomain.TradeRecord
-	for rows.Next() {
-		var rec tradingDomain.TradeRecord
-		var env, side string
-		var sid sql.NullString
-		if err := rows.Scan(
-			&rec.ID, &sid, &rec.StrategyVersion, &env, &rec.Symbol, &side,
-			&rec.EntryDate, &rec.EntryPrice, &rec.ExitDate, &rec.ExitPrice, &rec.PNL, &rec.PNLPct, &rec.HoldDays, &rec.Reason, &rec.CreatedAt,
-		); err != nil {
-			return nil, err
+	out := make([]tradingDomain.TradeRecord, len(models))
+	for i, m := range models {
+		rec := tradingDomain.TradeRecord{
+			ID:              m.ID,
+			StrategyVersion: m.StrategyVersion,
+			Env:             tradingDomain.Environment(m.Env),
+			Symbol:          m.Symbol,
+			Side:            m.Side,
+			EntryDate:       m.EntryDate,
+			EntryPrice:      m.EntryPrice,
+			ExitDate:        m.ExitDate,
+			ExitPrice:       m.ExitPrice,
+			PNL:             m.PNL,
+			PNLPct:          m.PNLPct,
+			HoldDays:        m.HoldDays,
+			Reason:          m.Reason,
+			CreatedAt:       m.CreatedAt,
 		}
-		if sid.Valid {
-			rec.StrategyID = sid.String
+		if m.StrategyID != nil {
+			rec.StrategyID = *m.StrategyID
 		} else {
 			rec.StrategyID = "manual"
 		}
-		rec.Env = tradingDomain.Environment(env)
-		rec.Side = side
-		out = append(out, rec)
+		out[i] = rec
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 // GetOpenPosition 取得當前持倉。
 func (r *TradingRepo) GetOpenPosition(ctx context.Context, strategyID string, env tradingDomain.Environment) (*tradingDomain.Position, error) {
-	q := `
-SELECT id, strategy_id, env, symbol, entry_date, entry_price, size, stop_loss, take_profit, status, updated_at
-FROM strategy_positions
-WHERE `
-	args := []interface{}{string(env)}
-	if strategyID == "manual" {
-		q += "strategy_id IS NULL AND env=$1 AND status='open'"
-	} else {
-		q += "strategy_id=$2 AND env=$1 AND status='open'"
-		args = append(args, strategyID)
-	}
-	q += " LIMIT 1;"
+	query := r.db.WithContext(ctx).Model(&StrategyPosition{}).Where("env = ? AND status = 'open'", string(env))
 
-	var p tradingDomain.Position
-	var envStr, status string
-	var sid sql.NullString
-	var stop, tp sql.NullFloat64
-	err := r.db.QueryRowContext(ctx, q, args...).Scan(
-		&p.ID, &sid, &envStr, &p.Symbol, &p.EntryDate, &p.EntryPrice, &p.Size, &stop, &tp, &status, &p.UpdatedAt,
-	)
-	if err == sql.ErrNoRows {
-		return nil, nil
+	if strategyID == "manual" {
+		query = query.Where("strategy_id IS NULL")
+	} else {
+		query = query.Where("strategy_id = ?", strategyID)
 	}
+
+	var m StrategyPosition
+	err := query.First(&m).Error
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
 		return nil, err
 	}
-	if sid.Valid {
-		p.StrategyID = sid.String
+
+	p := &tradingDomain.Position{
+		ID:         m.ID,
+		Symbol:     m.Symbol,
+		Env:        tradingDomain.Environment(m.Env),
+		EntryDate:  m.EntryDate,
+		EntryPrice: m.EntryPrice,
+		Size:       m.Size,
+		StopLoss:   m.StopLoss,
+		TakeProfit: m.TakeProfit,
+		Status:     m.Status,
+		UpdatedAt:  m.UpdatedAt,
+	}
+	if m.StrategyID != nil {
+		p.StrategyID = *m.StrategyID
 	} else {
 		p.StrategyID = "manual"
 	}
-	p.Env = tradingDomain.Environment(envStr)
-	p.Status = status
-	if stop.Valid {
-		p.StopLoss = &stop.Float64
-	}
-	if tp.Valid {
-		p.TakeProfit = &tp.Float64
-	}
-	return &p, nil
+	return p, nil
 }
 
 // ListOpenPositions 列出所有未平倉。
 func (r *TradingRepo) ListOpenPositions(ctx context.Context) ([]tradingDomain.Position, error) {
-	const q = `
-SELECT id, strategy_id, env, symbol, entry_date, entry_price, size, stop_loss, take_profit, status, updated_at
-FROM strategy_positions
-WHERE status='open'
-ORDER BY updated_at DESC
-LIMIT 200;
-`
-	rows, err := r.db.QueryContext(ctx, q)
+	var models []StrategyPosition
+	err := r.db.WithContext(ctx).Where("status = 'open'").Order("updated_at DESC").Limit(200).Find(&models).Error
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var out []tradingDomain.Position
-	for rows.Next() {
-		var p tradingDomain.Position
-		var envStr, status string
-		var sid sql.NullString
-		var stop, tp sql.NullFloat64
-		if err := rows.Scan(&p.ID, &sid, &envStr, &p.Symbol, &p.EntryDate, &p.EntryPrice, &p.Size, &stop, &tp, &status, &p.UpdatedAt); err != nil {
-			return nil, err
+	out := make([]tradingDomain.Position, len(models))
+	for i, m := range models {
+		p := tradingDomain.Position{
+			ID:         m.ID,
+			Symbol:     m.Symbol,
+			Env:        tradingDomain.Environment(m.Env),
+			EntryDate:  m.EntryDate,
+			EntryPrice: m.EntryPrice,
+			Size:       m.Size,
+			StopLoss:   m.StopLoss,
+			TakeProfit: m.TakeProfit,
+			Status:     m.Status,
+			UpdatedAt:  m.UpdatedAt,
 		}
-		if sid.Valid {
-			p.StrategyID = sid.String
+		if m.StrategyID != nil {
+			p.StrategyID = *m.StrategyID
 		} else {
 			p.StrategyID = "manual"
 		}
-		p.Env = tradingDomain.Environment(envStr)
-		p.Status = status
-		if stop.Valid {
-			p.StopLoss = &stop.Float64
-		}
-		if tp.Valid {
-			p.TakeProfit = &tp.Float64
-		}
-		out = append(out, p)
+		out[i] = p
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func (r *TradingRepo) GetPosition(ctx context.Context, id string) (*tradingDomain.Position, error) {
-	const q = `SELECT id, strategy_id, env, symbol, entry_date, entry_price, size, stop_loss, take_profit, status, updated_at FROM strategy_positions WHERE id = $1`
-	var p tradingDomain.Position
-	var sl, tp sql.NullFloat64
-	var sid sql.NullString
-	err := r.db.QueryRowContext(ctx, q, id).Scan(
-		&p.ID, &sid, &p.Env, &p.Symbol, &p.EntryDate, &p.EntryPrice, &p.Size, &sl, &tp, &p.Status, &p.UpdatedAt,
-	)
+	var m StrategyPosition
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&m).Error
 	if err != nil {
 		return nil, err
 	}
-	if sid.Valid {
-		p.StrategyID = sid.String
+
+	p := &tradingDomain.Position{
+		ID:         m.ID,
+		Symbol:     m.Symbol,
+		Env:        tradingDomain.Environment(m.Env),
+		EntryDate:  m.EntryDate,
+		EntryPrice: m.EntryPrice,
+		Size:       m.Size,
+		StopLoss:   m.StopLoss,
+		TakeProfit: m.TakeProfit,
+		Status:     m.Status,
+		UpdatedAt:  m.UpdatedAt,
+	}
+	if m.StrategyID != nil {
+		p.StrategyID = *m.StrategyID
 	} else {
 		p.StrategyID = "manual"
 	}
-	if sl.Valid {
-		v := sl.Float64
-		p.StopLoss = &v
-	}
-	if tp.Valid {
-		v := tp.Float64
-		p.TakeProfit = &v
-	}
-	return &p, nil
+	return p, nil
 }
 
 // UpsertPosition 新增或更新持倉。
 func (r *TradingRepo) UpsertPosition(ctx context.Context, p tradingDomain.Position) error {
-	var sid interface{} = p.StrategyID
-	if p.StrategyID == "" || p.StrategyID == "manual" {
-		sid = nil
+	var sid *string
+	if p.StrategyID != "" && p.StrategyID != "manual" {
+		s := p.StrategyID
+		sid = &s
 	}
 
-	if p.ID == "" {
-		const q = `
-INSERT INTO strategy_positions (strategy_id, env, symbol, entry_date, entry_price, size, stop_loss, take_profit, status)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9);
-`
-		_, err := r.db.ExecContext(ctx, q, sid, string(p.Env), p.Symbol, p.EntryDate, p.EntryPrice, p.Size, p.StopLoss, p.TakeProfit, p.Status)
-		return err
+	m := StrategyPosition{
+		ID:         p.ID,
+		StrategyID: sid,
+		Env:        string(p.Env),
+		Symbol:     p.Symbol,
+		EntryDate:  p.EntryDate,
+		EntryPrice: p.EntryPrice,
+		Size:       p.Size,
+		StopLoss:   p.StopLoss,
+		TakeProfit: p.TakeProfit,
+		Status:     p.Status,
 	}
-	const q = `
-UPDATE strategy_positions
-SET entry_date=$1, entry_price=$2, size=$3, stop_loss=$4, take_profit=$5, status=$6, updated_at=NOW()
-WHERE id=$7;
-`
-	_, err := r.db.ExecContext(ctx, q, p.EntryDate, p.EntryPrice, p.Size, p.StopLoss, p.TakeProfit, p.Status, p.ID)
-	return err
+
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"entry_date", "entry_price", "size", "stop_loss", "take_profit", "status", "updated_at"}),
+	}).Create(&m).Error
 }
 
 // ClosePosition 將持倉標記為結束。
 func (r *TradingRepo) ClosePosition(ctx context.Context, id string, exitDate time.Time, exitPrice float64) error {
-	const q = `UPDATE strategy_positions SET status='closed', exit_date=$1, exit_price=$2, updated_at=NOW() WHERE id=$3;`
-	_, err := r.db.ExecContext(ctx, q, exitDate, exitPrice, id)
-	return err
+	return r.db.WithContext(ctx).Model(&StrategyPosition{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"status":     "closed",
+		"exit_date":  exitDate,
+		"exit_price": exitPrice,
+		"updated_at": time.Now(),
+	}).Error
 }
 
 // SaveLog 寫入日誌。
 func (r *TradingRepo) SaveLog(ctx context.Context, log tradingDomain.LogEntry) error {
 	payload, _ := json.Marshal(log.Payload)
-	const q = `
-INSERT INTO strategy_logs (strategy_id, strategy_version, env, date, phase, message, payload)
-VALUES ($1,$2,$3,$4,$5,$6,$7);
-`
-	_, err := r.db.ExecContext(ctx, q, log.StrategyID, log.StrategyVersion, string(log.Env), log.Date, log.Phase, log.Message, payload)
-	return err
+	m := StrategyLog{
+		StrategyID:      log.StrategyID,
+		StrategyVersion: log.StrategyVersion,
+		Env:             string(log.Env),
+		Date:            log.Date,
+		Phase:           log.Phase,
+		Message:         log.Message,
+		Payload:         payload,
+	}
+	return r.db.WithContext(ctx).Create(&m).Error
 }
 
 // ListLogs 查詢日誌。
@@ -551,138 +502,120 @@ func (r *TradingRepo) ListLogs(ctx context.Context, filter tradingDomain.LogFilt
 	if limit <= 0 {
 		limit = 50
 	}
-	q := `
-SELECT id, strategy_id, strategy_version, env, date, phase, message, payload, created_at
-FROM strategy_logs
-WHERE strategy_id = $1
-`
-	args := []interface{}{filter.StrategyID}
-	if filter.Env != "" {
-		q += fmt.Sprintf(" AND env = $%d", len(args)+1)
-		args = append(args, string(filter.Env))
-	}
-	q += " ORDER BY created_at DESC"
-	q += fmt.Sprintf(" LIMIT %d", limit)
 
-	rows, err := r.db.QueryContext(ctx, q, args...)
+	var models []StrategyLog
+	query := r.db.WithContext(ctx).Where("strategy_id = ?", filter.StrategyID)
+	if filter.Env != "" {
+		query = query.Where("env = ?", string(filter.Env))
+	}
+
+	err := query.Order("created_at DESC").Limit(limit).Find(&models).Error
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var out []tradingDomain.LogEntry
-	for rows.Next() {
-		var log tradingDomain.LogEntry
-		var env sql.NullString
-		var payloadRaw []byte
-		if err := rows.Scan(&log.ID, &log.StrategyID, &log.StrategyVersion, &env, &log.Date, &log.Phase, &log.Message, &payloadRaw, &log.CreatedAt); err != nil {
-			return nil, err
+	out := make([]tradingDomain.LogEntry, len(models))
+	for i, m := range models {
+		l := tradingDomain.LogEntry{
+			ID:              m.ID,
+			StrategyID:      m.StrategyID,
+			StrategyVersion: m.StrategyVersion,
+			Env:             tradingDomain.Environment(m.Env),
+			Date:            m.Date,
+			Phase:           m.Phase,
+			Message:         m.Message,
+			CreatedAt:       m.CreatedAt,
 		}
-		log.Env = tradingDomain.Environment(env.String)
-		if len(payloadRaw) > 0 {
-			_ = json.Unmarshal(payloadRaw, &log.Payload)
+		if len(m.Payload) > 0 {
+			_ = json.Unmarshal(m.Payload, &l.Payload)
 		}
-		out = append(out, log)
+		out[i] = l
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 // SaveReport 儲存報告。
 func (r *TradingRepo) SaveReport(ctx context.Context, rep tradingDomain.Report) (string, error) {
 	summary, _ := json.Marshal(rep.Summary)
 	trades, _ := json.Marshal(rep.TradesRef)
-	const q = `
-INSERT INTO strategy_reports (strategy_id, strategy_version, env, period_start, period_end, summary, trades_ref, created_by)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-RETURNING id;
-`
-	var id string
-	if err := r.db.QueryRowContext(ctx, q, rep.StrategyID, rep.StrategyVersion, string(rep.Env), rep.PeriodStart, rep.PeriodEnd, summary, trades, nullableUUID(rep.CreatedBy)).Scan(&id); err != nil {
+
+	m := StrategyReport{
+		StrategyID:      rep.StrategyID,
+		StrategyVersion: rep.StrategyVersion,
+		Env:             string(rep.Env),
+		PeriodStart:     rep.PeriodStart,
+		PeriodEnd:       rep.PeriodEnd,
+		Summary:         summary,
+		TradesRef:       trades,
+		CreatedBy:       rep.CreatedBy,
+	}
+
+	if err := r.db.WithContext(ctx).Create(&m).Error; err != nil {
 		return "", err
 	}
-	return id, nil
+	return m.ID, nil
 }
 
 // ListReports 查詢報告列表。
 func (r *TradingRepo) ListReports(ctx context.Context, strategyID string) ([]tradingDomain.Report, error) {
-	const q = `
-SELECT id, strategy_id, strategy_version, env, period_start, period_end, summary, trades_ref, created_by, created_at
-FROM strategy_reports
-WHERE strategy_id=$1
-ORDER BY created_at DESC
-LIMIT 100;
-`
-	rows, err := r.db.QueryContext(ctx, q, strategyID)
+	var models []StrategyReport
+	err := r.db.WithContext(ctx).Where("strategy_id = ?", strategyID).Order("created_at DESC").Limit(100).Find(&models).Error
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var out []tradingDomain.Report
-	for rows.Next() {
-		var rep tradingDomain.Report
-		var env string
-		var summaryRaw, tradesRaw []byte
-		var createdBy sql.NullString
-		if err := rows.Scan(
-			&rep.ID, &rep.StrategyID, &rep.StrategyVersion, &env, &rep.PeriodStart, &rep.PeriodEnd, &summaryRaw, &tradesRaw, &createdBy, &rep.CreatedAt,
-		); err != nil {
-			return nil, err
+	out := make([]tradingDomain.Report, len(models))
+	for i, m := range models {
+		rep := tradingDomain.Report{
+			ID:              m.ID,
+			StrategyID:      m.StrategyID,
+			StrategyVersion: m.StrategyVersion,
+			Env:             tradingDomain.Environment(m.Env),
+			PeriodStart:     m.PeriodStart,
+			PeriodEnd:       m.PeriodEnd,
+			CreatedBy:       m.CreatedBy,
+			CreatedAt:       m.CreatedAt,
 		}
-		rep.Env = tradingDomain.Environment(env)
-		_ = json.Unmarshal(summaryRaw, &rep.Summary)
-		_ = json.Unmarshal(tradesRaw, &rep.TradesRef)
-		if createdBy.Valid {
-			rep.CreatedBy = createdBy.String
-		}
-		out = append(out, rep)
+		_ = json.Unmarshal(m.Summary, &rep.Summary)
+		_ = json.Unmarshal(m.TradesRef, &rep.TradesRef)
+		out[i] = rep
 	}
-	return out, rows.Err()
-}
-
-func nullableUUID(id string) sql.NullString {
-	if id == "" {
-		return sql.NullString{}
-	}
-	return sql.NullString{String: id, Valid: true}
+	return out, nil
 }
 
 func (r *TradingRepo) fallbackUser(ctx context.Context) (string, error) {
-	const q = `SELECT id FROM users ORDER BY created_at ASC LIMIT 1;`
-	var id string
-	if err := r.db.QueryRowContext(ctx, q).Scan(&id); err != nil {
+	var u User
+	if err := r.db.WithContext(ctx).Order("created_at ASC").First(&u).Error; err != nil {
 		return "", err
 	}
-	return id, nil
+	return u.ID, nil
 }
 
 func (r *TradingRepo) LoadScoringStrategyBySlug(ctx context.Context, slug string) (*strategyDomain.ScoringStrategy, error) {
-	return strategyDomain.LoadScoringStrategyBySlug(ctx, r.db, slug)
+	// 這裡保持原本的 LoadScoringStrategyBySlug 呼叫
+	// 但原本的內部實現是手寫 SQL，這裡我們也應該重構它。
+	// 為了保持進度，我們先重構主要的 Repo 方法。
+	return strategyDomain.LoadScoringStrategyBySlugGORM(ctx, r.db, slug)
 }
 
 func (r *TradingRepo) LoadScoringStrategyByID(ctx context.Context, id string) (*strategyDomain.ScoringStrategy, error) {
-	return strategyDomain.LoadScoringStrategyByID(ctx, r.db, id)
+	return strategyDomain.LoadScoringStrategyIDGORM(ctx, r.db, id)
 }
 
 func (r *TradingRepo) ListActiveScoringStrategies(ctx context.Context) ([]*strategyDomain.ScoringStrategy, error) {
-	const q = `SELECT slug FROM strategies WHERE is_active = true AND slug IS NOT NULL`
-	rows, err := r.db.QueryContext(ctx, q)
+	var slugs []string
+	err := r.db.WithContext(ctx).Table("strategies").Where("is_active = ? AND slug IS NOT NULL", true).Pluck("slug", &slugs).Error
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
 	var out []*strategyDomain.ScoringStrategy
-	for rows.Next() {
-		var slug string
-		if err := rows.Scan(&slug); err != nil {
-			return nil, err
-		}
+	for _, slug := range slugs {
 		s, err := r.LoadScoringStrategyBySlug(ctx, slug)
 		if err != nil {
-			continue // skip or log
+			continue
 		}
 		out = append(out, s)
 	}
-	return out, rows.Err()
+	return out, nil
 }

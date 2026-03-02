@@ -1,23 +1,25 @@
 package strategy
 
 import (
-	strategyDomain "ai-auto-trade/internal/domain/strategy"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"time"
+
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type SaveScoringStrategyInput struct {
-	UserID    string             `json:"user_id"`
-	Name      string             `json:"name"`
-	Slug      string             `json:"slug"`
-	BaseSymbol string            `json:"base_symbol"`
-	Timeframe string             `json:"timeframe"`
-	Threshold     float64            `json:"threshold"`
-	ExitThreshold float64            `json:"exit_threshold"`
-	Rules         []SaveRuleInput    `json:"rules"`
+	UserID        string          `json:"user_id"`
+	Name          string          `json:"name"`
+	Slug          string          `json:"slug"`
+	BaseSymbol    string          `json:"base_symbol"`
+	Timeframe     string          `json:"timeframe"`
+	Threshold     float64         `json:"threshold"`
+	ExitThreshold float64         `json:"exit_threshold"`
+	Rules         []SaveRuleInput `json:"rules"`
 }
 
 type SaveRuleInput struct {
@@ -29,24 +31,21 @@ type SaveRuleInput struct {
 }
 
 type SaveScoringStrategyUseCase struct {
-	db strategyDomain.DBQueryer
+	db *gorm.DB
 }
 
-func NewSaveScoringStrategyUseCase(db strategyDomain.DBQueryer) *SaveScoringStrategyUseCase {
+func NewSaveScoringStrategyUseCase(db *gorm.DB) *SaveScoringStrategyUseCase {
 	return &SaveScoringStrategyUseCase{db: db}
 }
 
-// Execute performs the save operation into the database.
 func (u *SaveScoringStrategyUseCase) Execute(ctx context.Context, input SaveScoringStrategyInput) error {
 	if u.db == nil {
 		return fmt.Errorf("database not available")
 	}
-	// Defensive check for typed nil
 	if reflect.ValueOf(u.db).IsNil() {
 		return fmt.Errorf("database storage not initialized")
 	}
 
-	// 0. Validate rules: Must have at least one entry and one exit
 	hasEntry := false
 	hasExit := false
 	for _, r := range input.Rules {
@@ -64,85 +63,92 @@ func (u *SaveScoringStrategyUseCase) Execute(ctx context.Context, input SaveScor
 		return fmt.Errorf("策略必須包含至少一個出場規則 (exit)")
 	}
 
-	// 1. Start Transaction if possible
-	var tx *sql.Tx
-	db, ok := u.db.(*sql.DB)
-	if ok {
-		var err error
-		tx, err = db.BeginTx(ctx, nil)
-		if err != nil {
-			return fmt.Errorf("failed to start transaction: %w", err)
-		}
-		defer tx.Rollback()
-	}
-
-	queryer := u.db
-	if tx != nil {
-		queryer = tx
-	}
-
-	// 2. Insert or Update Strategy
 	var strategyID string
-	err := queryer.QueryRowContext(ctx, `
-		INSERT INTO strategies (user_id, name, slug, threshold, exit_threshold, base_symbol, timeframe, env, is_active, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, 'both', true, NOW())
-		ON CONFLICT (slug) DO UPDATE SET 
-			name = EXCLUDED.name, 
-			threshold = EXCLUDED.threshold, 
-			exit_threshold = EXCLUDED.exit_threshold,
-			base_symbol = EXCLUDED.base_symbol,
-			timeframe = EXCLUDED.timeframe,
-			updated_at = NOW()
-		RETURNING id
-	`, input.UserID, input.Name, input.Slug, input.Threshold, input.ExitThreshold, input.BaseSymbol, input.Timeframe).Scan(&strategyID)
-	if err != nil {
-		return fmt.Errorf("儲存策略主檔失敗: %w", err)
-	}
-
-	// 3. Clear old rules
-	_, err = queryer.ExecContext(ctx, "DELETE FROM strategy_rules WHERE strategy_id = $1", strategyID)
-	if err != nil {
-		return fmt.Errorf("清除舊規則失敗: %w", err)
-	}
-
-	// 4. Process Rules
-	for _, r := range input.Rules {
-		paramsJSON, _ := json.Marshal(r.Params)
-		
-		var conditionID string
-		err = queryer.QueryRowContext(ctx, `
-			SELECT id FROM conditions WHERE type = $1 AND params::jsonb = $2::jsonb
-		`, r.Type, paramsJSON).Scan(&conditionID)
-		
-		if err == sql.ErrNoRows {
-			err = queryer.QueryRowContext(ctx, `
-				INSERT INTO conditions (name, type, params)
-				VALUES ($1, $2, $3)
-				RETURNING id
-			`, r.ConditionName, r.Type, paramsJSON).Scan(&conditionID)
+	err := u.db.Transaction(func(tx *gorm.DB) error {
+		type Strategy struct {
+			ID            string `gorm:"primaryKey;default:gen_random_uuid()"`
+			UserID        string
+			Name          string
+			Slug          string
+			Threshold     float64
+			ExitThreshold float64
+			BaseSymbol    string
+			Timeframe     string
+			Env           string
+			IsActive      bool
+			UpdatedAt     time.Time
 		}
-		
+		s := Strategy{
+			UserID:        input.UserID,
+			Name:          input.Name,
+			Slug:          input.Slug,
+			Threshold:     input.Threshold,
+			ExitThreshold: input.ExitThreshold,
+			BaseSymbol:    input.BaseSymbol,
+			Timeframe:     input.Timeframe,
+			Env:           "both",
+			IsActive:      true,
+			UpdatedAt:     time.Now(),
+		}
+
+		err := tx.Table("strategies").Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "slug"}},
+			DoUpdates: clause.AssignmentColumns([]string{"name", "threshold", "exit_threshold", "base_symbol", "timeframe", "updated_at"}),
+		}).Create(&s).Error
 		if err != nil {
-			return fmt.Errorf("處理條件 [%s] 失敗: %w", r.Type, err)
+			return err
+		}
+		strategyID = s.ID
+
+		if err := tx.Table("strategy_rules").Where("strategy_id = ?", strategyID).Delete(nil).Error; err != nil {
+			return err
 		}
 
-		ruleType := r.RuleType
-		if ruleType == "" {
-			ruleType = "entry"
-		}
-		_, err = queryer.ExecContext(ctx, `
-			INSERT INTO strategy_rules (strategy_id, condition_id, weight, rule_type)
-			VALUES ($1, $2, $3, $4)
-		`, strategyID, conditionID, r.Weight, ruleType)
-		if err != nil {
-			return fmt.Errorf("建立規則連結失敗: %w", err)
-		}
-	}
+		for _, r := range input.Rules {
+			paramsJSON, _ := json.Marshal(r.Params)
+			
+			var conditionID string
+			tx.Table("conditions").Select("id").Where("type = ? AND params::jsonb = ?::jsonb", r.Type, string(paramsJSON)).Scan(&conditionID)
+			
+			if conditionID == "" {
+				type Condition struct {
+					ID     string `gorm:"primaryKey;default:gen_random_uuid()"`
+					Name   string
+					Type   string
+					Params []byte
+				}
+				c := Condition{Name: r.ConditionName, Type: r.Type, Params: paramsJSON}
+				if err := tx.Table("conditions").Create(&c).Error; err != nil {
+					return err
+				}
+				conditionID = c.ID
+			}
 
-	if tx != nil {
-		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("failed to commit transaction: %w", err)
+			ruleType := r.RuleType
+			if ruleType == "" {
+				ruleType = "entry"
+			}
+			
+			rule := struct {
+				StrategyID  string
+				ConditionID string
+				Weight      float64
+				RuleType    string
+			}{
+				StrategyID:  strategyID,
+				ConditionID: conditionID,
+				Weight:      r.Weight,
+				RuleType:    ruleType,
+			}
+			if err := tx.Table("strategy_rules").Create(&rule).Error; err != nil {
+				return err
+			}
 		}
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("儲存策略失敗: %w", err)
 	}
 
 	fmt.Printf("[SaveStrategy] Successfully upserted strategy %s (ID: %s)\n", input.Slug, strategyID)

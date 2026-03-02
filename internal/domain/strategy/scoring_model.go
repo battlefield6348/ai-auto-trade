@@ -4,15 +4,125 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	tradingDomain "ai-auto-trade/internal/domain/trading"
+
+	"gorm.io/gorm"
 )
 
+// LoadScoringStrategyBySlugGORM fetches a strategy and all its associated rules/conditions by slug using GORM.
+func LoadScoringStrategyBySlugGORM(ctx context.Context, db *gorm.DB, slug string) (*ScoringStrategy, error) {
+	return loadScoringStrategyGORM(ctx, db, "slug", slug)
+}
+
+// LoadScoringStrategyIDGORM fetches a strategy and all its associated rules/conditions by ID using GORM.
+func LoadScoringStrategyIDGORM(ctx context.Context, db *gorm.DB, id string) (*ScoringStrategy, error) {
+	return loadScoringStrategyGORM(ctx, db, "id", id)
+}
+
+func loadScoringStrategyGORM(ctx context.Context, db *gorm.DB, field, value string) (*ScoringStrategy, error) {
+	// 1. Fetch the base Strategy
+	s := &ScoringStrategy{}
+	type strategyResult struct {
+		ID            string
+		UserID        string
+		Name          string
+		Slug          string
+		Description   string
+		Timeframe     string
+		BaseSymbol    string
+		Threshold     float64
+		ExitThreshold float64
+		IsActive      bool
+		Env           string
+		RiskSettings  []byte
+		CreatedAt     time.Time
+		UpdatedAt     time.Time
+	}
+
+	var res strategyResult
+	err := db.WithContext(ctx).Table("strategies").Where(fmt.Sprintf("%s = ?", field), value).First(&res).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("strategy not found with %s: %s", field, value)
+		}
+		return nil, fmt.Errorf("failed to fetch strategy: %w", err)
+	}
+
+	s.ID = res.ID
+	s.UserID = res.UserID
+	s.Name = res.Name
+	s.Slug = res.Slug
+	s.Description = res.Description
+	s.Timeframe = res.Timeframe
+	s.BaseSymbol = res.BaseSymbol
+	s.Threshold = res.Threshold
+	s.ExitThreshold = res.ExitThreshold
+	s.IsActive = res.IsActive
+	s.Env = res.Env
+	s.CreatedAt = res.CreatedAt
+	s.UpdatedAt = res.UpdatedAt
+
+	if len(res.RiskSettings) > 0 {
+		_ = json.Unmarshal(res.RiskSettings, &s.Risk)
+	}
+
+	// 2. Fetch Rules and Conditions via JOIN
+	type ruleResult struct {
+		StrategyID  string
+		Weight      float64
+		RuleType    string
+		ID          string
+		Name        string
+		Type        string
+		Params      []byte
+	}
+
+	var rawResults []ruleResult
+	err = db.WithContext(ctx).Table("strategy_rules sr").
+		Select("sr.strategy_id, sr.weight, sr.rule_type, c.id, c.name, c.type, c.params").
+		Joins("JOIN conditions c ON sr.condition_id = c.id").
+		Where("sr.strategy_id = ?", s.ID).
+		Scan(&rawResults).Error
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch strategy rules: %w", err)
+	}
+
+	for _, r := range rawResults {
+		rule := StrategyRule{
+			StrategyID:  r.StrategyID,
+			ConditionID: r.ID,
+			Weight:      r.Weight,
+			RuleType:    r.RuleType,
+			Condition: Condition{
+				ID:        r.ID,
+				Name:      r.Name,
+				Type:      r.Type,
+				ParamsRaw: r.Params,
+			},
+		}
+
+		s.Rules = append(s.Rules, rule)
+
+		isEntry := rule.RuleType == "entry" || rule.RuleType == "both" || rule.RuleType == ""
+		isExit := rule.RuleType == "exit" || rule.RuleType == "both"
+
+		if isEntry {
+			s.EntryRules = append(s.EntryRules, rule)
+		}
+		if isExit {
+			s.ExitRules = append(s.ExitRules, rule)
+		}
+	}
+
+	return s, nil
+}
+
 // ScoringStrategy represents the new three-layer strategy design.
-// We use a different name to avoid conflict with the existing legacy Strategy struct if needed,
-// but here we align it with the DB schema requested.
 type ScoringStrategy struct {
 	ID        string         `json:"id" db:"id"`
 	UserID    string         `json:"user_id" db:"user_id"`
@@ -24,13 +134,13 @@ type ScoringStrategy struct {
 	Threshold     float64        `json:"threshold" db:"threshold"`
 	ExitThreshold float64        `json:"exit_threshold" db:"exit_threshold"`
 	IsActive      bool           `json:"is_active" db:"is_active"`
-	Env           string         `json:"env" db:"env"`
-	Risk          tradingDomain.RiskSettings `json:"risk_settings" db:"risk_settings"`
-	Rules         []StrategyRule `json:"rules"` // Legacy field for back-compat if needed, or keeping it as list
-	EntryRules    []StrategyRule `json:"entry_rules"`
-	ExitRules     []StrategyRule `json:"exit_rules"`
-	CreatedAt     time.Time      `json:"created_at" db:"created_at"`
-	UpdatedAt     time.Time      `json:"updated_at" db:"updated_at"`
+	Env           string         `json:"env" gorm:"column:env"`
+	Risk          tradingDomain.RiskSettings `json:"risk_settings" gorm:"-"`
+	Rules         []StrategyRule `json:"rules" gorm:"-"` 
+	EntryRules    []StrategyRule `json:"entry_rules" gorm:"-"`
+	ExitRules     []StrategyRule `json:"exit_rules" gorm:"-"`
+	CreatedAt     time.Time      `json:"created_at" gorm:"column:created_at"`
+	UpdatedAt     time.Time      `json:"updated_at" gorm:"column:updated_at"`
 }
 
 // Condition represents a reusable logic component.
@@ -38,7 +148,7 @@ type Condition struct {
 	ID        string          `json:"id" db:"id"`
 	Name      string          `json:"name" db:"name"`
 	Type      string          `json:"type" db:"type"`
-	ParamsRaw json.RawMessage `json:"params" db:"params"` // Using json.RawMessage to store params as requested
+	ParamsRaw json.RawMessage `json:"params" db:"params"` 
 }
 
 // ParseParams parses ParamsRaw into a map[string]interface{}.
@@ -65,24 +175,17 @@ type StrategyRule struct {
 	Condition   Condition `json:"condition"`
 }
 
-// DBQueryer defines the interface for database operations.
-type DBQueryer interface {
-	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
-	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+// LoadScoringStrategyBySlug fetches a strategy and all its associated rules/conditions by slug using sql.DB (Legacy).
+func LoadScoringStrategyBySlug(ctx context.Context, db *sql.DB, slug string) (*ScoringStrategy, error) {
+	return loadScoringStrategyLegacy(ctx, db, "slug", slug)
 }
 
-// LoadScoringStrategyBySlug fetches a strategy and all its associated rules/conditions by slug.
-func LoadScoringStrategyBySlug(ctx context.Context, db DBQueryer, slug string) (*ScoringStrategy, error) {
-	return loadScoringStrategy(ctx, db, "slug", slug)
+// LoadScoringStrategyByID fetches a strategy and all its associated rules/conditions by ID using sql.DB (Legacy).
+func LoadScoringStrategyByID(ctx context.Context, db *sql.DB, id string) (*ScoringStrategy, error) {
+	return loadScoringStrategyLegacy(ctx, db, "id", id)
 }
 
-// LoadScoringStrategyByID fetches a strategy and all its associated rules/conditions by ID.
-func LoadScoringStrategyByID(ctx context.Context, db DBQueryer, id string) (*ScoringStrategy, error) {
-	return loadScoringStrategy(ctx, db, "id", id)
-}
-
-func loadScoringStrategy(ctx context.Context, db DBQueryer, field, value string) (*ScoringStrategy, error) {
+func loadScoringStrategyLegacy(ctx context.Context, db *sql.DB, field, value string) (*ScoringStrategy, error) {
 	// 1. Fetch the base Strategy
 	s := &ScoringStrategy{}
 	strategyQuery := fmt.Sprintf(`

@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"database/sql"
 	"net/http"
 	"strings"
 	"sync"
@@ -22,6 +21,7 @@ import (
 	"ai-auto-trade/internal/infrastructure/persistence/postgres"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type backtestPresetStore interface {
@@ -42,7 +42,7 @@ type Server struct {
 	queryUC       *analysis.QueryUseCase
 	tokenTTL      time.Duration
 	refreshTTL    time.Duration
-	db            *sql.DB
+	db            *gorm.DB // Changed from *sql.DB to *gorm.DB
 	dataRepo      DataRepository
 	authRepo      auth.UserRepository
 	tokenSvc      *authinfra.JWTIssuer
@@ -69,8 +69,8 @@ type Server struct {
 }
 
 
-// NewServer 建立 API 伺服器，預設使用記憶體資料存儲；若 db 未來可用，再注入對應 repository。
-func NewServer(cfg config.Config, db *sql.DB) *Server {
+// NewServer 建立 API 伺服器，預設使用記憶體資料存儲。
+func NewServer(cfg config.Config, db *gorm.DB) *Server {
 	store := memory.NewStore()
 	store.SeedUsers()
 
@@ -160,7 +160,7 @@ func NewServer(cfg config.Config, db *sql.DB) *Server {
 
 	s.scoringBtUC = appStrategy.NewBacktestUseCase(db, dataRepo)
 	s.saveScoringBtUC = appStrategy.NewSaveScoringStrategyUseCase(db)
-	s.analyzeUC = analysis.NewAnalyzeUseCase(nil, nil, nil) // Placeholder
+	s.analyzeUC = analysis.NewAnalyzeUseCase(dataRepo, dataRepo, dataRepo)
 	s.binanceClient = binanceClient
 	s.defaultEnv = tradingDomain.EnvTest
 	if !cfg.Binance.UseTestnet {

@@ -10,6 +10,7 @@ import (
 	analysisDomain "ai-auto-trade/internal/domain/analysis"
 	dataDomain "ai-auto-trade/internal/domain/dataingestion"
 	"ai-auto-trade/internal/infra/memory"
+	"sort"
 )
 
 const (
@@ -38,6 +39,9 @@ type DataRepository interface {
 	InsertAnalysisResult(ctx context.Context, stockID string, res analysisDomain.DailyAnalysisResult) error
 	HasAnalysisForDate(ctx context.Context, date time.Time) (bool, error)
 	LatestAnalysisDate(ctx context.Context) (time.Time, error)
+	GetHistory(ctx context.Context, symbol string, endDate time.Time, lookback int) ([]dataDomain.DailyPrice, error)
+	ListBasicInfo(ctx context.Context, symbols []string, date time.Time) ([]analysis.BasicInfo, error)
+	SaveDailyResult(ctx context.Context, result analysisDomain.DailyAnalysisResult) error
 }
 
 // memoryRepoAdapter 讓 memory.Store 相容 DataRepository。
@@ -89,4 +93,43 @@ func (m memoryRepoAdapter) FindHistory(ctx context.Context, symbol string, timef
 
 func (m memoryRepoAdapter) Get(ctx context.Context, symbol string, date time.Time, timeframe string) (analysisDomain.DailyAnalysisResult, error) {
 	return m.store.Get(ctx, symbol, date)
+}
+
+func (m memoryRepoAdapter) GetHistory(ctx context.Context, symbol string, endDate time.Time, lookback int) ([]dataDomain.DailyPrice, error) {
+	// Simple implementation for memory adapter
+	all := m.store.PricesByPair(symbol)
+	var out []dataDomain.DailyPrice
+	for _, p := range all {
+		if !p.TradeDate.After(endDate) {
+			out = append(out, p)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].TradeDate.After(out[j].TradeDate)
+	})
+	if len(out) > lookback {
+		out = out[:lookback]
+	}
+	// Sort ascending for analysis
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].TradeDate.Before(out[j].TradeDate)
+	})
+	return out, nil
+}
+
+func (m memoryRepoAdapter) ListBasicInfo(ctx context.Context, symbols []string, date time.Time) ([]analysis.BasicInfo, error) {
+	// Memory store doesn't have a clean ListBasicInfo, return dummy
+	if len(symbols) == 0 {
+		return nil, nil
+	}
+	out := make([]analysis.BasicInfo, len(symbols))
+	for i, s := range symbols {
+		out[i] = analysis.BasicInfo{Symbol: s}
+	}
+	return out, nil
+}
+
+func (m memoryRepoAdapter) SaveDailyResult(ctx context.Context, result analysisDomain.DailyAnalysisResult) error {
+	m.store.InsertAnalysisResult(result)
+	return nil
 }

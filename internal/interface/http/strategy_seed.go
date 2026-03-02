@@ -2,19 +2,23 @@ package httpapi
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
+
+	"gorm.io/gorm"
 )
 
 // seedScoringStrategies 預設建立幾套最強的計分策略。
-func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
+func seedScoringStrategies(ctx context.Context, db *gorm.DB) error {
 	// 1. 取得管理員 ID
 	var adminID string
-	err := db.QueryRowContext(ctx, "SELECT id FROM users WHERE email = 'admin@example.com'").Scan(&adminID)
+	err := db.Table("users").Select("id").Where("email = ?", "admin@example.com").Scan(&adminID).Error
 	if err != nil {
 		return fmt.Errorf("find admin user: %w", err)
+	}
+	if adminID == "" {
+		return fmt.Errorf("admin user not found")
 	}
 
 	// 2. 定義預設策略 - Nexus 高效系列
@@ -40,7 +44,7 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 			Timeframe:     "1d",
 			BaseSymbol:    "BTCUSDT",
 			Threshold:     65.0,
-			ExitThreshold: 90.0, // 極速止損：只要任一健康條件不滿足即退出
+			ExitThreshold: 90.0,
 			IsActive:      true,
 			Rules: []struct {
 				Type     string
@@ -49,13 +53,11 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 				Weight   float64
 				RuleType string
 			}{
-				// 進場邏輯：AI + 動能 + 趨勢
 				{Type: "BASE_SCORE", Name: "AI 核心預測支撐", Params: map[string]interface{}{}, Weight: 45.0, RuleType: "entry"},
 				{Type: "PRICE_RETURN", Name: "短線發動 (> 1.2%)", Params: map[string]interface{}{"days": 1.0, "min": 0.012}, Weight: 30.0, RuleType: "entry"},
 				{Type: "VOLUME_SURGE", Name: "量能確認 (> 1.5倍)", Params: map[string]interface{}{"min": 1.5}, Weight: 15.0, RuleType: "entry"},
 				{Type: "MA_DEVIATION", Name: "均線上方安全區 (MA20 > 1%)", Params: map[string]interface{}{"ma": 20.0, "min": 0.01}, Weight: 10.0, RuleType: "entry"},
 				
-				// 出場邏輯 (必須全部滿足才留著，任一失敗即退出)
 				{Type: "PRICE_RETURN", Name: "持倉安全 (漲跌 > -1.2%)", Params: map[string]interface{}{"days": 1.0, "min": -0.012}, Weight: 60.0, RuleType: "exit"},
 				{Type: "MA_DEVIATION", Name: "趨勢未破 (MA20 > -0.5%)", Params: map[string]interface{}{"ma": 20.0, "min": -0.005}, Weight: 40.0, RuleType: "exit"},
 			},
@@ -66,7 +68,7 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 			Timeframe:     "1d",
 			BaseSymbol:    "BTCUSDT",
 			Threshold:     55.0,
-			ExitThreshold: 85.0, // 修正止損遲鈍問題
+			ExitThreshold: 85.0,
 			IsActive:      true,
 			Rules: []struct {
 				Type     string
@@ -88,53 +90,82 @@ func seedScoringStrategies(ctx context.Context, db *sql.DB) error {
 
 	for _, s := range strategies {
 		var sid string
-		// Check if exists first to avoid clearing rules for existing strategies
-		err = db.QueryRowContext(ctx, "SELECT id FROM strategies WHERE slug = $1", s.Slug).Scan(&sid)
-		if err == nil {
+		err = db.Table("strategies").Select("id").Where("slug = ?", s.Slug).Scan(&sid).Error
+		if err == nil && sid != "" {
 			log.Printf("[Seed] Strategy %s already exists, skipping re-seed.", s.Slug)
 			continue
 		}
 
-		err = db.QueryRowContext(ctx, `
-			INSERT INTO strategies (user_id, name, slug, timeframe, base_symbol, threshold, exit_threshold, is_active, env, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'both', NOW())
-			RETURNING id
-		`, adminID, s.Name, s.Slug, s.Timeframe, s.BaseSymbol, s.Threshold, s.ExitThreshold, s.IsActive).Scan(&sid)
+		err = db.Transaction(func(tx *gorm.DB) error {
+			newStrat := struct {
+				ID            string `gorm:"primaryKey;default:gen_random_uuid()"`
+				UserID        string
+				Name          string
+				Slug          string
+				Timeframe     string
+				BaseSymbol    string
+				Threshold     float64
+				ExitThreshold float64
+				IsActive      bool
+				Env           string
+			}{
+				UserID:        adminID,
+				Name:          s.Name,
+				Slug:          s.Slug,
+				Timeframe:     s.Timeframe,
+				BaseSymbol:    s.BaseSymbol,
+				Threshold:     s.Threshold,
+				ExitThreshold: s.ExitThreshold,
+				IsActive:      s.IsActive,
+				Env:           "both",
+			}
+			if err := tx.Table("strategies").Create(&newStrat).Error; err != nil {
+				return err
+			}
+			sid = newStrat.ID
+
+			for _, r := range s.Rules {
+				paramsBytes, _ := json.Marshal(r.Params)
+				var cid string
+				tx.Table("conditions").Select("id").Where("name = ? AND type = ? AND params::jsonb = ?::jsonb", r.Name, r.Type, string(paramsBytes)).Scan(&cid)
+
+				if cid == "" {
+					newCond := struct {
+						ID     string `gorm:"primaryKey;default:gen_random_uuid()"`
+						Name   string
+						Type   string
+						Params []byte
+					}{
+						Name:   r.Name,
+						Type:   r.Type,
+						Params: paramsBytes,
+					}
+					if err := tx.Table("conditions").Create(&newCond).Error; err != nil {
+						return err
+					}
+					cid = newCond.ID
+				}
+
+				link := struct {
+					StrategyID  string
+					ConditionID string
+					Weight      float64
+					RuleType    string
+				}{
+					StrategyID:  sid,
+					ConditionID: cid,
+					Weight:      r.Weight,
+					RuleType:    r.RuleType,
+				}
+				if err := tx.Table("strategy_rules").Create(&link).Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		})
 
 		if err != nil {
-			log.Printf("[Seed] Strategy %s insert failed: %v", s.Slug, err)
-			continue
-		}
-
-		for _, r := range s.Rules {
-			paramsBytes, _ := json.Marshal(r.Params)
-			var cid string
-			err = db.QueryRowContext(ctx, `
-				SELECT id FROM conditions WHERE name = $1 AND type = $2 AND params::jsonb = $3::jsonb
-			`, r.Name, r.Type, paramsBytes).Scan(&cid)
-
-			if err == sql.ErrNoRows {
-				err = db.QueryRowContext(ctx, `
-					INSERT INTO conditions (name, type, params)
-					VALUES ($1, $2, $3)
-					RETURNING id
-				`, r.Name, r.Type, paramsBytes).Scan(&cid)
-			}
-
-			if err != nil {
-				log.Printf("[Seed] Condition %s failed: %v", r.Name, err)
-				continue
-			}
-
-			_, err = db.ExecContext(ctx, `
-				INSERT INTO strategy_rules (strategy_id, condition_id, weight, rule_type)
-				VALUES ($1, $2, $3, $4)
-				ON CONFLICT DO NOTHING
-			`, sid, cid, r.Weight, r.RuleType)
-
-			if err != nil {
-				log.Printf("[Seed] Link rule %s to %s failed: %v", r.Name, s.Slug, err)
-			}
+			log.Printf("[Seed] Strategy %s seed failed: %v", s.Slug, err)
 		}
 	}
 

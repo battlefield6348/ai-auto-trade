@@ -1,42 +1,52 @@
-import { updateExchangeLink, initSidebar, initBinanceConfigModal, initGlobalEnvSelector, handleUnauthorized, apiFetch, showMessage } from "./common.js";
+import { initSidebar, initGlobalEnvSelector, apiFetch, showMessage } from "./common.js";
 
 const state = {
     positions: [],
     trades: [],
+    balance: { asset: 'USDT', free: '0.00', locked: '0.00' },
     prices: {},
     env: "test"
 };
 
 const el = (id) => document.getElementById(id);
 
-async function fetchPrices(symbols) {
-    for (const s of symbols) {
-        try {
-            const data = await apiFetch(`/admin/binance/price?symbol=${s}`);
-            state.prices[s] = data.price;
-        } catch (err) {
-            console.error(`Failed to fetch price for ${s}:`, err);
-        }
-    }
-}
-
 async function refreshTradingData() {
     try {
-        const [posData, tradeData] = await Promise.all([
+        const [posData, tradeData, accData] = await Promise.all([
             apiFetch(`/admin/positions?env=${state.env}`),
-            apiFetch(`/admin/trades?env=${state.env}`)
+            apiFetch(`/admin/trades?env=${state.env}`),
+            apiFetch(`/admin/binance/account`)
         ]);
 
         state.positions = posData.positions || [];
         state.trades = (tradeData.trades || []).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
+        if (accData.success && accData.account && accData.account.balances) {
+            const usdt = accData.account.balances.find(b => b.asset === 'USDT');
+            if (usdt) state.balance = usdt;
+        }
+
         const symbols = [...new Set(state.positions.map(p => p.symbol))];
-        if (symbols.length > 0) await fetchPrices(symbols);
+        if (symbols.indexOf('BTCUSDT') === -1) symbols.push('BTCUSDT'); // Always track BTC
+
+        await fetchPrices(symbols);
 
         renderUI();
-        el('lastUpdated').textContent = new Date().toLocaleTimeString('zh-TW', { hour12: false });
+        const lastUpdated = el('lastUpdated');
+        if (lastUpdated) lastUpdated.textContent = new Date().toLocaleTimeString('zh-TW', { hour12: false });
     } catch (err) {
         console.error("Failed to refresh trading data:", err);
+    }
+}
+
+async function fetchPrices(symbols) {
+    for (const s of symbols) {
+        try {
+            const data = await apiFetch(`/admin/binance/price?symbol=${s}`);
+            if (data.success) state.prices[s] = data.price;
+        } catch (err) {
+            console.error(`Failed to fetch price for ${s}:`, err);
+        }
     }
 }
 
@@ -53,9 +63,19 @@ function renderStats() {
         totalUnrealized += (current - p.entry_price) * p.size;
     });
 
-    const unrealPnlEl = el('unrealizedPnl');
-    unrealPnlEl.textContent = `${totalUnrealized >= 0 ? '+' : ''}${totalUnrealized.toFixed(2)}`;
-    unrealPnlEl.className = `text-2xl font-black font-mono ${totalUnrealized >= 0 ? 'text-success' : 'text-danger'}`;
+    const free = parseFloat(state.balance.free || 0);
+    const locked = parseFloat(state.balance.locked || 0);
+    const equity = free + locked + totalUnrealized;
+
+    if (el('unrealizedPnl')) {
+        el('unrealizedPnl').textContent = `${totalUnrealized >= 0 ? '+' : ''}${totalUnrealized.toFixed(2)}`;
+        el('unrealizedPnl').className = `text-2xl font-black font-mono ${totalUnrealized >= 0 ? 'text-success' : 'text-danger'}`;
+    }
+
+    // Update all relevant equity fields in the UI
+    if (el('totalEquity')) el('totalEquity').textContent = equity.toLocaleString('en-US', { minimumFractionDigits: 2 });
+    if (el('availableMargin')) el('availableMargin').textContent = free.toLocaleString('en-US', { minimumFractionDigits: 2 });
+    if (el('usdtBalance')) el('usdtBalance').textContent = `$${free.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
 }
 
 function renderPositions() {
@@ -90,8 +110,8 @@ function renderPositions() {
                 <div class="text-[10px] text-white font-mono font-bold">${p.size.toFixed(4)} ${p.symbol.replace('USDT', '')}</div>
                 <div class="text-[9px] text-success font-black mt-1">LONG 10x</div>
             </td>
-            <td class="px-6 py-6 text-center font-mono text-[11px] text-slate-400">${p.entry_price.toLocaleString()}</td>
-            <td class="px-6 py-6 text-center font-mono text-[11px] text-white font-bold">${current.toLocaleString()}</td>
+            <td class="px-6 py-6 text-center font-mono text-[11px] text-slate-400">${parseFloat(p.entry_price).toLocaleString()}</td>
+            <td class="px-6 py-6 text-center font-mono text-[11px] text-white font-bold">${parseFloat(current).toLocaleString()}</td>
             <td class="px-8 py-6 text-right">
                 <div class="text-sm font-black ${isProfit ? 'text-success' : 'text-danger'}">${isProfit ? '+' : ''}${pnl.toFixed(2)}</div>
                 <div class="text-[10px] font-bold ${isProfit ? 'text-success/70' : 'text-danger/70'}">(${isProfit ? '+' : ''}${pnlPct.toFixed(2)}%)</div>
@@ -124,43 +144,35 @@ function renderLogs() {
                     <span class="text-[10px] text-white font-bold">${isBuy ? '買入' : '賣出'} ${t.symbol}</span>
                     <span class="text-[8px] text-slate-600 font-mono">${new Date(t.created_at).toLocaleTimeString('zh-TW', { hour12: false })}</span>
                 </div>
-                <p class="text-[10px] text-slate-500 leading-relaxed">成交價格: ${t.entry_price.toLocaleString()} ● 數量: ${t.amount}</p>
+                <p class="text-[10px] text-slate-500 leading-relaxed">成交價格: ${parseFloat(t.entry_price).toLocaleString()} ● 數量: ${t.amount}</p>
             </div>
         `;
         container.appendChild(item);
     });
 }
 
-async function panicSell() {
-    if (!confirm("確定要執行緊急平倉嗎？這將會市價平掉所有當前持倉！")) return;
-
-    try {
-        // Since we might not have a dedicated panic endpoint, we loop through and close
-        const promises = state.positions.map(p => apiFetch(`/admin/positions/${p.id}/close`, { method: "POST" }));
-        await Promise.all(promises);
-        showMessage("全數平倉指令已送出", "success");
-        refreshTradingData();
-    } catch (err) {
-        showMessage(err.message, "danger");
-    }
-}
-
 function bootstrap() {
     initSidebar();
-    updateExchangeLink();
-    initBinanceConfigModal();
 
     initGlobalEnvSelector((env) => {
         state.env = env;
         refreshTradingData();
     });
 
-    el('panicSellBtn').addEventListener('click', panicSell);
-    el('switchEnvBtn').addEventListener('click', () => {
-        // Fallback to modal if no global selector visible
-        const modal = el('binanceConfigModal');
-        if (modal) modal.classList.remove('hidden');
-    });
+    const panicBtn = el('panicSellBtn');
+    if (panicBtn) {
+        panicBtn.onclick = async () => {
+            if (!confirm("確定要執行緊急平倉嗎？這將會市價平掉所有當前持倉！")) return;
+            try {
+                const promises = state.positions.map(p => apiFetch(`/admin/positions/${p.id}/close`, { method: "POST" }));
+                await Promise.all(promises);
+                showMessage("全數平倉指令已送出", "success");
+                refreshTradingData();
+            } catch (err) {
+                showMessage(err.message, "danger");
+            }
+        };
+    }
 
     refreshTradingData();
     setInterval(refreshTradingData, 10000);

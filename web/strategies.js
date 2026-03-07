@@ -1,9 +1,8 @@
-import { updateExchangeLink, initSidebar, initBinanceConfigModal, initGlobalEnvSelector, handleUnauthorized, apiFetch } from "./common.js";
+import { initSidebar, initGlobalEnvSelector, apiFetch, showMessage } from "./common.js";
 
 const state = {
-    token: localStorage.getItem("aat_token") || "",
     strategies: [],
-    env: localStorage.getItem("aat_env") || "test"
+    env: "test"
 };
 
 const el = (id) => document.getElementById(id);
@@ -20,9 +19,12 @@ async function fetchStrategies() {
 }
 
 function updateStats() {
-    el("activeCount").textContent = state.strategies.filter(s => s.active).length;
+    const activeCount = el("activeCount");
+    if (activeCount) activeCount.textContent = state.strategies.filter(s => s.active).length;
+
     // Mock other stats for UI completeness
-    el("triggerCount").textContent = Math.floor(Math.random() * 500) + 100;
+    const triggerCount = el("triggerCount");
+    if (triggerCount) triggerCount.textContent = Math.floor(Math.random() * 500) + 100;
 }
 
 function renderTable() {
@@ -42,7 +44,7 @@ function renderTable() {
     filtered.forEach((s) => {
         const date = new Date(s.updated_at).toLocaleDateString('zh-TW');
         const tr = document.createElement("tr");
-        tr.className = "hover:bg-white/5 transition-colors border-b border-surface-border/20 text-xs";
+        tr.className = "hover:bg-white/5 transition-colors border-b border-surface-border/20 text-xs group";
 
         tr.innerHTML = `
             <td class="px-8 py-6">
@@ -79,9 +81,6 @@ function renderTable() {
                 </div>
             </td>
         `;
-
-        // Add class group for hover effect
-        tr.classList.add('group');
         tbody.appendChild(tr);
     });
 
@@ -111,6 +110,7 @@ async function toggleStatus(id, currentlyActive) {
         });
 
         if (res.success) {
+            showMessage(`策略已${!currentlyActive ? '開啟' : '關閉'}`, "success");
             fetchStrategies();
         }
     } catch (err) {
@@ -122,41 +122,25 @@ async function deleteStrategy(id, name) {
     if (!confirm(`確定要刪除策略 [${name}] 嗎？`)) return;
     try {
         const res = await apiFetch(`/admin/strategies/${id}`, { method: "DELETE" });
-        if (res.success) fetchStrategies();
+        if (res.success) {
+            showMessage("策略已刪除", "success");
+            fetchStrategies();
+        }
     } catch (err) {
         showMessage(err.message, 'danger');
     }
 }
 
 function bootstrap() {
-    updateExchangeLink();
     initSidebar();
-    initBinanceConfigModal();
 
     initGlobalEnvSelector((env) => {
         state.env = env;
-        localStorage.setItem('aat_env', env);
         renderTable();
     });
 
-    const clock = document.getElementById('serverClock');
-    if (clock) {
-        setInterval(() => {
-            const now = new Date();
-            clock.textContent = now.toLocaleString('zh-TW', { hour12: false });
-        }, 1000);
-    }
-
-    el("refreshBtn").addEventListener("click", fetchStrategies);
-
-    const logout = el("logoutBtn");
-    if (logout) {
-        logout.classList.remove("hidden");
-        logout.addEventListener("click", () => {
-            localStorage.removeItem("aat_token");
-            window.location.href = "/login.html";
-        });
-    }
+    const refreshBtn = el("refreshBtn");
+    if (refreshBtn) refreshBtn.addEventListener("click", fetchStrategies);
 
     fetchStrategies();
 }

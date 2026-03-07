@@ -159,11 +159,12 @@
                     </div>
                     <div>
                         <h2 class="text-xl font-black text-white italic tracking-tight">交易執行環境 (Environment)</h2>
-                        <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">切換全域交易模式</p>
+                        <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">目前處於：<span
+                                id="currentEnvStatus" class="text-primary font-black">--</span></p>
                     </div>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <button data-env="test"
+                    <button id="card-test" data-env="test"
                         class="env-selector glass p-6 rounded-[2rem] text-left hover:border-secondary transition-all group overflow-hidden relative">
                         <div class="absolute -right-4 -top-4 opacity-5 group-hover:opacity-10 transition-opacity">
                             <span class="material-symbols-outlined text-8xl">bug_report</span>
@@ -172,7 +173,7 @@
                         <h3 class="font-bold text-white mb-1">測試網 (Binance Testnet)</h3>
                         <p class="text-[10px] text-slate-500 leading-relaxed font-body">無風險的開發與調試環境，使用虛擬測試幣進行完全模擬。</p>
                     </button>
-                    <button data-env="paper"
+                    <button id="card-paper" data-env="paper"
                         class="env-selector glass p-6 rounded-[2rem] text-left hover:border-primary transition-all group overflow-hidden relative">
                         <div class="absolute -right-4 -top-4 opacity-5 group-hover:opacity-10 transition-opacity">
                             <span class="material-symbols-outlined text-8xl">description</span>
@@ -181,7 +182,7 @@
                         <h3 class="font-bold text-white mb-1">模擬盤 (Paper Trading)</h3>
                         <p class="text-[10px] text-slate-500 leading-relaxed font-body">接取實時行情，但訂單為系統模擬，不涉及任何真實資產損益。</p>
                     </button>
-                    <button data-env="real"
+                    <button id="card-real" data-env="real"
                         class="env-selector glass p-6 rounded-[2rem] text-left hover:border-warning transition-all group overflow-hidden relative">
                         <div class="absolute -right-4 -top-4 opacity-5 group-hover:opacity-10 transition-opacity">
                             <span class="material-symbols-outlined text-8xl">payments</span>
@@ -215,7 +216,7 @@
                             <div class="relative group">
                                 <span
                                     class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 transition-colors group-focus-within:text-primary">key</span>
-                                <input type="text" placeholder="輸入 API 金鑰..."
+                                <input id="binanceKey" type="text" placeholder="輸入 API 金鑰..."
                                     class="w-full bg-background-dark/50 border border-surface-border rounded-2xl py-4 pl-12 pr-6 text-sm text-white focus:border-primary focus:ring-0 transition-all font-mono">
                             </div>
                         </div>
@@ -226,7 +227,7 @@
                             <div class="relative group">
                                 <span
                                     class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 transition-colors group-focus-within:text-primary">lock</span>
-                                <input type="password" placeholder="輸入 Secret Key..."
+                                <input id="binanceSecret" type="password" placeholder="輸入 Secret Key..."
                                     class="w-full bg-background-dark/50 border border-surface-border rounded-2xl py-4 pl-12 pr-6 text-sm text-white focus:border-primary focus:ring-0 transition-all tracking-[0.3em]">
                             </div>
                         </div>
@@ -262,7 +263,7 @@
                             <p class="text-[10px] text-slate-500">接收每一筆進場、平倉與自動優化報告</p>
                         </div>
                         <label class="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" checked class="sr-only peer">
+                            <input id="tgNotifyToggle" type="checkbox" checked class="sr-only peer">
                             <div
                                 class="w-11 h-6 bg-slate-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-success after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all">
                             </div>

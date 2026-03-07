@@ -7,6 +7,7 @@ function handleUnauthorized() {
     console.warn("[Auth] Unauthorized or session expired, redirecting to login...");
     localStorage.removeItem("aat_token");
     localStorage.removeItem("aat_email");
+    localStorage.removeItem("aat_user");
 
     // Use replace to avoid back-button loop from login page
     window.location.replace("/login.html");
@@ -53,13 +54,6 @@ async function updateExchangeLink() {
     } catch (err) {
         console.error('Failed to update exchange link:', err);
     }
-}
-
-async function initBinanceConfigModal() {
-    // Deprecated: Environment configuration is now handled globally in the top bar.
-    // This function is kept to avoid import errors until all references are removed.
-    const openBtn = document.getElementById('binanceConfigBtn');
-    if (openBtn) openBtn.style.display = 'none'; // Hide the button instead
 }
 
 function initSidebar() {
@@ -119,68 +113,17 @@ function initSidebar() {
     }
 
     // Auth State UI Update
-    const token = localStorage.getItem("aat_token");
     const email = localStorage.getItem("aat_email");
-    const loginBtn = document.getElementById("loginBtn");
     const logoutBtn = document.getElementById("logoutBtn");
     const loginStatus = document.getElementById("loginStatus");
+    const roleLabel = document.getElementById("roleLabel");
 
-    if (token) {
-        if (loginBtn) loginBtn.classList.add("hidden");
+    if (email) {
         if (logoutBtn) logoutBtn.classList.remove("hidden");
-        if (loginStatus) loginStatus.textContent = email || "已登入";
-    } else {
-        if (loginBtn) loginBtn.classList.remove("hidden");
-        if (logoutBtn) logoutBtn.classList.add("hidden");
-        if (loginStatus) loginStatus.textContent = "未登入";
+        if (loginStatus) loginStatus.textContent = email;
+        if (roleLabel) roleLabel.textContent = "ADMIN";
     }
-}
 
-function initAuthModal(onSuccess) {
-    const dialog = document.getElementById("loginModal");
-    const openBtn = document.getElementById("loginBtn");
-    const closeBtn = document.getElementById("closeAuth");
-    const authForm = document.getElementById("authForm");
-    const toggleMode = document.getElementById("toggleAuthMode");
-    const nameField = document.getElementById("nameField");
-    const authTitle = document.getElementById("authTitle");
-    const authSubmit = document.getElementById("authSubmit");
-
-    if (!dialog || !authForm) return;
-
-    // Remove registration elements
-    if (toggleMode) toggleMode.style.display = 'none';
-    if (nameField) nameField.style.display = 'none';
-    if (authTitle) authTitle.textContent = "系統登入 (Login)";
-    if (authSubmit) authSubmit.textContent = "Verify";
-
-    if (openBtn) openBtn.onclick = () => dialog.showModal();
-    if (closeBtn) closeBtn.onclick = () => dialog.close();
-
-    authForm.onsubmit = async (e) => {
-        e.preventDefault();
-        const email = document.getElementById("authEmail").value;
-        const password = document.getElementById("authPassword").value;
-
-        try {
-            const res = await fetch("/api/auth/login", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, password }),
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.message || data.error || "登入失敗");
-
-            localStorage.setItem("aat_token", data.access_token);
-            localStorage.setItem("aat_email", email);
-            dialog.close();
-            if (onSuccess) onSuccess(data);
-        } catch (err) {
-            alert(err.message);
-        }
-    };
-
-    const logoutBtn = document.getElementById("logoutBtn");
     if (logoutBtn) {
         logoutBtn.onclick = () => {
             localStorage.removeItem("aat_token");
@@ -194,111 +137,98 @@ async function initGlobalEnvSelector(onEnvChange) {
     const envSelectors = document.querySelectorAll(".env-selector");
     if (envSelectors.length === 0) return;
 
-    const token = localStorage.getItem("aat_token");
-    const headers = { 'Content-Type': 'application/json' };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-
     const updateEnvUI = (activeEnv) => {
         let env = activeEnv;
         if (env === 'prod') env = 'real';
 
-        // Re-query targets to avoid stale references after replacement
-        const currentSelectors = document.querySelectorAll(".env-selector");
+        localStorage.setItem('aat_env', env);
 
+        const currentSelectors = document.querySelectorAll(".env-selector");
         currentSelectors.forEach(btn => {
             const btnEnv = btn.dataset.env;
             const isMatch = (btnEnv === env);
 
-            // Reset classes
             btn.classList.remove(
                 "bg-white", "bg-secondary", "bg-primary", "bg-warning",
                 "text-background-dark", "text-white", "shadow-sm", "shadow-neon-glow",
-                "shadow-neon-glow-cyan", "shadow-neon-glow-warning", "ring-2", "ring-white/20"
+                "shadow-neon-glow-cyan", "shadow-neon-glow-warning", "ring-2", "ring-white/20",
+                "border-primary", "bg-primary/5"
             );
-            btn.classList.add("text-slate-500", "hover:bg-white/5");
+            btn.classList.add("text-slate-500", "hover:border-white/20");
 
             if (isMatch) {
-                btn.classList.remove("text-slate-500", "hover:bg-white/5");
-
+                btn.classList.remove("text-slate-500");
                 if (btnEnv === 'test') {
-                    btn.classList.add("bg-secondary", "text-white", "shadow-neon-glow-cyan", "ring-1", "ring-white/30");
-                    btn.innerHTML = `<span class="flex items-center gap-1"><span class="size-1.5 rounded-full bg-white animate-pulse"></span> TEST</span>`;
+                    btn.classList.add("bg-secondary", "text-white", "ring-1", "ring-white/30");
                 } else if (btnEnv === 'paper') {
-                    btn.classList.add("bg-primary", "text-background-dark", "shadow-neon-glow", "ring-1", "ring-primary/50");
-                    btn.innerHTML = `<span class="flex items-center gap-1"><span class="size-1.5 rounded-full bg-background-dark animate-pulse"></span> PAPER</span>`;
+                    btn.classList.add("bg-primary", "text-background-dark", "ring-1", "ring-primary/50");
                 } else if (btnEnv === 'real') {
-                    btn.classList.add("bg-warning", "text-background-dark", "shadow-neon-glow-warning", "ring-1", "ring-warning/50");
-                    btn.innerHTML = `<span class="flex items-center gap-1"><span class="size-1.5 rounded-full bg-background-dark animate-pulse"></span> LIVE</span>`;
+                    btn.classList.add("bg-warning", "text-background-dark", "ring-1", "ring-warning/50");
                 }
-            } else {
-                // Restore static labels for inactive buttons
-                if (btnEnv === 'test') btn.textContent = 'Test';
-                if (btnEnv === 'paper') btn.textContent = 'Paper';
-                if (btnEnv === 'real') btn.textContent = 'Live';
+
+                // Special case for cards in settings.html
+                if (btn.id && btn.id.startsWith('card-')) {
+                    btn.classList.add('border-primary', 'bg-primary/5');
+                }
             }
         });
+
+        // Update currentEnvStatus text if it exists (for settings.html)
+        const statusText = document.getElementById('currentEnvStatus');
+        if (statusText) {
+            const names = { 'test': '測試網 (Testnet)', 'paper': '模擬交易 (Paper)', 'real': '實時交易 (Live)' };
+            statusText.textContent = names[env] || env;
+        }
     };
 
     const setBackendEnv = async (env) => {
         const backendEnv = env === 'real' ? 'prod' : env;
-
-        // Optimistic UI update
         updateEnvUI(backendEnv);
 
         try {
-            await fetch('/api/admin/binance/config', {
+            await apiFetch('/admin/binance/config', {
                 method: 'POST',
-                headers: headers,
                 body: JSON.stringify({ active_env: backendEnv })
             });
             updateExchangeLink();
             if (onEnvChange) onEnvChange(backendEnv);
         } catch (err) {
             console.error("Failed to set env:", err);
-            // Revert UI if needed? Or just show error
         }
     };
 
     envSelectors.forEach(btn => {
-        // Remove old listeners to be safe (though this runs once usually)
-        const newBtn = btn.cloneNode(true);
-        btn.parentNode.replaceChild(newBtn, btn);
-        newBtn.addEventListener("click", () => setBackendEnv(newBtn.dataset.env));
+        btn.addEventListener("click", () => setBackendEnv(btn.dataset.env));
     });
-
-    // Re-select because we replaced nodes
-    const refreshedSelectors = document.querySelectorAll(".env-selector");
 
     // Sync with backend on load
     try {
-        const res = await fetch('/api/admin/binance/config', {
-            headers: token ? { "Authorization": `Bearer ${token}` } : {}
-        });
-        const data = await res.json();
-        if (data.success) {
-            updateEnvUI(data.active_env);
-            if (onEnvChange) onEnvChange(data.active_env);
+        const config = await apiFetch('/admin/binance/config');
+        if (config.success) {
+            updateEnvUI(config.active_env);
+            if (onEnvChange) onEnvChange(config.active_env);
         }
     } catch (err) {
         console.error("Failed to sync env:", err);
     }
-}
-function formatTime(dateStr) {
-    const d = new Date(dateStr);
-    return d.toLocaleTimeString('zh-TW', { hour12: false });
 }
 
 async function apiFetch(path, options = {}) {
     const token = localStorage.getItem("aat_token");
     const headers = options.headers || {};
     if (token) headers["Authorization"] = `Bearer ${token}`;
-    if (!(options.body instanceof FormData) && typeof options.body === 'string') {
+
+    let body = options.body;
+    if (body && typeof body === 'object' && !(body instanceof FormData)) {
         headers["Content-Type"] = "application/json";
+        body = JSON.stringify(body);
     }
 
-    const response = await fetch(`/api${path}`, {
+    const fullPath = path.startsWith('/api') ? path : `/api${path}`;
+    const response = await fetch(fullPath, {
         ...options,
-        headers
+        headers,
+        body
     });
 
     if (response.status === 401) {
@@ -311,10 +241,14 @@ async function apiFetch(path, options = {}) {
 
 function showMessage(msg, type = 'info') {
     const alertEl = document.getElementById('alert');
-    if (!alertEl) return;
+    if (!alertEl) {
+        // Fallback to alert if no element
+        console.log(`[${type}] ${msg}`);
+        return;
+    }
 
     alertEl.textContent = msg;
-    alertEl.classList.remove('hidden', 'bg-primary/10', 'text-primary', 'bg-danger/10', 'text-danger', 'bg-success/10', 'text-success');
+    alertEl.classList.remove('hidden', 'bg-primary/10', 'text-primary', 'bg-danger/10', 'text-danger', 'bg-success/10', 'text-success', 'border-primary/30', 'border-danger/30', 'border-success/30');
 
     if (type === 'danger' || type === 'error') {
         alertEl.classList.add('bg-danger/10', 'text-danger', 'border-danger/30');
@@ -328,14 +262,17 @@ function showMessage(msg, type = 'info') {
     setTimeout(() => alertEl.classList.add('hidden'), 5000);
 }
 
+function formatTime(dateStr) {
+    const d = new Date(dateStr);
+    return d.toLocaleTimeString('zh-TW', { hour12: false });
+}
+
 // 統一導出所有工具函數
 export {
     handleUnauthorized,
     guardRoute,
     updateExchangeLink,
-    initBinanceConfigModal,
     initSidebar,
-    initAuthModal,
     initGlobalEnvSelector,
     apiFetch,
     showMessage,

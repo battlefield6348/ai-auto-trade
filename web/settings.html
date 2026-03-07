@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html class="dark" lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>系統設定 - AI Auto Trade</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+        rel="stylesheet" />
+    <script>
+        if (!localStorage.getItem('aat_token') && !window.location.pathname.endsWith('/login.html')) {
+            window.location.href = '/login.html';
+        }
+    </script>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#0ddff2",
+                        secondary: "#7c3aed",
+                        "background-dark": "#0A0E1A",
+                        "surface-dark": "#161b2e",
+                        "surface-border": "#232d4b",
+                        success: "#10b981",
+                        danger: "#ef4444",
+                        warning: "#f59e0b",
+                    },
+                    fontFamily: {
+                        display: ["Space Grotesk", "sans-serif"],
+                        body: ["Noto Sans TC", "sans-serif"],
+                    },
+                },
+            },
+        };
+    </script>
+    <style>
+        body {
+            font-family: "Space Grotesk", "Noto Sans TC", sans-serif;
+        }
+
+        .sidebar-collapsed {
+            width: 72px !important;
+        }
+
+        .sidebar-collapsed .sidebar-expanded-only {
+            display: none !important;
+        }
+
+        .content-collapsed-padding {
+            padding-left: 72px !important;
+        }
+
+        .glass {
+            background: rgba(22, 27, 46, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(35, 45, 75, 0.5);
+        }
+
+        .scrollbar-thin::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .scrollbar-thin::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .scrollbar-thin::-webkit-scrollbar-thumb {
+            background: #232d4b;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+
+<body class="bg-background-dark text-white min-h-screen flex flex-col antialiased">
+    <aside id="sidebar"
+        class="fixed top-0 left-0 h-full z-40 bg-[#0E1324] border-r border-surface-border flex flex-col transition-all duration-300 overflow-hidden w-64 lg:translate-x-0 -translate-x-full">
+        <div class="px-6 py-8 flex items-center justify-between">
+            <div class="flex items-center gap-3 sidebar-expanded-only text-primary">
+                <div class="size-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                    <span class="material-symbols-outlined font-bold">settings</span>
+                </div>
+                <div class="flex flex-col">
+                    <span class="font-bold font-display tracking-tight text-white leading-none">AI TRADE</span>
+                    <span
+                        class="text-[10px] text-slate-500 font-mono leading-none tracking-widest mt-1 uppercase">Settings</span>
+                </div>
+            </div>
+            <button id="sidebarToggle" class="hidden lg:block p-1.5 hover:bg-white/5 rounded-lg text-slate-400">
+                <span id="sidebarToggleIcon" class="material-symbols-outlined">menu_open</span>
+            </button>
+        </div>
+        <nav class="flex-1 px-3 space-y-1.5 mt-2">
+            <a href="/"
+                class="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/5 text-slate-400 hover:text-white transition-all group">
+                <span class="material-symbols-outlined">dashboard</span>
+                <span class="sidebar-expanded-only font-medium text-sm">儀表板 (Dashboard)</span>
+            </a>
+            <a href="/optimizer.html"
+                class="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/5 text-slate-400 hover:text-white transition-all group">
+                <span class="material-symbols-outlined">psychology</span>
+                <span class="sidebar-expanded-only font-medium text-sm">AI 優化器 (Optimizer)</span>
+            </a>
+            <a href="/strategies.html"
+                class="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/5 text-slate-400 hover:text-white transition-all group">
+                <span class="material-symbols-outlined">analytics</span>
+                <span class="sidebar-expanded-only font-medium text-sm">策略管理 (Strategies)</span>
+            </a>
+            <a href="/backtest.html"
+                class="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/5 text-slate-400 hover:text-white transition-all group">
+                <span class="material-symbols-outlined">query_stats</span>
+                <span class="sidebar-expanded-only font-medium text-sm">回測終端 (Backtest)</span>
+            </a>
+            <a href="/trading.html"
+                class="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/5 text-slate-400 hover:text-white transition-all group">
+                <span class="material-symbols-outlined">rocket_launch</span>
+                <span class="sidebar-expanded-only font-medium text-sm">實時交易 (Trading)</span>
+            </a>
+            <a href="/settings.html"
+                class="flex items-center gap-3 px-3 py-3 rounded-xl bg-primary/10 text-primary border border-primary/20 transition-all font-bold group">
+                <span class="material-symbols-outlined">tune</span>
+                <span class="sidebar-expanded-only text-sm font-bold tracking-tight">系統設定 (Settings)</span>
+            </a>
+        </nav>
+        <div class="p-4 border-t border-surface-border">
+            <button id="logoutBtn"
+                class="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-danger/10 text-slate-400 hover:text-danger transition-all">
+                <span class="material-symbols-outlined">logout</span>
+                <span class="sidebar-expanded-only font-medium text-sm">帳號登出</span>
+            </button>
+        </div>
+    </aside>
+
+    <div id="main-content" class="flex-1 transition-all duration-300 lg:pl-64 flex flex-col">
+        <header
+            class="h-16 px-8 flex items-center justify-between border-b border-surface-border sticky top-0 bg-background-dark/80 backdrop-blur-md z-30">
+            <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary">construction</span>
+                <h1 class="text-xs font-black text-white uppercase tracking-widest">系統偏好設定與 API 管理</h1>
+            </div>
+            <div id="serverClock" class="text-[10px] font-mono text-slate-500 font-bold uppercase tracking-widest">
+                --:--:--</div>
+        </header>
+
+        <main class="flex-1 p-8 lg:p-12 max-w-4xl mx-auto w-full flex flex-col gap-12">
+            <div id="alert" class="hidden rounded border px-4 py-3 text-sm"></div>
+
+            <!-- Section: Trading Environment -->
+            <section>
+                <div class="flex items-center gap-4 mb-8">
+                    <div
+                        class="size-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary shadow-inner">
+                        <span class="material-symbols-outlined text-2xl">science</span>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-black text-white italic tracking-tight">交易執行環境 (Environment)</h2>
+                        <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">切換全域交易模式</p>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <button data-env="test"
+                        class="env-selector glass p-6 rounded-[2rem] text-left hover:border-secondary transition-all group overflow-hidden relative">
+                        <div class="absolute -right-4 -top-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                            <span class="material-symbols-outlined text-8xl">bug_report</span>
+                        </div>
+                        <span class="material-symbols-outlined text-secondary mb-4 block">science</span>
+                        <h3 class="font-bold text-white mb-1">測試網 (Binance Testnet)</h3>
+                        <p class="text-[10px] text-slate-500 leading-relaxed font-body">無風險的開發與調試環境，使用虛擬測試幣進行完全模擬。</p>
+                    </button>
+                    <button data-env="paper"
+                        class="env-selector glass p-6 rounded-[2rem] text-left hover:border-primary transition-all group overflow-hidden relative">
+                        <div class="absolute -right-4 -top-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                            <span class="material-symbols-outlined text-8xl">description</span>
+                        </div>
+                        <span class="material-symbols-outlined text-primary mb-4 block">description</span>
+                        <h3 class="font-bold text-white mb-1">模擬盤 (Paper Trading)</h3>
+                        <p class="text-[10px] text-slate-500 leading-relaxed font-body">接取實時行情，但訂單為系統模擬，不涉及任何真實資產損益。</p>
+                    </button>
+                    <button data-env="real"
+                        class="env-selector glass p-6 rounded-[2rem] text-left hover:border-warning transition-all group overflow-hidden relative">
+                        <div class="absolute -right-4 -top-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                            <span class="material-symbols-outlined text-8xl">payments</span>
+                        </div>
+                        <span class="material-symbols-outlined text-warning mb-4 block">payments</span>
+                        <h3 class="font-bold text-white mb-1">正式盤 (Live Execution)</h3>
+                        <p class="text-[10px] text-slate-500 leading-relaxed font-body">連接主網執行真實交易。啟動前請確認您的資產安全與風險承受能力。
+                        </p>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Section: API Credentials -->
+            <section>
+                <div class="flex items-center gap-4 mb-8">
+                    <div
+                        class="size-12 bg-secondary/10 rounded-2xl flex items-center justify-center text-secondary shadow-inner">
+                        <span class="material-symbols-outlined text-2xl">vpn_key</span>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-black text-white italic tracking-tight">API 憑據管理 (API Credentials)</h2>
+                        <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">配置交易所存取權限</p>
+                    </div>
+                </div>
+                <div class="glass rounded-[2.5rem] p-10 flex flex-col gap-8">
+                    <div class="space-y-6">
+                        <div>
+                            <label
+                                class="block text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-3 ml-1">Binance
+                                API Key</label>
+                            <div class="relative group">
+                                <span
+                                    class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 transition-colors group-focus-within:text-primary">key</span>
+                                <input type="text" placeholder="輸入 API 金鑰..."
+                                    class="w-full bg-background-dark/50 border border-surface-border rounded-2xl py-4 pl-12 pr-6 text-sm text-white focus:border-primary focus:ring-0 transition-all font-mono">
+                            </div>
+                        </div>
+                        <div>
+                            <label
+                                class="block text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-3 ml-1">Binance
+                                Secret Key</label>
+                            <div class="relative group">
+                                <span
+                                    class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 transition-colors group-focus-within:text-primary">lock</span>
+                                <input type="password" placeholder="輸入 Secret Key..."
+                                    class="w-full bg-background-dark/50 border border-surface-border rounded-2xl py-4 pl-12 pr-6 text-sm text-white focus:border-primary focus:ring-0 transition-all tracking-[0.3em]">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="border-t border-surface-border/30 pt-8 flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <span class="size-2 rounded-full bg-success"></span>
+                            <span class="text-[10px] text-slate-500 font-bold uppercase">已加密存儲於伺服器</span>
+                        </div>
+                        <button id="saveApiBtn"
+                            class="px-8 py-3 bg-white text-background-dark text-xs font-black uppercase tracking-widest rounded-xl hover:bg-primary transition-all shadow-lg active:scale-95">更新憑據
+                            (Update Keys)</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section: Notification -->
+            <section>
+                <div class="flex items-center gap-4 mb-8">
+                    <div
+                        class="size-12 bg-success/10 rounded-2xl flex items-center justify-center text-success shadow-inner">
+                        <span class="material-symbols-outlined text-2xl">notifications_active</span>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-black text-white italic tracking-tight">推播通知設定 (Notifications)</h2>
+                        <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">接收即時交易動態</p>
+                    </div>
+                </div>
+                <div class="glass rounded-[2rem] p-8 space-y-6">
+                    <div class="flex items-center justify-between group">
+                        <div>
+                            <h4 class="text-sm font-bold text-white mb-1">Telegram 通知核心</h4>
+                            <p class="text-[10px] text-slate-500">接收每一筆進場、平倉與自動優化報告</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" checked class="sr-only peer">
+                            <div
+                                class="w-11 h-6 bg-slate-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-success after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all">
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script type="module" src="./settings.js"></script>
+</body>
+
+</html>

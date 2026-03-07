@@ -60,6 +60,7 @@ type Server struct {
 	presetStore   backtestPresetStore
 	scoringBtUC   *appStrategy.BacktestUseCase
 	saveScoringBtUC *appStrategy.SaveScoringStrategyUseCase
+	optimizeUC    *appStrategy.OptimizeScoringStrategyUseCase
 	analyzeUC     *analysis.AnalyzeUseCase
 	binanceClient   *binance.Client
 	defaultEnv      tradingDomain.Environment
@@ -160,6 +161,7 @@ func NewServer(cfg config.Config, db *gorm.DB) *Server {
 
 	s.scoringBtUC = appStrategy.NewBacktestUseCase(db, dataRepo)
 	s.saveScoringBtUC = appStrategy.NewSaveScoringStrategyUseCase(db)
+	s.optimizeUC = appStrategy.NewOptimizeScoringStrategyUseCase(s.scoringBtUC, s.saveScoringBtUC)
 	s.analyzeUC = analysis.NewAnalyzeUseCase(dataRepo, dataRepo, dataRepo)
 	s.binanceClient = binanceClient
 	s.defaultEnv = tradingDomain.EnvTest
@@ -248,6 +250,7 @@ func (s *Server) registerRoutes() {
 				strategies.GET("", s.handleListStrategies)
 				strategies.POST("", s.handleCreateStrategy)
 				strategies.POST("/backtest", s.handleInlineBacktest)
+				strategies.POST("/optimize", s.handleOptimizeStrategy)
 				strategies.Any("/execute/:slug", s.handleStrategyExecute)
 
 				instance := strategies.Group("/:id")

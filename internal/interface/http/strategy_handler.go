@@ -288,3 +288,27 @@ func (s *Server) handleGenerateReport(c *gin.Context, strategyID string) {
 		"report":  rep,
 	})
 }
+
+func (s *Server) handleOptimizeStrategy(c *gin.Context) {
+	var body strategy.OptimizeRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid body", "error_code": errCodeBadRequest})
+		return
+	}
+
+	body.CreatedBy = currentUserID(c)
+	if body.CreatedBy == "" {
+		body.CreatedBy = "00000000-0000-0000-0000-000000000001"
+	}
+
+	result, err := s.optimizeUC.Execute(c.Request.Context(), body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error(), "error_code": errCodeInternal})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"result":  result,
+	})
+}

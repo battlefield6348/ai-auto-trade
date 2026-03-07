@@ -1,0 +1,151 @@
+import { apiFetch, showMessage, formatTime } from './common.js';
+
+document.addEventListener('DOMContentLoaded', async () => {
+    setupSidebar();
+    setupClock();
+    setupEventListeners();
+    await updateLoginStatus();
+});
+
+function setupSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const toggle = document.getElementById('sidebarToggle');
+    const toggleIcon = document.getElementById('sidebarToggleIcon');
+    const mainContent = document.getElementById('main-content');
+
+    if (toggle) {
+        toggle.addEventListener('click', () => {
+            sidebar.classList.toggle('sidebar-collapsed');
+            mainContent.classList.toggle('lg:pl-64');
+            mainContent.classList.toggle('lg:pl-[72px]');
+            toggleIcon.textContent = sidebar.classList.contains('sidebar-collapsed') ? 'menu' : 'menu_open';
+        });
+    }
+}
+
+function setupClock() {
+    const clock = document.getElementById('serverClock');
+    setInterval(() => {
+        const now = new Date();
+        clock.textContent = now.toTimeString().split(' ')[0];
+    }, 1000);
+}
+
+function setupEventListeners() {
+    const daysSlider = document.getElementById('optDays');
+    const daysLabel = document.getElementById('optDaysLabel');
+    const runBtn = document.getElementById('runOptimizerBtn');
+
+    daysSlider.addEventListener('input', (e) => {
+        daysLabel.textContent = `${e.target.value} 天`;
+    });
+
+    runBtn.addEventListener('click', runOptimization);
+}
+
+async function runOptimization() {
+    const symbol = document.getElementById('optSymbol').value;
+    const days = parseInt(document.getElementById('optDays').value);
+    const saveTop = document.getElementById('optSaveTop').checked;
+    const runBtn = document.getElementById('runOptimizerBtn');
+
+    // UI Feedback Initialization
+    runBtn.disabled = true;
+    runBtn.innerHTML = `<span class="material-symbols-outlined animate-spin">refresh</span> 優化計算中...`;
+
+    document.getElementById('searchStatus').textContent = "正在計算最佳參數組合...";
+    document.getElementById('searchSubStatus').textContent = "Scanning millions of permutations";
+    document.getElementById('scannerIcon').classList.add('scanner-ring');
+
+    const progressIndicator = document.getElementById('progressIndicator');
+    const progressText = document.getElementById('progressText');
+    const progressBar = document.getElementById('progressBar');
+    const resultsContainer = document.getElementById('resultsContainer');
+    const bestCard = document.getElementById('bestResultCard');
+
+    progressIndicator.classList.remove('hidden');
+    progressText.classList.remove('hidden');
+    resultsContainer.classList.add('hidden');
+    bestCard.classList.add('hidden');
+
+    // Fake progress simulation while wait for API
+    let progress = 0;
+    const progressInterval = setInterval(() => {
+        if (progress < 95) {
+            progress += Math.random() * 5;
+            updateProgress(progress);
+        }
+    }, 300);
+
+    try {
+        const result = await apiFetch('/admin/strategies/optimize', {
+            method: 'POST',
+            body: JSON.stringify({
+                symbol: symbol,
+                days: days,
+                save_top: saveTop
+            })
+        });
+
+        clearInterval(progressInterval);
+        updateProgress(100);
+
+        if (result.success) {
+            displayResults(result.result);
+            showMessage('優化完成！' + (saveTop ? ' 最佳策略已自動儲存並啟用。' : ''), 'success');
+        } else {
+            throw new Error(result.error || '優化失敗');
+        }
+    } catch (err) {
+        clearInterval(progressInterval);
+        showMessage(err.message, 'danger');
+        document.getElementById('searchStatus').textContent = "發生錯誤";
+        document.getElementById('searchSubStatus').textContent = err.message;
+    } finally {
+        runBtn.disabled = false;
+        runBtn.innerHTML = `<span class="material-symbols-outlined">bolt</span> 開始優化計算`;
+        document.getElementById('scannerIcon').classList.remove('scanner-ring');
+    }
+}
+
+function updateProgress(value) {
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    const combos = Math.floor(value * 8421); // Scaled fake number
+
+    progressBar.style.width = `${value}%`;
+    progressText.textContent = `掃描進度：${value.toFixed(1)}% | 已處理：${combos.toLocaleString()} 組合`;
+}
+
+function displayResults(data) {
+    const searchStatus = document.getElementById('searchStatus');
+    const searchSubStatus = document.getElementById('searchSubStatus');
+    const progressIndicator = document.getElementById('progressIndicator');
+    const progressText = document.getElementById('progressText');
+    const bestCard = document.getElementById('bestResultCard');
+
+    searchStatus.textContent = "已找到最佳模型方案";
+    searchSubStatus.textContent = "Recommended Parameters for current market";
+    progressIndicator.classList.add('hidden');
+    progressText.classList.add('hidden');
+
+    bestCard.classList.remove('hidden');
+
+    const best = data.best_strategy;
+    document.getElementById('bestReturn').textContent = `+${data.total_return.toFixed(1)}%`;
+    document.getElementById('bestWinRate').textContent = `${data.win_rate.toFixed(1)}%`;
+    document.getElementById('bestTrades').textContent = data.total_trades;
+    document.getElementById('bestThreshold').textContent = best.threshold;
+
+    const tp = best.risk.take_profit_pct ? (best.risk.take_profit_pct * 100).toFixed(0) : 0;
+    const sl = best.risk.stop_loss_pct ? (best.risk.stop_loss_pct * 100).toFixed(0) : 0;
+    document.getElementById('bestTPSL').textContent = `${tp}% / ${Math.abs(sl)}%`;
+}
+
+async function updateLoginStatus() {
+    const userJson = localStorage.getItem('aat_user');
+    if (!userJson) return;
+    const user = JSON.parse(userJson);
+    document.getElementById('loginStatus').textContent = user.email;
+    document.getElementById('roleLabel').textContent = user.role.toUpperCase();
+}

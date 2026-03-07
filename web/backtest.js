@@ -1,1100 +1,211 @@
-import { updateExchangeLink, initSidebar, initBinanceConfigModal, initAuthModal, initGlobalEnvSelector, handleUnauthorized } from "./common.js";
+import { updateExchangeLink, initSidebar, initBinanceConfigModal, initAuthModal, initGlobalEnvSelector, handleUnauthorized, apiFetch, showMessage } from "./common.js";
 
 const state = {
   token: localStorage.getItem("aat_token") || "",
-  lastEmail: localStorage.getItem("aat_email") || "",
   role: "",
-  btScoreChart: null,
-  btReturnChart: null,
-  debounceTimer: null,
+  scoreChart: null,
 };
 
 const el = (id) => document.getElementById(id);
-const val = (id, def = "") => el(id)?.value || def;
-const setVal = (id, v) => {
-  const element = el(id);
-  if (element) element.value = v;
-};
-const checked = (id) => !!el(id)?.checked;
-const setChecked = (id, v) => {
-  const element = el(id);
-  if (element) element.checked = !!v;
-};
 
-function debounce(fn, delay = 500) {
-  return (...args) => {
-    clearTimeout(state.debounceTimer);
-    state.debounceTimer = setTimeout(() => fn(...args), delay);
-  };
-}
+function setupSliders() {
+  const sliders = [
+    { id: 'maWeightSlider', valId: 'maWeightVal' },
+    { id: 'volWeightSlider', valId: 'volWeightVal' },
+    { id: 'rsiWeightSlider', valId: 'rsiWeightVal' }
+  ];
 
-function setAlert(msg, type = "info") {
-  const box = el("alert");
-  if (!msg) {
-    box.classList.add("hidden");
-    box.textContent = "";
-    return;
-  }
-  const palette = {
-    info: "border-primary/30 bg-primary/10 text-primary",
-    error: "border-danger/30 bg-danger/10 text-danger",
-    success: "border-success/30 bg-success/10 text-success",
-  };
-  box.className = `rounded border px-4 py-3 text-sm ${palette[type] || palette.info}`;
-  box.textContent = msg;
-  box.classList.remove("hidden");
-  // Scroll to top to ensure user sees the alert
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-function authHeaders(requireAuth = true) {
-  const headers = {};
-  if (requireAuth && state.token) headers["Authorization"] = `Bearer ${state.token}`;
-  return headers;
-}
-
-async function api(path, { method = "GET", body, requireAuth = true } = {}) {
-  const headers = authHeaders(requireAuth);
-  let payload = body;
-  if (body && typeof body === "object" && !(body instanceof FormData)) {
-    headers["Content-Type"] = "application/json";
-    payload = JSON.stringify(body);
-  }
-  console.log(`[API] ${method} ${path}`, body || "");
-  const res = await fetch(path, { method, headers, body: payload });
-  if (res.status === 401) {
-    handleUnauthorized();
-    throw new Error("需要登入或權限不足");
-  }
-  const data = await res.json().catch(() => ({}));
-  console.log(`[API] Response ${path}:`, data);
-  if (!res.ok || data.success === false) {
-    const msg = data?.message || data?.error || data?.reason || res.statusText;
-    throw new Error(msg);
-  }
-  if (res.headers.get("x-user-role")) {
-    state.role = res.headers.get("x-user-role");
-    el("loginStatus").textContent = `已登入：${state.lastEmail || state.role}`;
-  }
-  return data;
+  sliders.forEach(s => {
+    const slider = el(s.id);
+    const valDisp = el(s.valId);
+    if (slider && valDisp) {
+      slider.addEventListener('input', () => {
+        valDisp.textContent = `${slider.value}%`;
+      });
+    }
+  });
 }
 
 function readForm() {
-  const parse = (id, def = 0) => {
-    const element = el(id);
-    if (!element) return def;
-    const v = parseFloat(element.value);
-    return isNaN(v) ? def : v;
-  };
-  const horizons = val("btHorizons", "3,5,10")
-    .split(",")
-    .map((s) => parseInt(s.trim(), 10))
-    .filter((n) => !isNaN(n));
+  const horizons = [3, 5, 10]; // Fixed for now based on UI
 
-  const buildSide = (prefix) => ({
-    weights: {
-      score: parse(prefix + "ScoreWeight", 1.0),
-      change_bonus: parse(prefix + "ChangeBonus", 10),
-      volume_bonus: parse(prefix + "VolumeBonus", 10),
-      ma_bonus: parse(prefix + "MaBonus", 5),
-      range_bonus: parse(prefix + "RangeBonus", 5),
-      return_bonus: 0,
-      amp_bonus: 0
-    },
-    thresholds: {
-      change_min: parse(prefix + "ChangeMin", 0.5) / 100,
-      volume_ratio_min: parse(prefix + "VolMin", 1.2),
-      ma_gap_min: parse(prefix + "MaGapMin", 1) / 100,
-      range_min: parse(prefix + "RangeMin", 80),
-      return5_min: 0,
-      amp_min: 0
-    },
-    flags: {
-      use_change: checked(prefix + "UseChange"),
-      use_volume: checked(prefix + "UseVolume"),
-      use_ma: checked(prefix + "UseMa"),
-      use_range: checked(prefix + "UseRange"),
-      use_return: false,
-      use_amp: false
-    },
-    total_min: parse(prefix + "TotalMin", 60)
-  });
+  // Sliders
+  const maWeight = parseInt(el('maWeightSlider').value);
+  const volWeight = parseInt(el('volWeightSlider').value);
+  const rsiWeight = parseInt(el('rsiWeightSlider').value);
 
+  // Inputs
+  const tp = parseFloat(el('tpInput').value) / 100 || 0.125;
+  const sl = parseFloat(el('slInput').value) / 100 || 0.03;
+
+  // Build standard request payload compatible with backend
   return {
-    symbol: (val("btSymbol") || "BTCUSDT").trim().toUpperCase(),
-    start_date: val("btStart"),
-    end_date: val("btEnd"),
-    entry: buildSide("btEntry"),
-    exit: buildSide("btExit"),
-    horizons: horizons.length ? horizons : [3, 5, 10],
-    timeframe: "1d"
+    symbol: "BTCUSDT",
+    start_date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Last 30 days
+    end_date: new Date().toISOString().split('T')[0],
+    entry: {
+      weights: {
+        score: rsiWeight, // Map RSI to base score weight for now
+        ma_bonus: maWeight,
+        volume_bonus: volWeight,
+      },
+      thresholds: {
+        ma_gap_min: 0.01,
+        volume_ratio_min: 1.5,
+      },
+      flags: {
+        use_ma: true,
+        use_volume: true,
+      },
+      total_min: 60
+    },
+    exit: {
+      // Using TP/SL on the UI side translates to specific rules for the backend
+      weights: { score: 100 },
+      thresholds: { total_min: 40 },
+      flags: {},
+      total_min: 40
+    },
+    horizons: horizons,
+    timeframe: "1h" // Switched to 1h based on UI screenshot
   };
 }
 
-function updateVisibility() {
-  // Simple check based on prefix
-  ["btEntry", "btExit"].forEach(prefix => {
-    ["UseChange", "UseVolume", "UseMa", "UseRange"].forEach(name => {
-      const checkbox = el(prefix + name);
-      if (checkbox) {
-        // Toggle opacity or related inputs if needed, though they are inline now
-        // For now just refresh max score
-      }
+async function runBacktest() {
+  const payload = readForm();
+  const btn = el('runBacktestBtn');
+  btn.disabled = true;
+  btn.classList.add('opacity-50');
+
+  try {
+    const res = await apiFetch("/analysis/backtest", {
+      method: "POST",
+      body: JSON.stringify(payload)
     });
-  });
-  updateMaxScore();
-}
 
-function updateMaxScore() {
-  const parse = (id) => parseFloat(el(id)?.value) || 0;
-
-  let totalEntry = parse("btEntryScoreWeight");
-  if (el("btEntryUseChange").checked) totalEntry += parse("btEntryChangeBonus");
-  if (el("btEntryUseVolume").checked) totalEntry += parse("btEntryVolumeBonus");
-  if (el("btEntryUseMa").checked) totalEntry += parse("btEntryMaBonus");
-  if (el("btEntryUseRange")?.checked) totalEntry += parse("btEntryRangeBonus");
-
-  const display = el("maxPossibleScore");
-  if (display) display.textContent = totalEntry.toFixed(1);
-}
-
-function fillForm(cfg) {
-  if (!cfg) return;
-  if (cfg.symbol) setVal("btSymbol", cfg.symbol);
-  if (cfg.start_date) setVal("btStart", cfg.start_date);
-  if (cfg.end_date) setVal("btEnd", cfg.end_date);
-
-  const mapSide = (prefix, sideCfg) => {
-    if (!sideCfg) return;
-    if (sideCfg.weights) {
-      setVal(prefix + "ScoreWeight", sideCfg.weights.score ?? 0);
-      setVal(prefix + "ChangeBonus", sideCfg.weights.change_bonus ?? 0);
-      setVal(prefix + "VolumeBonus", sideCfg.weights.volume_bonus ?? 0);
-      setVal(prefix + "MaBonus", sideCfg.weights.ma_bonus ?? 0);
-      setVal(prefix + "RangeBonus", sideCfg.weights.range_bonus ?? 0);
+    if (res.success) {
+      renderResult(res.result || res.data);
+      showMessage("回測執行完成", "success");
     }
-    if (sideCfg.thresholds) {
-      setVal(prefix + "ChangeMin", (sideCfg.thresholds.change_min ?? 0) * 100);
-      setVal(prefix + "VolMin", sideCfg.thresholds.volume_ratio_min ?? 1.0);
-      setVal(prefix + "MaGapMin", (sideCfg.thresholds.ma_gap_min ?? 0) * 100);
-      setVal(prefix + "RangeMin", (sideCfg.thresholds.range_min ?? 0) * 100);
-    }
-    if (sideCfg.flags) {
-      setChecked(prefix + "UseChange", !!sideCfg.flags.use_change);
-      setChecked(prefix + "UseVolume", !!sideCfg.flags.use_volume);
-      setChecked(prefix + "UseMa", !!sideCfg.flags.use_ma);
-      setChecked(prefix + "UseRange", !!sideCfg.flags.use_range);
-    }
-    if (sideCfg.total_min !== undefined) setVal(prefix + "TotalMin", sideCfg.total_min);
-  };
-
-  if (cfg.entry) mapSide("btEntry", cfg.entry);
-  if (cfg.exit) mapSide("btExit", cfg.exit);
-
-  // Transition support for legacy presets
-  if (cfg.weights && !cfg.entry) {
-    // Basic mapping for score and common flags
-    setVal("btEntryScoreWeight", cfg.weights.score || 50);
-    setVal("btEntryTotalMin", cfg.thresholds?.total_min || 60);
+  } catch (err) {
+    showMessage(err.message, "danger");
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('opacity-50');
   }
-
-  if (cfg.horizons) setVal("btHorizons", cfg.horizons.join(","));
-  updateVisibility();
 }
-
 
 function renderResult(res) {
-  console.log("[Backtest] Rendering result:", res);
-  // Unwrap if nested in data or result (backend inconsistency fix)
-  if (res && res.data && !res.summary) res = res.data;
-  else if (res && res.result && !res.summary) res = res.result;
+  if (!res) return;
 
-  const box = el("btResult");
-  const list = el("btEvents");
-  const resetCharts = () => {
-    if (state.btScoreChart) state.btScoreChart.destroy();
-    if (state.btReturnChart) state.btReturnChart.destroy();
-    state.btScoreChart = null;
-    state.btReturnChart = null;
-  };
-  if (list) list.innerHTML = "";
-  if (!box) return;
-  if (!res || res.error || (!res.summary && !res.events && !res.trades)) {
-    box.textContent = res?.error || "尚未執行回測或返回資料為空";
-    resetCharts();
-    return;
-  }
-  const summary = res.summary || {};
-  const stats = res.stats || {};
-  const rows = [];
-  rows.push(`<div class="text-xs text-slate-400">交易對：${res.symbol || ""}</div>`);
-  rows.push(`<div>期間：${res.start_date || "--"} ~ ${res.end_date || "--"}</div>`);
+  // Update Summary
+  el('summaryPnl').textContent = `${(res.summary?.total_return || 0).toFixed(2)}%`;
+  el('summaryMdd').textContent = `${(res.summary?.mdd || 0).toFixed(2)}%`;
+  el('summaryWinRate').textContent = `${(res.summary?.win_rate || 0).toFixed(1)}%`;
 
-  if (summary.total_trades !== undefined) {
-    rows.push(`
-      <div class="grid grid-cols-2 gap-4 mt-4 p-4 bg-primary/5 rounded-xl border border-primary/20">
-        <div>
-          <div class="text-[10px] text-slate-500 uppercase font-bold">總交易次數</div>
-          <div class="text-xl font-black text-white">${summary.total_trades} 次</div>
-        </div>
-        <div>
-          <div class="text-[10px] text-slate-500 uppercase font-bold">累積收益率</div>
-          <div class="text-xl font-black ${summary.total_return >= 0 ? 'text-success' : 'text-danger'}">${summary.total_return.toFixed(2)}%</div>
-        </div>
-        <div>
-          <div class="text-[10px] text-slate-500 uppercase font-bold">勝率</div>
-          <div class="text-xl font-black text-white">${summary.win_rate?.toFixed(1) || 0}%</div>
-        </div>
-      </div>
-    `);
-  }
+  // Render Table
+  const tbody = el('tradeLogsBody');
+  tbody.innerHTML = "";
+  const trades = res.trades || [];
 
-  if (stats.returns) {
-    rows.push(`<div class="mt-4 text-[10px] text-slate-500 uppercase font-bold">統計預估：</div>`);
-    const items = Object.entries(stats.returns).map(
-      ([k, v]) => `<span class="text-xs text-slate-300">${k.replace('d', '')}日後: ${(v.avg_return * 100).toFixed(2)}% (勝率 ${(v.win_rate * 100).toFixed(1)}%)</span>`
-    );
-    rows.push(`<div class="flex flex-wrap gap-x-4 gap-y-1">${items.join("")}</div>`);
-  }
-  box.innerHTML = rows.join("");
-
-  if (list) {
-    list.innerHTML = "";
-    const trades = res.trades || [];
-    if (trades.length > 0) {
-      // Show Simulation Trades
-      const h3 = document.createElement("h3");
-      h3.className = "text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-4 mt-6";
-      h3.textContent = "交易明細 (Trades)";
-      list.appendChild(h3);
-
-      trades.forEach((t) => {
-        const div = document.createElement("div");
-        div.className = "border border-surface-border rounded-lg p-3 bg-background-dark/50 hover:border-primary/50 transition-all";
-        div.innerHTML = `
-          <div class="flex justify-between items-start mb-2">
-            <div class="flex flex-col">
-              <span class="text-[10px] text-slate-500 font-bold uppercase">進場 (Entry)</span>
-              <span class="text-xs text-white font-mono">${t.entry_date}</span>
-            </div>
-            <div class="flex flex-col items-end">
-              <span class="text-[10px] text-slate-500 font-bold uppercase">出場 (Exit)</span>
-              <span class="text-xs text-white font-mono">${t.exit_date}</span>
-            </div>
-          </div>
-          <div class="flex justify-between items-center bg-black/20 p-2 rounded">
-             <div class="text-xs font-mono text-slate-400">@ ${t.entry_price.toFixed(1)}</div>
-             <div class="material-symbols-outlined text-xs text-slate-600">arrow_forward</div>
-             <div class="text-xs font-mono text-slate-400">@ ${t.exit_price.toFixed(1)}</div>
-          </div>
-          <div class="flex justify-between items-center mt-2">
-            <span class="text-[10px] text-slate-400">${t.reason || ""}</span>
-            <span class="text-sm font-black ${t.pnl_pct >= 0 ? 'text-success' : 'text-error'}">
-              ${t.pnl_pct >= 0 ? '+' : ''}${(t.pnl_pct * 100).toFixed(2)}%
-            </span>
-          </div>
-        `;
-        list.appendChild(div);
-      });
-    } else {
-      // Fallback to Events if no trades
-      const hits = (res.events || []).filter(e => e.is_triggered);
-      hits.slice(0, 20).forEach((ev) => {
-        const div = document.createElement("div");
-        div.className = "border border-surface-border rounded-lg p-3 bg-background-dark/50";
-        div.innerHTML = `
-          <div class="flex justify-between text-xs text-slate-400">
-            <span>${ev.trade_date || "--"}</span>
-            <span>命中</span>
-          </div>
-          <div class="text-sm text-white mt-1 font-mono">收盤 ${ev.close_price}</div>
-          <div class="text-xs text-primary">總分：${ev.total_score != null ? ev.total_score.toFixed(1) : "--"}</div>
-        `;
-        list.appendChild(div);
-      });
-    }
-  }
-
-  renderCharts(res.events || []);
-}
-
-function renderCharts(events) {
-  const sorted = [...events].sort((a, b) => (a.trade_date || "").localeCompare(b.trade_date || ""));
-  const labels = sorted.map((e) => e.trade_date);
-  const scoreData = sorted.map((e) => e.total_score ?? null);
-  const closeData = sorted.map((e) => e.close_price ?? null);
-  const signalData = sorted.map((e, idx) => (e.is_triggered ? closeData[idx] : null));
-  const fwd5 = sorted.map((e) => {
-    const v = e.forward_returns?.d5;
-    return v == null ? null : v * 100;
-  });
-
-  if (state.btScoreChart) state.btScoreChart.destroy();
-  if (state.btReturnChart) state.btReturnChart.destroy();
-
-  const scoreCtx = el("btScoreChart");
-  const retCtx = el("btReturnChart");
-  if (scoreCtx) {
-    state.btScoreChart = new Chart(scoreCtx, {
-      type: "line",
-      data: {
-        labels,
-        datasets: [
-          {
-            label: "買入訊號",
-            data: signalData,
-            type: "scatter",
-            backgroundColor: "#facc15",
-            borderColor: "#fff",
-            borderWidth: 1.5,
-            pointRadius: 6,
-            pointHoverRadius: 9,
-            yAxisID: "y",
-            zIndex: 10
-          },
-          {
-            label: "收盤價格",
-            data: closeData,
-            borderColor: "#0ddff2",
-            backgroundColor: "rgba(13,223,242,0.05)",
-            borderWidth: 2,
-            fill: true,
-            yAxisID: "y",
-            pointRadius: 0,
-            tension: 0.2,
-            zIndex: 5
-          },
-          {
-            label: "量化總分",
-            data: scoreData,
-            borderColor: "rgba(124,58,237,0.4)",
-            backgroundColor: "transparent",
-            borderWidth: 1,
-            fill: false,
-            yAxisID: "y1",
-            pointRadius: 0,
-            tension: 0.1,
-            zIndex: 1
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: "index", intersect: false },
-        scales: {
-          y: {
-            position: "left",
-            title: { display: true, text: "價格 (USDT)", color: "#64748b", font: { size: 10, weight: "bold" } },
-            ticks: { color: "#cbd5e1", font: { family: "JetBrains Mono, monospace", size: 10 } },
-            grid: { color: "rgba(255,255,255,0.03)" }
-          },
-          y1: {
-            position: "right",
-            min: 0,
-            max: 100,
-            title: { display: true, text: "評分", color: "#64748b", font: { size: 10, weight: "bold" } },
-            ticks: { color: "rgba(124,58,237,0.6)", font: { size: 10 } },
-            grid: { drawOnChartArea: false }
-          },
-          x: {
-            ticks: { color: "#64748b", font: { size: 9 }, maxRotation: 45, minRotation: 45 },
-            grid: { display: false }
-          },
-        },
-        plugins: {
-          legend: {
-            position: "top",
-            align: "end",
-            labels: { color: "#94a3b8", font: { size: 10, weight: "bold" }, usePointStyle: true, boxWidth: 6 }
-          },
-          tooltip: {
-            backgroundColor: "rgba(15, 23, 42, 0.9)",
-            titleFont: { size: 12 },
-            bodyFont: { size: 11 },
-            padding: 12,
-            borderColor: "rgba(255,255,255,0.1)",
-            borderWidth: 1
-          }
-        },
-      },
-    });
-  }
-
-  if (retCtx) {
-    state.btReturnChart = new Chart(retCtx, {
-      type: "bar",
-      data: { labels, datasets: [{ label: "Forward Return (d5)", data: fwd5, backgroundColor: "#10b981" }] },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-          y: { ticks: { color: "#cbd5e1", callback: (v) => `${v}%` }, grid: { color: "rgba(255,255,255,0.05)" } },
-          x: { ticks: { color: "#94a3b8" }, grid: { color: "rgba(255,255,255,0.05)" } },
-        },
-        plugins: { legend: { labels: { color: "#e2e8f0" } } },
-      },
-    });
-  }
-}
-
-function setBusy(id, busy, labelWhenIdle) {
-  const btn = el(id);
-  if (!btn) return;
-  if (busy) {
-    btn.disabled = true;
-    btn.dataset.originalLabel = btn.textContent;
-    btn.textContent = "執行中...";
-    btn.classList.add("opacity-50", "cursor-wait");
+  if (trades.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="px-8 py-20 text-center text-slate-600 italic">無交易紀錄</td></tr>';
   } else {
-    btn.disabled = false;
-    btn.textContent = labelWhenIdle || btn.dataset.originalLabel || "";
-    btn.classList.remove("opacity-50", "cursor-wait");
+    trades.forEach(t => {
+      const tr = document.createElement('tr');
+      tr.className = "border-b border-surface-border/20 hover:bg-white/5 transition-all group";
+      tr.innerHTML = `
+                <td class="px-8 py-5 text-slate-400 font-mono">${t.entry_date}</td>
+                <td class="px-6 py-5 text-center"><span class="px-2 py-0.5 bg-primary/10 text-primary text-[10px] font-bold rounded">LONG</span></td>
+                <td class="px-6 py-5 text-center font-mono text-white">${t.entry_price.toLocaleString()}</td>
+                <td class="px-6 py-5 text-center">
+                    <div class="w-full bg-slate-800 h-1 rounded-full overflow-hidden mb-1">
+                        <div class="bg-secondary h-full" style="width: 85%"></div>
+                    </div>
+                </td>
+                <td class="px-6 py-5 text-center"><span class="px-2 py-0.5 bg-primary/10 text-primary text-[10px] font-bold rounded uppercase">${t.reason || 'Take Profit'}</span></td>
+                <td class="px-6 py-5 text-center font-mono text-white">${t.exit_price.toLocaleString()}</td>
+                <td class="px-8 py-5 text-right font-black ${t.pnl_pct >= 0 ? 'text-success' : 'text-danger'}">${(t.pnl_pct * 100).toFixed(2)}%</td>
+            `;
+      tbody.appendChild(tr);
+    });
   }
+
+  renderChart(res.events || []);
 }
 
-async function runBacktest(isAuto = false) {
-  let payload;
-  try {
-    payload = readForm();
-  } catch (err) {
-    console.error("[Backtest] readForm failed:", err);
-    if (!isAuto) setAlert("參數讀取失敗：" + err.message, "error");
-    return;
-  }
-  if (!payload.start_date || !payload.end_date) {
-    if (!isAuto) setAlert("請選擇起始與結束日期", "error");
-    return;
-  }
-  console.log("[Backtest] Request Payload:", payload);
-  if (!isAuto) setBusy("runBacktestBtn", true, "執行中...");
-  try {
-    const res = await api("/api/analysis/backtest", { method: "POST", body: payload });
-    console.log("[Backtest] Successful Response:", res);
-    renderResult(res);
-    if (!isAuto) setAlert("回測完成", "success");
-    else setAlert("");
-  } catch (err) {
-    console.error("[Backtest] Request Failed:", err);
-    if (!isAuto) setAlert(err.message, "error");
-    renderResult({ error: err.message });
-  } finally {
-    if (!isAuto) setBusy("runBacktestBtn", false, "執行回測");
-  }
-}
+function renderChart(events) {
+  const ctx = el('btScoreChart').getContext('2d');
+  if (state.scoreChart) state.scoreChart.destroy();
 
-const debouncedRunBacktest = debounce(() => runBacktest(true), 400);
+  const sorted = [...events].sort((a, b) => a.trade_date.localeCompare(b.trade_date));
+  const labels = sorted.map(e => e.trade_date.split(' ')[0]);
+  const prices = sorted.map(e => e.close_price);
+  const scores = sorted.map(e => e.total_score);
 
-// runDbStrategy removed, now unified into runBacktest
-
-
-async function confirmSaveScoringStrategy(sourceBtnId = "confirmSaveStrategyBtn") {
-  const isUpdateAction = (sourceBtnId === "updateStrategyBtn");
-
-  // Source of truth for identity
-  let name, slug;
-  if (isUpdateAction) {
-    slug = val("btStrategySlug");
-    const select = el("btStrategySlug");
-    if (select && select.selectedIndex >= 0) {
-      name = select.options[select.selectedIndex].text.split(" (")[0];
-    } else {
-      name = val("newStrategyName").trim();
-    }
-  } else {
-    name = val("newStrategyName").trim();
-    slug = val("newStrategySlug").trim();
-  }
-
-  if (!name || !slug) {
-    console.warn("[SaveStrategy] Name or Slug missing");
-    return setAlert("請輸入名稱與代碼", "error");
-  }
-
-  const originalText = el(sourceBtnId).textContent;
-  setBusy(sourceBtnId, true, "同步中...");
-  try {
-    const rules = [];
-
-    // Helpers
-    const parse = (id, def = 0) => {
-      const v = parseFloat(val(id));
-      return isNaN(v) ? def : v;
-    };
-
-    // 1. Entry Rules
-    rules.push({
-      condition_name: "進場 AI 核心評分",
-      type: "BASE_SCORE",
-      params: {},
-      weight: parse("btEntryScoreWeight"),
-      rule_type: "entry"
-    });
-
-    if (checked("btEntryUseChange")) {
-      rules.push({
-        condition_name: "進場價格漲幅",
-        type: "PRICE_RETURN",
-        params: { days: 1, min: parse("btEntryChangeMin") / 100 },
-        weight: parse("btEntryChangeBonus"),
-        rule_type: "entry"
-      });
-    }
-    if (checked("btEntryUseVolume")) {
-      rules.push({
-        condition_name: "進場成交量激增",
-        type: "VOLUME_SURGE",
-        params: { min: parse("btEntryVolMin") },
-        weight: parse("btEntryVolumeBonus"),
-        rule_type: "entry"
-      });
-    }
-    if (checked("btEntryUseMa")) {
-      rules.push({
-        condition_name: "進場均線偏離",
-        type: "MA_DEVIATION",
-        params: { ma: 20, min: parse("btEntryMaGapMin") / 100 },
-        weight: parse("btEntryMaBonus"),
-        rule_type: "entry"
-      });
-    }
-    if (checked("btEntryUseRange")) {
-      rules.push({
-        condition_name: "進場價格位階",
-        type: "RANGE_POS",
-        params: { days: 20, min: parse("btEntryRangeMin") / 100 },
-        weight: parse("btEntryRangeBonus"),
-        rule_type: "entry"
-      });
-    }
-
-    // 2. Exit Rules
-    rules.push({
-      condition_name: "維持/出場 AI 分數",
-      type: "BASE_SCORE",
-      params: {},
-      weight: parse("btExitScoreWeight"),
-      rule_type: "exit"
-    });
-
-    if (checked("btExitUseChange")) {
-      rules.push({
-        condition_name: "出場價格跌幅",
-        type: "PRICE_RETURN",
-        params: { days: 1, min: parse("btExitChangeMin") / 100 },
-        weight: parse("btExitChangeBonus"),
-        rule_type: "exit"
-      });
-    }
-    if (checked("btExitUseMa")) {
-      rules.push({
-        condition_name: "出場均線支撐",
-        type: "MA_DEVIATION",
-        params: { ma: 20, min: parse("btExitMaGapMin") / 100 },
-        weight: parse("btExitMaBonus"),
-        rule_type: "exit"
-      });
-    }
-
-    const payload = {
-      name: name,
-      slug: slug,
-      base_symbol: (val("btSymbol") || "BTCUSDT").trim().toUpperCase(),
-      timeframe: "1d",
-      threshold: parse("btEntryTotalMin"),
-      exit_threshold: parse("btExitTotalMin"), // Always use the visible field
-      rules: rules
-    };
-
-    console.log("[SaveStrategy] Sending payload:", payload);
-    await api("/api/analysis/strategies/save-scoring", { method: "POST", body: payload });
-
-    const isUpdateAction = sourceBtnId === "updateStrategyBtn";
-    setAlert(`策略 [${name}] 已${isUpdateAction ? '更新同步' : '成功存入資料庫'}`, "success");
-    el("saveAsStrategyForm").classList.add("hidden");
-
-    if (!isUpdateAction) {
-      const select = el("btStrategySlug");
-      if (select) {
-        while (select.options.length > 1) select.remove(1);
+  state.scoreChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: 'BTC 價格',
+          data: prices,
+          borderColor: '#0ddff2',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.4,
+          yAxisID: 'y',
+        },
+        {
+          label: 'AI 置信度',
+          data: scores,
+          borderColor: '#7c3aed',
+          borderWidth: 1,
+          borderDash: [5, 5],
+          pointRadius: 0,
+          tension: 0.4,
+          yAxisID: 'y1',
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: {
+          position: 'left',
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          ticks: { color: '#64748b', font: { size: 10 } }
+        },
+        y1: {
+          position: 'right',
+          min: 0,
+          max: 100,
+          grid: { display: false },
+          ticks: { color: '#7c3aed', font: { size: 10 } }
+        },
+        x: {
+          grid: { display: false },
+          ticks: { color: '#64748b', font: { size: 9 }, maxRotation: 0 }
+        }
+      },
+      plugins: {
+        legend: { display: false }
       }
-      await fetchStrategies();
-      setVal("btStrategySlug", slug);
-      el("updateStrategyBtn").classList.remove("hidden");
-    } else {
-      await fetchStrategies();
-      setTimeout(() => runBacktest(true), 300);
     }
-  } finally {
-    setBusy(sourceBtnId, false, originalText);
-  }
-}
-
-async function fetchStrategies() {
-  try {
-    const currentSlug = val("btStrategySlug");
-    const res = await api("/api/analysis/strategies");
-    const select = el("btStrategySlug");
-    if (!select) return;
-
-    // Clear existing options (except first empty one)
-    while (select.options.length > 1) {
-      select.remove(1);
-    }
-
-    if (res.strategies) {
-      res.strategies.forEach(s => {
-        const opt = document.createElement("option");
-        opt.value = s.slug;
-        opt.textContent = `${s.name} (${s.slug})`;
-        select.appendChild(opt);
-      });
-    }
-
-    if (currentSlug) {
-      setVal("btStrategySlug", currentSlug);
-    }
-  } catch (err) {
-    console.error("Failed to fetch strategies:", err);
-  }
-}
-
-async function loadStrategyDetails(slug) {
-  if (!slug) return;
-  console.log(`[Strategy] Loading details for ${slug}...`);
-  try {
-    const res = await api(`/api/analysis/strategies/get?slug=${slug}`);
-    if (res.strategy) {
-      const s = res.strategy;
-      const cfg = {
-        symbol: s.base_symbol,
-        entry: {
-          weights: { score: 0, change_bonus: 0, volume_bonus: 0, ma_bonus: 0, range_bonus: 0 },
-          thresholds: { change_min: 0, volume_ratio_min: 1.0, ma_gap_min: 0, range_min: 0 },
-          flags: { use_change: false, use_volume: false, use_ma: false, use_range: false },
-          total_min: s.threshold
-        },
-        exit: {
-          weights: { score: 0, change_bonus: 0, volume_bonus: 0, ma_bonus: 0, range_bonus: 0 },
-          thresholds: { change_min: 0, volume_ratio_min: 1.0, ma_gap_min: 0, range_min: 0 },
-          flags: { use_change: false, use_volume: false, use_ma: false, use_range: false },
-          total_min: s.exit_threshold ?? 45
-        }
-      };
-
-      (s.rules || []).forEach(r => {
-        const type = r.condition?.type;
-        const params = r.condition?.params || {};
-        const side = r.rule_type === "exit" ? "exit" : "entry";
-        const target = cfg[side];
-
-        if (type === "PRICE_RETURN" && params.days === 1) {
-          target.weights.change_bonus = r.weight;
-          target.thresholds.change_min = params.min;
-          target.flags.use_change = true;
-        } else if (type === "VOLUME_SURGE") {
-          target.weights.volume_bonus = r.weight;
-          target.thresholds.volume_ratio_min = params.min;
-          target.flags.use_volume = true;
-        } else if (type === "MA_DEVIATION") {
-          target.weights.ma_bonus = r.weight;
-          target.thresholds.ma_gap_min = params.min;
-          target.flags.use_ma = true;
-        } else if (type === "BASE_SCORE") {
-          target.weights.score = r.weight;
-        } else if (type === "RANGE_POS") {
-          target.weights.range_bonus = r.weight;
-          target.thresholds.range_min = params.min;
-          target.flags.use_range = true;
-        } else {
-          // Fallback for unknown types
-          target.weights.score += r.weight;
-        }
-      });
-      fillForm(cfg);
-
-      // Show Update button when a strategy is loaded
-      el("updateStrategyBtn").classList.remove("hidden");
-
-      // Pre-fill Save Form for Editing (but don't show it yet)
-      setVal("newStrategyName", s.name);
-      setVal("newStrategySlug", s.slug);
-      setVal("newStrategyExitThreshold", s.exit_threshold ?? 10);
-
-      setAlert(`已載入策略: ${s.name}，上方的回測條件已更新`, "success");
-      // Trigger a run with new parameters
-      setTimeout(() => runBacktest(true), 200);
-    }
-  } catch (err) {
-    console.error("[Strategy] Load failed:", err);
-    setAlert(err.message, "error");
-  }
-}
-
-async function savePreset() {
-  const payload = readForm();
-  setBusy("savePresetBtn", true, "儲存中");
-  console.log("[Preset] Saving...", payload);
-  try {
-    await api("/api/analysis/backtest/preset", { method: "POST", body: payload });
-    setAlert("已儲存為預設", "success");
-  } catch (err) {
-    setAlert(err.message, "error");
-  } finally {
-    setBusy("savePresetBtn", false, "儲存為預設");
-  }
-}
-
-async function loadPreset() {
-  setBusy("loadPresetBtn", true, "載入中");
-  try {
-    console.log("[Preset] Loading...");
-    const res = await api("/api/analysis/backtest/preset");
-    if (res.preset) {
-      fillForm(res.preset);
-      setAlert("已載入預設", "success");
-    } else {
-      setAlert(res.message || "尚無預設", "info");
-    }
-  } catch (err) {
-    setAlert(err.message, "error");
-  } finally {
-    setBusy("loadPresetBtn", false, "載入預設");
-  }
-}
-
-async function login(email, password) {
-  console.log(`[Auth] Logging in as ${email}...`);
-  const data = await api("/api/auth/login", { method: "POST", body: { email, password }, requireAuth: false });
-  state.token = data.access_token;
-  state.lastEmail = email;
-  localStorage.setItem("aat_token", state.token);
-  localStorage.setItem("aat_email", email);
-  el("loginStatus").textContent = `已登入：${email}`;
-  el("loginBtn").classList.add("hidden");
-  el("logoutBtn").classList.remove("hidden");
-  setAlert("登入成功", "success");
-}
-
-function logout(silent = false) {
-  console.log("[Auth] Logging out...");
-  state.token = "";
-  state.role = "";
-  localStorage.removeItem("aat_token");
-  el("loginStatus").textContent = "未登入";
-  el("loginBtn").classList.remove("hidden");
-  el("logoutBtn").classList.add("hidden");
-  if (!silent) setAlert("已登出", "info");
-}
-
-function setupAuth() {
-  initAuthModal((data) => {
-    state.token = data.access_token;
-    state.lastEmail = localStorage.getItem("aat_email");
-
-    // Refresh page to reload strategies and presets for the user
-    window.location.reload();
   });
-
-  el("logoutBtn").addEventListener("click", () => logout());
 }
-
-
-
-
-console.log("[Backtest] Script loaded at", new Date().toISOString());
 
 function bootstrap() {
-  try {
-    console.log("[Backtest] Bootstrapping UI components...");
-    updateExchangeLink();
-    initSidebar();
-    initBinanceConfigModal();
-    initGlobalEnvSelector((env) => {
-      console.log("[Backtest] Env switched to:", env);
-    });
+  initSidebar();
+  updateExchangeLink();
+  setupSliders();
 
-    window.onBinanceConfigUpdate = () => {
-      window.location.reload();
-    };
+  el('runBacktestBtn').addEventListener('click', runBacktest);
 
-    setupAuth();
-
-    // Set default dates if empty
-    if (!val("btStart")) {
-      const d = new Date();
-      d.setMonth(d.getMonth() - 1);
-      setVal("btStart", d.toISOString().split('T')[0]);
-      console.log("[Backtest] Set default StartDate:", val("btStart"));
-    }
-    if (!val("btEnd")) {
-      setVal("btEnd", new Date().toISOString().split('T')[0]);
-      console.log("[Backtest] Set default EndDate:", val("btEnd"));
-    }
-
-    const runBtn = el("runBacktestBtn");
-    if (runBtn) {
-      runBtn.addEventListener("click", () => {
-        console.log("[Backtest] Run button clicked");
-        runBacktest();
-      });
-    } else {
-      console.error("[Backtest] runBacktestBtn not found in DOM");
-    }
-
-    const saveBtn = el("saveAsStrategyBtn");
-    if (saveBtn) {
-      saveBtn.addEventListener("click", () => {
-        el("saveAsStrategyForm").classList.toggle("hidden");
-        // For 'Save as New', always ensure slug is enabled and cleared/copy-prefixed
-        if (!el("saveAsStrategyForm").classList.contains("hidden")) {
-          el("newStrategySlug").disabled = false;
-          el("newStrategySlug").classList.remove("opacity-50", "cursor-not-allowed");
-          el("saveFormTitle").textContent = "另存為新策略 (Save as New)";
-          el("confirmSaveStrategyBtn").textContent = "確認儲存 (Save)";
-
-          const currentName = val("newStrategyName");
-          if (currentName && !currentName.includes("(Copy)")) {
-            setVal("newStrategyName", currentName + " (Copy)");
-            setVal("newStrategySlug", val("newStrategySlug") + "-copy");
-          }
-        }
-      });
-    }
-
-    const updateBtn = el("updateStrategyBtn");
-    if (updateBtn) {
-      updateBtn.addEventListener("click", () => {
-        // One-click update: directly call save function with the update button as source
-        confirmSaveScoringStrategy("updateStrategyBtn");
-      });
-    }
-
-    el("cancelSaveStrategyBtn")?.addEventListener("click", () => el("saveAsStrategyForm")?.classList.add("hidden"));
-    el("confirmSaveStrategyBtn")?.addEventListener("click", confirmSaveScoringStrategy);
-    el("savePresetBtn")?.addEventListener("click", savePreset);
-    el("loadPresetBtn")?.addEventListener("click", loadPreset);
-
-    fetchStrategies().then(() => {
-      const params = new URLSearchParams(window.location.search);
-      const slug = params.get("slug");
-      if (slug) {
-        setVal("btStrategySlug", slug);
-        loadStrategyDetails(slug);
-      }
-    });
-
-    el("btStrategySlug")?.addEventListener("change", (e) => {
-      const s = e.target.value;
-      if (!s) {
-        el("updateStrategyBtn").classList.add("hidden");
-        return;
-      }
-      loadStrategyDetails(s);
-    });
-
-    console.log("[Backtest] Bootstrap completed successfully");
-
-    // ─── Post-Bootstrap Event Handlers ───
-    // Checkboxes for auto-refresh
-    const checkboxes = [
-      "btEntryUseChange", "btEntryUseVolume", "btEntryUseMa", "btEntryUseRange",
-      "btExitUseChange", "btExitUseMa", "btExitUseVolume"
-    ];
-    checkboxes.forEach((id) => {
-      const input = el(id);
-      if (input) {
-        input.addEventListener("change", () => {
-          updateVisibility();
-          debouncedRunBacktest();
-        });
-      }
-    });
-
-    // Numeric and Text Inputs for auto-refresh
-    const inputs = [
-      "btSymbol", "btStart", "btEnd", "btHorizons",
-      "btEntryTotalMin", "btEntryScoreWeight", "btEntryChangeMin", "btEntryChangeBonus",
-      "btEntryVolMin", "btEntryVolumeBonus", "btEntryMaGapMin", "btEntryMaBonus",
-      "btEntryRangeMin", "btEntryRangeBonus",
-      "btExitTotalMin", "btExitScoreWeight", "btExitChangeMin", "btExitChangeBonus",
-      "btExitMaGapMin", "btExitMaBonus", "btExitVolMin", "btExitVolumeBonus"
-    ];
-    inputs.forEach(id => {
-      const input = el(id);
-      if (!input) return;
-      const eventType = input.type === "date" ? "change" : "input";
-      input.addEventListener(eventType, debouncedRunBacktest);
-    });
-
-    updateVisibility();
-
-    if (state.token) {
-      el("loginStatus").textContent = state.lastEmail ? `已登入：${state.lastEmail}` : "已登入";
-    }
-
-    // Initial run
-    setTimeout(() => runBacktest(true), 800);
-
-    // Binance Live monitoring
-    el("refreshBinanceBtn")?.addEventListener("click", fetchBinanceInfo);
-    el("btStrategySlug")?.addEventListener("change", updateMonitoringUI);
-    el("checkExecuteBtn")?.addEventListener("click", toggleMonitoring);
-
-    fetchBinanceInfo();
-    setInterval(updateMonitoringUI, 10000);
-    setInterval(fetchBinanceInfo, 30000);
-
-  } catch (err) {
-    console.error("[Backtest] Bootstrap failed:", err);
-    setAlert("系統初始化失敗：" + err.message, "error");
-  }
-}
-
-
-
-async function fetchBinanceInfo() {
-  const balanceEl = el("binanceBalance");
-  const assetsEl = el("binanceAssets");
-  const tag = el("binanceTag");
-  const title = el("binanceHeaderTitle");
-
-  if (!balanceEl) return;
-
-  try {
-    const health = await api("/api/health");
-    const activeEnv = health.active_env || (health.use_testnet ? "test" : "prod");
-
-    if (activeEnv === "prod") {
-      if (title) title.textContent = "正式站連線觀測 (Binance Mainnet)";
-      if (tag) {
-        tag.textContent = "Live Mode";
-        tag.className = "px-2 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[10px] font-bold uppercase";
-      }
-    } else if (activeEnv === "paper") {
-      if (title) title.textContent = "虛擬實盤監測 (Paper Trading)";
-      if (tag) {
-        tag.textContent = "Paper Mode";
-        tag.className = "px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 text-[10px] font-bold uppercase";
-      }
-    } else {
-      if (title) title.textContent = "測試網連線觀測 (Binance Testnet)";
-      if (tag) {
-        tag.textContent = "Testnet";
-        tag.className = "px-2 py-0.5 rounded bg-secondary/10 text-secondary border border-secondary/20 text-[10px] font-bold uppercase";
-      }
-    }
-
-    assetsEl.textContent = "Fetching...";
-    const data = await api("/api/admin/binance/account");
-    if (data.account && data.account.balances) {
-      const usdt = data.account.balances.find(b => b.asset === "USDT");
-      const btc = data.account.balances.find(b => b.asset === "BTC");
-
-      if (usdt) {
-        balanceEl.innerHTML = `${parseFloat(usdt.free).toFixed(2)} <span class="text-xs font-normal text-slate-500">USDT</span>`;
-      }
-
-      let assetStr = "";
-      if (btc) assetStr += `BTC: ${parseFloat(btc.free).toFixed(6)}`;
-      assetsEl.textContent = assetStr || "No other assets found";
-      assetsEl.classList.remove("text-danger", "text-primary/70");
-    }
-  } catch (err) {
-    console.error("Failed to fetch Binance account:", err);
-    // Check if we are in a mock/paper mode
-    const isMock = (tag && tag.textContent.toUpperCase().includes("PAPER"));
-
-    if (isMock) {
-      balanceEl.innerHTML = `VIRTUAL <span class="text-xs font-normal text-slate-500">USDT</span>`;
-      assetsEl.textContent = "未偵測到實盤金鑰 (API-401 已攔截)";
-      assetsEl.classList.remove("text-danger");
-      assetsEl.classList.add("text-primary/70");
-    } else {
-      balanceEl.textContent = "連線失敗";
-      assetsEl.textContent = "請檢查 API Key 或連線環境";
-      assetsEl.classList.add("text-danger");
-    }
-  }
-}
-
-
-async function updateMonitoringUI() {
-  const slug = val("btStrategySlug");
-  const statusEl = el("monitoringStatus");
-  const btn = el("checkExecuteBtn");
-  const logEl = el("executionLog");
-
-  if (!slug) {
-    statusEl.innerHTML = `<div class="size-1.5 rounded-full bg-slate-500"></div> STANDBY`;
-    statusEl.className = "flex items-center gap-1.5 text-[10px] uppercase font-bold text-slate-500";
-    btn.innerHTML = `<span class="material-symbols-outlined text-sm">play_arrow</span> 啟動監聽監測 (Start Monitor)`;
-    btn.className = "flex-1 px-4 py-2 rounded bg-primary/20 text-primary border border-primary/40 hover:bg-primary/30 text-xs font-bold transition-all flex items-center justify-center gap-2";
-    return;
-  }
-
-  try {
-    const data = await api(`/api/analysis/strategies/get?slug=${slug}`);
-    const strat = data.strategy;
-    if (strat.is_active) {
-      statusEl.innerHTML = `<div class="size-1.5 rounded-full bg-success animate-pulse"></div> MONITORING`;
-      statusEl.className = "flex items-center gap-1.5 text-[10px] uppercase font-bold text-success";
-      btn.innerHTML = `<span class="material-symbols-outlined text-sm">stop</span> 停止監聽 (Stop Monitor)`;
-      btn.className = "flex-1 px-4 py-2 rounded bg-danger/20 text-danger border border-danger/40 hover:bg-danger/30 text-xs font-bold transition-all flex items-center justify-center gap-2";
-      logEl.textContent = `Active monitoring for ${slug}...`;
-    } else {
-      statusEl.innerHTML = `<div class="size-1.5 rounded-full bg-slate-500"></div> STANDBY`;
-      statusEl.className = "flex items-center gap-1.5 text-[10px] uppercase font-bold text-slate-500";
-      btn.innerHTML = `<span class="material-symbols-outlined text-sm">play_arrow</span> 啟動監聽監測 (Start Monitor)`;
-      btn.className = "flex-1 px-4 py-2 rounded bg-primary/20 text-primary border border-primary/40 hover:bg-primary/30 text-xs font-bold transition-all flex items-center justify-center gap-2";
-      logEl.textContent = `Strategy ${slug} is currently idle.`;
-    }
-  } catch (err) {
-    console.error("Failed to fetch strat status:", err);
-  }
-}
-
-async function toggleMonitoring() {
-  const slug = val("btStrategySlug");
-  if (!slug) {
-    alert("請先選取一個資料庫策略。");
-    return;
-  }
-
-  const btn = el("checkExecuteBtn");
-  const isRunning = btn.textContent.includes("停止");
-  const logEl = el("executionLog");
-
-  try {
-    const data = await api(`/api/analysis/strategies/get?slug=${slug}`);
-    const id = data.strategy.id;
-    const minBalance = parseFloat(val("autoStopLimit")) || 0;
-
-    if (!isRunning) {
-      logEl.textContent = "Starting monitoring...";
-      // Activation will now follow system default mode (Live/Paper/Testnet)
-      await api(`/api/admin/strategies/${id}/activate`, {
-        method: "POST",
-        body: {
-          env: "", // Backend will use default system mode
-          auto_stop_min_balance: minBalance
-        }
-      });
-      logEl.textContent = "Monitoring started. Program is now listening to Binance...";
-    } else {
-      logEl.textContent = "Stopping monitoring...";
-      await api(`/api/admin/strategies/${id}/deactivate`, { method: "POST" });
-      logEl.textContent = "Monitoring stopped.";
-    }
-    updateMonitoringUI();
-    setTimeout(fetchBinanceInfo, 1000);
-  } catch (err) {
-    logEl.textContent = `ERROR: ${err.message}`;
-    logEl.classList.add("text-danger");
-  }
+  // Initial Backtest
+  setTimeout(runBacktest, 500);
 }
 
 bootstrap();
-
-window.runBacktest = runBacktest;
-window.api = api;

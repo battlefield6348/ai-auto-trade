@@ -283,6 +283,51 @@ async function initGlobalEnvSelector(onEnvChange) {
         console.error("Failed to sync env:", err);
     }
 }
+function formatTime(dateStr) {
+    const d = new Date(dateStr);
+    return d.toLocaleTimeString('zh-TW', { hour12: false });
+}
+
+async function apiFetch(path, options = {}) {
+    const token = localStorage.getItem("aat_token");
+    const headers = options.headers || {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    if (!(options.body instanceof FormData) && typeof options.body === 'string') {
+        headers["Content-Type"] = "application/json";
+    }
+
+    const response = await fetch(`/api${path}`, {
+        ...options,
+        headers
+    });
+
+    if (response.status === 401) {
+        handleUnauthorized();
+        throw new Error("Unauthorized");
+    }
+
+    return response.json();
+}
+
+function showMessage(msg, type = 'info') {
+    const alertEl = document.getElementById('alert');
+    if (!alertEl) return;
+
+    alertEl.textContent = msg;
+    alertEl.classList.remove('hidden', 'bg-primary/10', 'text-primary', 'bg-danger/10', 'text-danger', 'bg-success/10', 'text-success');
+
+    if (type === 'danger' || type === 'error') {
+        alertEl.classList.add('bg-danger/10', 'text-danger', 'border-danger/30');
+    } else if (type === 'success') {
+        alertEl.classList.add('bg-success/10', 'text-success', 'border-success/30');
+    } else {
+        alertEl.classList.add('bg-primary/10', 'text-primary', 'border-primary/30');
+    }
+
+    alertEl.classList.remove('hidden');
+    setTimeout(() => alertEl.classList.add('hidden'), 5000);
+}
+
 // 統一導出所有工具函數
 export {
     handleUnauthorized,
@@ -291,5 +336,8 @@ export {
     initBinanceConfigModal,
     initSidebar,
     initAuthModal,
-    initGlobalEnvSelector
+    initGlobalEnvSelector,
+    apiFetch,
+    showMessage,
+    formatTime
 };

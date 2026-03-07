@@ -104,6 +104,15 @@ async function updateDashboard() {
 
         const volatilityEl = document.getElementById('volatility');
         if (volatilityEl) volatilityEl.innerHTML = `${(best.Amplitude * 100 || 0.42).toFixed(2)}% <span class="text-xs text-slate-500 ml-1">Stable</span>`;
+
+        // Update 24h Change
+        const btcChangeEl = document.querySelector('#btcPrice + p');
+        if (btcChangeEl && best.ChangeRate !== undefined) {
+          const change = best.ChangeRate * 100;
+          const isPos = change >= 0;
+          btcChangeEl.textContent = `${isPos ? '+' : ''}${change.toFixed(2)}% (24h)`;
+          btcChangeEl.className = `text-sm font-bold mt-1 ${isPos ? 'text-success' : 'text-danger'}`;
+        }
       }
     } catch (e) { console.warn("Analysis summary not available yet"); }
 

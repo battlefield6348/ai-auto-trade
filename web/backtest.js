@@ -132,6 +132,33 @@ function renderResult(res) {
   }
 
   renderChart(res.events || []);
+  renderHorizonBars(res.stats || {});
+}
+
+function renderHorizonBars(stats) {
+  // Expected horizons from UI: 3, 5, 10
+  const horizons = [3, 5, 10];
+  horizons.forEach(h => {
+    const key = `d${h}`;
+    const data = stats[key];
+    const barContainer = document.querySelector(`.flex-1.flex.flex-col.items-center.gap-2:nth-child(${horizons.indexOf(h) + 1})`);
+
+    if (barContainer && data) {
+      const innerBar = barContainer.querySelector('.rounded-t-lg div');
+      const valLabel = barContainer.querySelector('span:last-child');
+
+      if (innerBar) {
+        // Scale height based on return (clamped for visual)
+        const height = Math.min(100, Math.max(10, (data.AvgReturn * 1000) + 30));
+        innerBar.style.height = `${height}%`;
+        innerBar.className = `absolute bottom-0 w-full rounded-t-lg ${data.AvgReturn >= 0 ? 'bg-primary' : 'bg-danger'}`;
+      }
+      if (valLabel) {
+        valLabel.textContent = `${data.AvgReturn >= 0 ? '+' : ''}${(data.AvgReturn * 100).toFixed(1)}%`;
+        valLabel.className = `text-[8px] font-bold ${data.AvgReturn >= 0 ? 'text-primary' : 'text-danger'}`;
+      }
+    }
+  });
 }
 
 function renderChart(events) {

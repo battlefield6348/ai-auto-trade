@@ -24,7 +24,10 @@ function updateStats() {
 
     // Mock other stats for UI completeness
     const triggerCount = el("triggerCount");
-    if (triggerCount) triggerCount.textContent = Math.floor(Math.random() * 500) + 100;
+    if (triggerCount) triggerCount.textContent = (Math.floor(Math.random() * 500) + 100).toLocaleString();
+
+    const avgWinRate = el("avgWinRate");
+    if (avgWinRate) avgWinRate.textContent = "68.5%";
 }
 
 function renderTable() {
@@ -44,7 +47,8 @@ function renderTable() {
     filtered.forEach((s) => {
         const date = new Date(s.updated_at).toLocaleDateString('zh-TW');
         const tr = document.createElement("tr");
-        tr.className = "hover:bg-white/5 transition-colors border-b border-surface-border/20 text-xs group";
+        tr.className = "hover:bg-white/5 transition-colors border-b border-surface-border/20 text-xs group cursor-pointer";
+        tr.dataset.id = s.id;
 
         tr.innerHTML = `
             <td class="px-8 py-6">
@@ -81,24 +85,77 @@ function renderTable() {
                 </div>
             </td>
         `;
+
+        // Detailed Rules Row (Hidden by default)
+        const detailTr = document.createElement("tr");
+        detailTr.id = `detail-${s.id}`;
+        detailTr.className = "hidden bg-surface-dark/30 border-b border-surface-border/20";
+        detailTr.innerHTML = `
+            <td colspan="6" class="px-8 py-8">
+                <div class="grid grid-cols-2 gap-12">
+                    <div>
+                        <h4 class="text-[10px] font-black text-primary uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                           <span class="size-1.5 rounded-full bg-primary"></span> 進場評分規則 (Entry Rules)
+                        </h4>
+                        <div class="space-y-3">
+                            ${renderRules(s.buy_conditions?.conditions || [])}
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="text-[10px] font-black text-danger uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                           <span class="size-1.5 rounded-full bg-danger"></span> 出場評分規則 (Exit Rules)
+                        </h4>
+                        <div class="space-y-3">
+                            ${renderRules(s.sell_conditions?.conditions || [])}
+                        </div>
+                    </div>
+                </div>
+            </td>
+        `;
+
         tbody.appendChild(tr);
+        tbody.appendChild(detailTr);
     });
 
     attachEvents();
 }
 
+function renderRules(conditions) {
+    if (conditions.length === 0) return `<p class="text-[10px] text-slate-600 italic">無自訂規則</p>`;
+    return conditions.map(c => `
+        <div class="flex items-center justify-between p-3 bg-background-dark/50 rounded-xl border border-surface-border/50">
+            <span class="text-[11px] text-slate-300 font-bold tracking-tight">${c.type}</span>
+            <span class="text-[10px] text-primary font-mono font-bold">${c.weight || 10} pts</span>
+        </div>
+    `).join('');
+}
+
 function attachEvents() {
     document.querySelectorAll(".delete-btn").forEach((btn) => {
-        btn.onclick = () => deleteStrategy(btn.dataset.id, btn.dataset.name);
+        btn.onclick = (e) => { e.stopPropagation(); deleteStrategy(btn.dataset.id, btn.dataset.name); };
     });
     document.querySelectorAll(".edit-btn").forEach((btn) => {
-        btn.onclick = () => window.location.href = `/backtest.html?slug=${btn.dataset.slug}`;
+        btn.onclick = (e) => { e.stopPropagation(); window.location.href = `/backtest.html?slug=${btn.dataset.slug}`; };
     });
     document.querySelectorAll(".status-toggle-btn").forEach((btn) => {
-        btn.onclick = () => toggleStatus(btn.dataset.id, btn.dataset.active === 'true');
+        btn.onclick = (e) => { e.stopPropagation(); toggleStatus(btn.dataset.id, btn.dataset.active === 'true'); };
+    });
+    document.querySelectorAll("tbody tr.cursor-pointer").forEach((tr) => {
+        tr.onclick = () => {
+            const detail = el(`detail-${tr.dataset.id}`);
+            const icon = tr.querySelector(".expand-btn span");
+            if (detail) {
+                const isHidden = detail.classList.contains('hidden');
+                detail.classList.toggle('hidden');
+                if (icon) icon.textContent = isHidden ? 'expand_less' : 'expand_more';
+                if (isHidden) tr.classList.add('bg-white/5');
+                else tr.classList.remove('bg-white/5');
+            }
+        };
     });
 }
 
+// ... rest of the file stays same ...
 async function toggleStatus(id, currentlyActive) {
     try {
         const path = !currentlyActive ? "activate" : "deactivate";
@@ -141,6 +198,26 @@ function bootstrap() {
 
     const refreshBtn = el("refreshBtn");
     if (refreshBtn) refreshBtn.addEventListener("click", fetchStrategies);
+
+    const exportBtn = el("exportReportBtn");
+    if (exportBtn) {
+        exportBtn.onclick = () => {
+            if (state.strategies.length === 0) {
+                showMessage("沒有可導出的數據", "warning");
+                return;
+            }
+            const csvData = state.strategies.map(s => `"${s.name}","${s.slug}",${s.threshold},${s.active},"${s.env}"`).join('\n');
+            const blob = new Blob([`Name,Slug,Threshold,Active,Environment\n${csvData}`], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `strategies_report_${new Date().toISOString().split('T')[0]}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showMessage("策略報表導出完成", "success");
+        };
+    }
 
     fetchStrategies();
 }

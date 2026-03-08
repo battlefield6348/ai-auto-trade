@@ -77,18 +77,36 @@ async function runOptimization() {
             displayResults(result.result);
             showMessage('優化完成！' + (saveTop ? ' 最佳策略已自動儲存並啟用。' : ''), 'success');
         } else {
-            throw new Error(result.error || '優化失敗');
+            // Error handled by catch block
+            throw new Error(result.error || '未能在當前參數空間找到獲利策略');
         }
     } catch (err) {
         clearInterval(progressInterval);
+        // Show only as a toast notification as requested
         showMessage(err.message, 'danger');
-        document.getElementById('searchStatus').textContent = "發生錯誤";
-        document.getElementById('searchSubStatus').textContent = err.message;
+
+        // Reset the UI to initial state to prevent "layout jumping"
+        resetUI();
     } finally {
         runBtn.disabled = false;
         runBtn.innerHTML = originalContent;
         document.getElementById('scannerIcon').classList.remove('scanner-ring');
     }
+}
+
+function resetUI() {
+    const searchStatus = document.getElementById('searchStatus');
+    const searchSubStatus = document.getElementById('searchSubStatus');
+    const progressIndicator = document.getElementById('progressIndicator');
+    const progressText = document.getElementById('progressText');
+    const bestCard = document.getElementById('bestResultCard');
+
+    searchStatus.textContent = "準備就緒，等候運作指令...";
+    searchSubStatus.textContent = "Waiting for optimization command";
+
+    progressIndicator.classList.add('hidden');
+    progressText.classList.add('hidden');
+    bestCard.classList.add('hidden');
 }
 
 function updateProgress(value) {

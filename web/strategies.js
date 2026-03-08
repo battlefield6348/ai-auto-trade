@@ -20,7 +20,7 @@ async function fetchStrategies() {
 
 function updateStats() {
     const activeCount = el("activeCount");
-    if (activeCount) activeCount.textContent = state.strategies.filter(s => s.active).length;
+    if (activeCount) activeCount.textContent = state.strategies.filter(s => s.status === 'active').length;
 
     // Mock other stats for UI completeness
     const triggerCount = el("triggerCount");
@@ -36,7 +36,10 @@ function renderTable() {
     if (!tbody) return;
     tbody.innerHTML = "";
 
-    const filtered = state.strategies.filter(s => s.env === (state.env === 'real' ? 'prod' : state.env));
+    const filtered = state.strategies.filter(s => {
+        const targetEnv = state.env === 'real' ? 'prod' : state.env;
+        return s.env === 'both' || s.env === targetEnv;
+    });
 
     if (filtered.length === 0) {
         if (empty) empty.classList.remove("hidden");
@@ -45,7 +48,11 @@ function renderTable() {
     if (empty) empty.classList.add("hidden");
 
     filtered.forEach((s) => {
-        const date = new Date(s.updated_at).toLocaleDateString('zh-TW');
+        // Backend uses updated_at, status='active'
+        const dateStr = s.updated_at || s.updatedAt || new Date().toISOString();
+        const date = new Date(dateStr).toLocaleDateString('zh-TW');
+        const isActive = s.status === 'active';
+
         const tr = document.createElement("tr");
         tr.className = "hover:bg-white/5 transition-colors border-b border-surface-border/20 text-xs group cursor-pointer";
         tr.dataset.id = s.id;
@@ -58,16 +65,16 @@ function renderTable() {
                 </div>
             </td>
             <td class="px-6 py-6 text-center">
-                <span class="px-2 py-1 bg-surface-dark border border-surface-border rounded text-primary font-mono font-bold">${s.threshold}</span>
+                <span class="px-2 py-1 bg-surface-dark border border-surface-border rounded text-primary font-mono font-bold">${s.threshold || 0}</span>
             </td>
             <td class="px-6 py-6 text-center">
-                <span class="px-2 py-1 bg-surface-dark border border-surface-border rounded text-danger font-mono font-bold">${s.risk?.threshold || 0.3}</span>
+                <span class="px-2 py-1 bg-surface-dark border border-surface-border rounded text-danger font-mono font-bold">${s.exit_threshold || 0}</span>
             </td>
             <td class="px-6 py-6 text-center text-slate-400 font-mono">${date}</td>
             <td class="px-6 py-6 text-center">
-                <button class="status-toggle-btn inline-flex items-center" data-id="${s.id}" data-active="${s.active}">
-                    <div class="w-10 h-5 rounded-full p-1 transition-colors duration-200 ${s.active ? 'bg-primary' : 'bg-slate-700'}">
-                        <div class="w-3 h-3 bg-white rounded-full transition-transform duration-200 transform ${s.active ? 'translate-x-5' : 'translate-x-0'}"></div>
+                <button class="status-toggle-btn inline-flex items-center" data-id="${s.id}" data-active="${isActive}">
+                    <div class="w-10 h-5 rounded-full p-1 transition-colors duration-200 ${isActive ? 'bg-primary' : 'bg-slate-700'}">
+                        <div class="w-3 h-3 bg-white rounded-full transition-transform duration-200 transform ${isActive ? 'translate-x-5' : 'translate-x-0'}"></div>
                     </div>
                 </button>
             </td>
@@ -86,10 +93,14 @@ function renderTable() {
             </td>
         `;
 
-        // Detailed Rules Row (Hidden by default)
+        // Detailed Rules Row
         const detailTr = document.createElement("tr");
         detailTr.id = `detail-${s.id}`;
         detailTr.className = "hidden bg-surface-dark/30 border-b border-surface-border/20";
+
+        const buyRules = s.buy_conditions?.conditions || (Array.isArray(s.buy_conditions) ? s.buy_conditions : []);
+        const sellRules = s.sell_conditions?.conditions || (Array.isArray(s.sell_conditions) ? s.sell_conditions : []);
+
         detailTr.innerHTML = `
             <td colspan="6" class="px-8 py-8">
                 <div class="grid grid-cols-2 gap-12">
@@ -98,7 +109,7 @@ function renderTable() {
                            <span class="size-1.5 rounded-full bg-primary"></span> 進場評分規則 (Entry Rules)
                         </h4>
                         <div class="space-y-3">
-                            ${renderRules(s.buy_conditions?.conditions || [])}
+                            ${renderRules(buyRules)}
                         </div>
                     </div>
                     <div>
@@ -106,7 +117,7 @@ function renderTable() {
                            <span class="size-1.5 rounded-full bg-danger"></span> 出場評分規則 (Exit Rules)
                         </h4>
                         <div class="space-y-3">
-                            ${renderRules(s.sell_conditions?.conditions || [])}
+                            ${renderRules(sellRules)}
                         </div>
                     </div>
                 </div>
@@ -121,11 +132,11 @@ function renderTable() {
 }
 
 function renderRules(conditions) {
-    if (conditions.length === 0) return `<p class="text-[10px] text-slate-600 italic">無自訂規則</p>`;
+    if (!conditions || conditions.length === 0) return `<p class="text-[10px] text-slate-600 italic">無自訂規則</p>`;
     return conditions.map(c => `
         <div class="flex items-center justify-between p-3 bg-background-dark/50 rounded-xl border border-surface-border/50">
-            <span class="text-[11px] text-slate-300 font-bold tracking-tight">${c.type}</span>
-            <span class="text-[10px] text-primary font-mono font-bold">${c.weight || 10} pts</span>
+            <span class="text-[11px] text-slate-300 font-bold tracking-tight">${c.type || c.Indicator || '指標'}</span>
+            <span class="text-[10px] text-primary font-mono font-bold">${c.weight || c.Weight || 10} pts</span>
         </div>
     `).join('');
 }
@@ -155,20 +166,20 @@ function attachEvents() {
     });
 }
 
-// ... rest of the file stays same ...
 async function toggleStatus(id, currentlyActive) {
     try {
         const path = !currentlyActive ? "activate" : "deactivate";
         const envToSend = state.env === 'real' ? 'prod' : state.env;
 
-        const res = await apiFetch(`/admin/strategies/${id}/${path}`, {
-            method: "POST",
-            body: JSON.stringify({ env: envToSend })
+        const res = await apiFetch(`/admin/strategies/${id}/${path}?env=${envToSend}`, {
+            method: "POST"
         });
 
         if (res.success) {
             showMessage(`策略已${!currentlyActive ? '開啟' : '關閉'}`, "success");
             fetchStrategies();
+        } else {
+            showMessage(res.error || "操作失敗", "danger");
         }
     } catch (err) {
         showMessage(err.message, 'danger');
@@ -206,8 +217,8 @@ function bootstrap() {
                 showMessage("沒有可導出的數據", "warning");
                 return;
             }
-            const csvData = state.strategies.map(s => `"${s.name}","${s.slug}",${s.threshold},${s.active},"${s.env}"`).join('\n');
-            const blob = new Blob([`Name,Slug,Threshold,Active,Environment\n${csvData}`], { type: 'text/csv;charset=utf-8;' });
+            const csvData = state.strategies.map(s => `"${s.name}","${s.slug}",${s.threshold},${s.status},"${s.env}"`).join('\n');
+            const blob = new Blob([`Name,Slug,Threshold,Status,Environment\n${csvData}`], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
             link.setAttribute("href", url);

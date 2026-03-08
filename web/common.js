@@ -248,18 +248,26 @@ function showMessage(msg, type = 'info') {
     }
 
     alertEl.textContent = msg;
-    alertEl.classList.remove('hidden', 'bg-primary/10', 'text-primary', 'bg-danger/10', 'text-danger', 'bg-success/10', 'text-success', 'border-primary/30', 'border-danger/30', 'border-success/30');
+    // Force fixed position to prevent layout shifts across all pages
+    alertEl.className = `fixed top-12 right-6 z-[100] min-w-[300px] px-6 py-4 rounded-2xl border backdrop-blur-md shadow-2xl transition-all duration-300 transform translate-y-0 opacity-100 flex items-center justify-between text-xs font-bold uppercase tracking-widest`;
 
     if (type === 'danger' || type === 'error') {
-        alertEl.classList.add('bg-danger/10', 'text-danger', 'border-danger/30');
+        alertEl.classList.add('bg-danger/20', 'text-danger', 'border-danger/30', 'shadow-danger/20');
     } else if (type === 'success') {
-        alertEl.classList.add('bg-success/10', 'text-success', 'border-success/30');
+        alertEl.classList.add('bg-success/20', 'text-success', 'border-success/30', 'shadow-success/20');
     } else {
-        alertEl.classList.add('bg-primary/10', 'text-primary', 'border-primary/30');
+        alertEl.classList.add('bg-primary/20', 'text-primary', 'border-primary/30', 'shadow-primary/20');
     }
 
     alertEl.classList.remove('hidden');
-    setTimeout(() => alertEl.classList.add('hidden'), 5000);
+    // Animate out
+    setTimeout(() => {
+        alertEl.classList.add('opacity-0', 'translate-y-[-10px]');
+        setTimeout(() => {
+            alertEl.classList.add('hidden');
+            alertEl.classList.remove('opacity-0', 'translate-y-[-10px]');
+        }, 300);
+    }, 4000);
 }
 
 function formatTime(dateStr) {

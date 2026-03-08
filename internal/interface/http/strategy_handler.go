@@ -209,8 +209,12 @@ func (s *Server) handleRunStrategy(c *gin.Context, strategyID string) {
 }
 
 func (s *Server) handleActivateStrategy(c *gin.Context, strategyID string) {
+	env := s.defaultEnv
+	if qenv := c.Query("env"); qenv != "" {
+		env = tradingDomain.Environment(qenv)
+	}
 	// SetStatus in tradingSvc
-	if err := s.tradingSvc.SetStatus(c.Request.Context(), strategyID, tradingDomain.StatusActive, s.defaultEnv); err != nil {
+	if err := s.tradingSvc.SetStatus(c.Request.Context(), strategyID, tradingDomain.StatusActive, env); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error(), "error_code": errCodeInternal})
 		return
 	}
@@ -218,7 +222,11 @@ func (s *Server) handleActivateStrategy(c *gin.Context, strategyID string) {
 }
 
 func (s *Server) handleDeactivateStrategy(c *gin.Context, strategyID string) {
-	if err := s.tradingSvc.SetStatus(c.Request.Context(), strategyID, tradingDomain.StatusDraft, s.defaultEnv); err != nil {
+	env := s.defaultEnv
+	if qenv := c.Query("env"); qenv != "" {
+		env = tradingDomain.Environment(qenv)
+	}
+	if err := s.tradingSvc.SetStatus(c.Request.Context(), strategyID, tradingDomain.StatusDraft, env); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error(), "error_code": errCodeInternal})
 		return
 	}
